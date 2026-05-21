@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verlauf | E-Rechnung Konverter | DIHAG</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-logo">DIHAG <span>E-Rechnung</span></div>
+  <nav class="site-nav">
+    <a href="index.html">Konverter</a>
+    <a href="verlauf.html" class="active">Verlauf</a>
+  </nav>
+</header>
+
+<div class="page-content">
+
+  <div class="verlauf-header">
+    <div>
+      <h2>📂 Exportverlauf</h2>
+      <p>Alle exportierten Rechnungen – gespeichert lokal in Ihrem Browser.</p>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <a href="index.html" class="btn btn-primary">+ Neue Rechnung</a>
+      <button class="btn btn-danger" id="btn-clear-all" style="display:none;" type="button">🗑 Alles löschen</button>
+    </div>
+  </div>
+
+  <div id="verlauf-container"></div>
+
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Libraries -->
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+<!-- App Scripts -->
+<script src="js/xrechnung.js"></script>
+<script src="js/zugferd.js"></script>
+<script src="js/history.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    renderVerlauf();
+
+    document.getElementById('btn-clear-all').addEventListener('click', () => {
+      if (confirm('Wirklich den gesamten Verlauf löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+        clearHistory();
+        renderVerlauf();
+        showToast('Verlauf geleert.', 'info');
+      }
+    });
+  });
+
+  function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+    toast.innerHTML = `<span class="toast-icon">${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('fade-out');
+      toast.addEventListener('animationend', () => toast.remove());
+    }, 4000);
+  }
+</script>
+
+</body>
+</html>

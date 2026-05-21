@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Rechnung Konverter | DIHAG</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-logo">DIHAG <span>E-Rechnung</span></div>
+  <nav class="site-nav">
+    <a href="index.html" class="active">Konverter</a>
+    <a href="verlauf.html">Verlauf</a>
+  </nav>
+</header>
+
+<div class="page-content">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-icon">🧾</div>
+    <div>
+      <h1>PDF in E-Rechnung umwandeln</h1>
+      <p>Laden Sie Ihre Rechnung als PDF hoch, füllen Sie die Rechnungsdaten aus und exportieren Sie die Rechnung als XRechnung (XML) oder ZUGFeRD (PDF + XML). Alle Daten bleiben lokal in Ihrem Browser.</p>
+      <div class="hero-badges">
+        <span class="badge">XRechnung 3.0</span>
+        <span class="badge">ZUGFeRD 2.3</span>
+        <span class="badge">EN 16931</span>
+        <span class="badge">100 % lokal</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="upload-zone">
+    <input type="file" id="pdf-input" accept=".pdf,application/pdf">
+    <div class="upload-placeholder">
+      <span class="upload-icon">📤</span>
+      <h3>PDF hier ablegen oder klicken</h3>
+      <p>Die Original-Rechnung dient als Referenz beim Ausfüllen der Daten.</p>
+      <button class="btn-upload" type="button">PDF auswählen</button>
+    </div>
+    <div class="file-info">
+      <span class="file-info-icon">📄</span>
+      <div class="file-info-text">
+        <strong id="file-name-display"></strong>
+        <span id="file-size-display"></span>
+      </div>
+      <button class="btn-change-file" id="btn-change-file" type="button">Andere Datei</button>
+    </div>
+  </div>
+
+  <!-- Main Layout: PDF-Viewer + Formular -->
+  <div class="main-layout">
+
+    <!-- PDF Viewer -->
+    <div class="pdf-viewer-panel">
+      <div class="panel-header">
+        <h3>📄 PDF-Vorschau</h3>
+        <div class="pdf-nav">
+          <button id="btn-prev-page" disabled title="Vorherige Seite">‹</button>
+          <span id="page-info">–</span>
+          <button id="btn-next-page" disabled title="Nächste Seite">›</button>
+        </div>
+      </div>
+      <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
+        <div class="pdf-placeholder" id="pdf-placeholder">
+          <span class="ph-icon">📋</span>
+          <p>Kein PDF geladen</p>
+        </div>
+        <canvas id="pdf-canvas" style="display:none;"></canvas>
+      </div>
+    </div>
+
+    <!-- Formular -->
+    <div class="form-panel">
+
+      <!-- Rechnungssteller -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🏢</span>
+          <h3>Rechnungssteller</h3>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label>Firma / Name <span class="required">*</span></label>
+              <input type="text" id="verkaeufer" placeholder="Muster GmbH">
+            </div>
+            <div class="form-group full-width">
+              <label>Straße & Hausnummer</label>
+              <input type="text" id="verkaeufer-strasse" placeholder="Musterstraße 1">
+            </div>
+            <div class="form-group">
+              <label>PLZ</label>
+              <input type="text" id="verkaeufer-plz" placeholder="12345" maxlength="10">
+            </div>
+            <div class="form-group">
+              <label>Ort</label>
+              <input type="text" id="verkaeufer-stadt" placeholder="Musterstadt">
+            </div>
+            <div class="form-group">
+              <label>Land</label>
+              <input type="text" id="verkaeufer-land" placeholder="DE" value="DE" maxlength="2">
+            </div>
+            <div class="form-group">
+              <label>USt-IdNr.</label>
+              <input type="text" id="verkaeufer-vat" placeholder="DE123456789">
+              <span class="hint">z. B. DE123456789</span>
+            </div>
+            <div class="form-group">
+              <label>Steuernummer (alternativ)</label>
+              <input type="text" id="verkaeufer-steuernr" placeholder="12/345/67890">
+            </div>
+            <div class="form-group">
+              <label>IBAN</label>
+              <input type="text" id="iban" placeholder="DE00 0000 0000 0000 0000 00">
+            </div>
+            <div class="form-group">
+              <label>BIC</label>
+              <input type="text" id="bic" placeholder="DEUTDEDB">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rechnungsempfänger -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">📬</span>
+          <h3>Rechnungsempfänger</h3>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label>Firma / Name <span class="required">*</span></label>
+              <input type="text" id="kaeufer" placeholder="Empfänger GmbH">
+            </div>
+            <div class="form-group full-width">
+              <label>Straße & Hausnummer</label>
+              <input type="text" id="kaeufer-strasse" placeholder="Empfängerstraße 2">
+            </div>
+            <div class="form-group">
+              <label>PLZ</label>
+              <input type="text" id="kaeufer-plz" placeholder="54321" maxlength="10">
+            </div>
+            <div class="form-group">
+              <label>Ort</label>
+              <input type="text" id="kaeufer-stadt" placeholder="Empfängerstadt">
+            </div>
+            <div class="form-group">
+              <label>Land</label>
+              <input type="text" id="kaeufer-land" placeholder="DE" value="DE" maxlength="2">
+            </div>
+            <div class="form-group">
+              <label>Leitweg-ID</label>
+              <input type="text" id="leitwegid" placeholder="04011000-1234512345-06">
+              <span class="hint">Pflicht für Rechnungen an öffentliche Auftraggeber (B2G)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rechnungsdaten -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">📋</span>
+          <h3>Rechnungsdaten</h3>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Rechnungsnummer <span class="required">*</span></label>
+              <input type="text" id="rechnungsnummer" placeholder="RE-2024-001">
+            </div>
+            <div class="form-group">
+              <label>Rechnungsdatum <span class="required">*</span></label>
+              <input type="date" id="rechnungsdatum">
+            </div>
+            <div class="form-group">
+              <label>Lieferdatum / Leistungsdatum</label>
+              <input type="date" id="lieferdatum">
+            </div>
+            <div class="form-group">
+              <label>Fälligkeitsdatum</label>
+              <input type="date" id="faelligkeitsdatum">
+            </div>
+            <div class="form-group full-width">
+              <label>Zahlungsreferenz / Verwendungszweck</label>
+              <input type="text" id="zahlungsreferenz" placeholder="Wird automatisch mit Rechnungsnummer befüllt">
+            </div>
+            <div class="form-group full-width">
+              <label>Notiz / Hinweise</label>
+              <textarea id="notiz" placeholder="Zahlbar innerhalb von 30 Tagen ohne Abzug."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Positionen -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">📝</span>
+          <h3>Positionen</h3>
+        </div>
+        <div class="card-body">
+          <div class="positions-table-wrapper">
+            <table class="positions-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Beschreibung</th>
+                  <th>Menge</th>
+                  <th>Einheit</th>
+                  <th>Einzelpreis (netto)</th>
+                  <th>MwSt.</th>
+                  <th class="text-right">Gesamt (netto)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="positions-body"></tbody>
+            </table>
+          </div>
+          <button class="btn-add-row" id="btn-add-row" type="button">+ Position hinzufügen</button>
+        </div>
+      </div>
+
+      <!-- Summen -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">💶</span>
+          <h3>Zusammenfassung</h3>
+        </div>
+        <div class="card-body">
+          <div class="totals-box">
+            <div class="totals-row">
+              <span>Nettobetrag</span>
+              <span class="amount" id="total-netto">0,00 €</span>
+            </div>
+            <div id="total-vat-container"></div>
+            <div class="totals-row total-grand">
+              <span>Gesamtbetrag (brutto)</span>
+              <span class="amount" id="total-brutto">0,00 €</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="export-section">
+        <div class="export-info">
+          <h3>Exportieren</h3>
+          <p>XRechnung: reines XML · ZUGFeRD: Ihr PDF mit eingebettetem XML (EN 16931)</p>
+        </div>
+        <div class="export-buttons">
+          <button class="btn-export btn-xrechnung" id="btn-export-xrechnung" type="button">
+            <span class="export-format">XML</span>
+            <span class="export-label">XRechnung 3.0</span>
+          </button>
+          <button class="btn-export btn-zugferd" id="btn-export-zugferd" type="button">
+            <span class="export-format">PDF+XML</span>
+            <span class="export-label">ZUGFeRD 2.3</span>
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /form-panel -->
+  </div><!-- /main-layout -->
+
+</div><!-- /page-content -->
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loading-overlay" style="display:none;">
+  <div class="loading-box">
+    <span class="spinner"></span>
+    <p id="loading-text">Verarbeitung...</p>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Libraries (CDN) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+<!-- App Scripts -->
+<script src="js/xrechnung.js"></script>
+<script src="js/zugferd.js"></script>
+<script src="js/history.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
