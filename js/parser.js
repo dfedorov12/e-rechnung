@@ -94,8 +94,8 @@ function extractSeller(fullText) {
   const vatm = fullText.match(/USt-?IdNr\.?\s*[^\w\n]{0,4}\s*(DE(?:\s*\d){9})/i);
   if (vatm) r.verkaeufervat = vatm[1].replace(/\s/g, '');
 
-  // Steuernummer
-  const stm = fullText.match(/Steuer-?Nr\.?\s*[^\w\n]{0,4}\s*([\d]+\/[\d\/]+)/i);
+  // Steuernummer — "Steuernr. 232/118/07369", "Steuer-Nr.: 232/118/07369", etc.
+  const stm = fullText.match(/Steuer-?(?:Nr|nummer)\.?\s*[^\w\n]{0,4}\s*(\d[\d\/]{5,20})/i);
   if (stm) r.verkaeufersteuernr = stm[1];
 
   // IBAN

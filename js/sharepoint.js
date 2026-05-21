@@ -16,7 +16,8 @@ const SP = {
 };
 
 // Cached IDs nach erster Initialisierung
-const _sp = { siteId: null, listId: null, driveId: null, ready: false };
+// availableFields: nur Felder schreiben, die wirklich in der Liste existieren
+const _sp = { siteId: null, listId: null, driveId: null, ready: false, availableFields: new Set(['Title']) };
 
 /* ═══════════════════════════════════════════════════
    Öffentliche API
@@ -56,7 +57,7 @@ async function spSaveExport({ invoiceData, xml, pdfBytes, format }) {
     pdfUrl = res.webUrl || '';
   }
 
-  const fields = {
+  const allFields = {
     Title:               (invoiceData.rechnungsnummer || '').slice(0, 255),
     Rechnungsdatum:      invoiceData.rechnungsdatum || new Date().toISOString().slice(0, 10),
     Rechnungssteller:    (invoiceData.verkaeufer || '').slice(0, 255),
@@ -69,6 +70,11 @@ async function spSaveExport({ invoiceData, xml, pdfBytes, format }) {
     ZUGFeRDPdfUrl:       pdfUrl,
     OriginalPdfName:     (invoiceData.originalPdfName || '').slice(0, 255),
   };
+
+  // Nur Felder senden, die in der Liste vorhanden sind (verhindert 400-Fehler bei fehlenden Spalten)
+  const fields = Object.fromEntries(
+    Object.entries(allFields).filter(([k]) => _sp.availableFields.has(k))
+  );
 
   return await _post(
     `${SP.graphBase}/sites/${_sp.siteId}/lists/${_sp.listId}/items`,
@@ -148,42 +154,18 @@ async function _spInit(token) {
   ) || drives.value?.[0];
   if (docDrive) _sp.driveId = docDrive.id;
 
-  // Pflicht-Spalten anlegen (falls noch nicht vorhanden)
-  await _ensureColumns(token);
+  // Vorhandene Spalten ermitteln — nur verfügbare Felder werden beim Schreiben gesendet.
+  // Schlägt das Lesen fehl (z. B. 403), werden nur Title-Einträge gespeichert.
+  try {
+    const cols = await _get(
+      `${SP.graphBase}/sites/${_sp.siteId}/lists/${_sp.listId}/columns`, token
+    );
+    (cols.value || []).forEach(c => _sp.availableFields.add(c.name));
+  } catch (e) {
+    console.warn('Spalten konnten nicht gelesen werden – nur "Title" wird geschrieben:', e.message);
+  }
 
   _sp.ready = true;
-}
-
-async function _ensureColumns(token) {
-  const existing = await _get(
-    `${SP.graphBase}/sites/${_sp.siteId}/lists/${_sp.listId}/columns`, token
-  );
-  const have = new Set((existing.value || []).map(c => c.name));
-
-  const cols = [
-    { name: 'Rechnungsdatum',     dateTime: { displayAs: 'default', format: 'dateOnly' } },
-    { name: 'Rechnungssteller',   text: {} },
-    { name: 'Rechnungsempfaenger', text: {} },
-    { name: 'Nettobetrag',        number: { decimalPlaces: 'two' } },
-    { name: 'MwStBetrag',         number: { decimalPlaces: 'two' } },
-    { name: 'Bruttobetrag',       number: { decimalPlaces: 'two' } },
-    { name: 'Format',             choice: { choices: ['XRechnung', 'ZUGFeRD', 'Beide'], displayType: 'dropDown', allowTextEntry: false } },
-    { name: 'XMLDateiUrl',        text: { maxLength: 1000 } },
-    { name: 'ZUGFeRDPdfUrl',      text: { maxLength: 1000 } },
-    { name: 'OriginalPdfName',    text: {} },
-  ];
-
-  for (const col of cols) {
-    if (have.has(col.name)) continue;
-    try {
-      await _post(
-        `${SP.graphBase}/sites/${_sp.siteId}/lists/${_sp.listId}/columns`,
-        token, col
-      );
-    } catch (e) {
-      console.warn(`Spalte "${col.name}" nicht angelegt:`, e.message);
-    }
-  }
 }
 
 /* ═══════════════════════════════════════════════════
