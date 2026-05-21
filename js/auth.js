@@ -11,6 +11,10 @@ const _AUTH = {
 
 let _msal = null;
 let _account = null;
+let _postAuthCb = null;
+
+/** Callback registrieren, der nach erfolgreichem Login aufgerufen wird. */
+function onAuthReady(cb) { _postAuthCb = cb; }
 
 async function authInit() {
   _msal = new msal.PublicClientApplication({
@@ -55,6 +59,9 @@ async function authInit() {
 
   // User-Info in Header rendern
   _renderUser(_account);
+
+  // Post-Auth-Callback aufrufen (z.B. SharePoint-Daten laden)
+  if (_postAuthCb) _postAuthCb(_account);
 }
 
 function _renderUser(account) {
@@ -81,6 +88,24 @@ function authLogout() {
 }
 
 function getAuthUser() { return _account; }
+
+/**
+ * Access-Token für eine Graph/SharePoint-Scope anfordern.
+ * Bei fehlendem Consent → Redirect zu Microsoft.
+ */
+async function acquireToken(scopes) {
+  if (!_msal || !_account) throw new Error('Nicht angemeldet');
+  try {
+    const result = await _msal.acquireTokenSilent({ scopes, account: _account });
+    return result.accessToken;
+  } catch (e) {
+    if (e instanceof msal.InteractionRequiredAuthError) {
+      await _msal.acquireTokenRedirect({ scopes, account: _account });
+      return null; // Page will redirect
+    }
+    throw e;
+  }
+}
 
 function _showAuthError(err) {
   document.body.classList.remove('auth-guard');

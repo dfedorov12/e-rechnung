@@ -838,6 +838,68 @@ textarea.autofilled {
 /* positions-table autofilled cells */
 .positions-table td input.autofilled { background: #f0fdf4 !important; border-color: #86efac !important; }
 
+/* ── Verlauf Loading ── */
+.verlauf-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 64px 32px;
+  color: var(--gray-500);
+  font-size: 14px;
+  background: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+}
+
+.verlauf-loading .spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--gray-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ── SharePoint Error Banner ── */
+.sp-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.sp-error-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+
+.sp-error-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.sp-error-text strong { font-size: 14px; color: #78350f; }
+
+.sp-error-close {
+  background: none;
+  border: none;
+  color: #92400e;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.6;
+  transition: opacity var(--transition);
+  flex-shrink: 0;
+}
+.sp-error-close:hover { opacity: 1; }
+
 /* ── Auth Guard ── */
 body.auth-guard { visibility: hidden; }
 

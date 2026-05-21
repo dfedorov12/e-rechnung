@@ -391,7 +391,7 @@ async function exportInvoice(format) {
     const xml = buildXML(data, format);
     const { netTotal, vatTotal, grossTotal } = calcTotals(data.positionen);
     const safeNr = sanitizeFilename(data.rechnungsnummer);
-    let zugferdPdfB64 = null;
+    let pdfBytes = null;
 
     if (format === 'zugferd') {
       if (!uploadedPdfBytes) {
@@ -399,14 +399,14 @@ async function exportInvoice(format) {
         showToast('Für ZUGFeRD bitte zuerst eine PDF-Datei hochladen.', 'error');
         return;
       }
-      const pdfBytes = await embedXMLIntoPDF(uploadedPdfBytes, xml, 'zugferd');
-      zugferdPdfB64 = bytesToBase64(pdfBytes);
+      pdfBytes = await embedXMLIntoPDF(uploadedPdfBytes, xml, 'zugferd');
       downloadBlob(pdfBytes, `${safeNr}_zugferd.pdf`, 'application/pdf');
     } else {
       downloadText(xml, `${safeNr}_xrechnung.xml`);
     }
 
-    const historyEntry = saveToHistory({
+    // Lokaler Cache (localStorage)
+    saveToHistory({
       rechnungsnummer: data.rechnungsnummer,
       rechnungsdatum: data.rechnungsdatum,
       verkaeufer: data.verkaeufer,
@@ -414,17 +414,34 @@ async function exportInvoice(format) {
       netTotal, vatTotal, grossTotal,
       formate: format === 'zugferd' ? ['ZUGFeRD'] : ['XRechnung'],
       xml,
-      zugferdPdf: zugferdPdfB64,
+      zugferdPdf: pdfBytes ? bytesToBase64(pdfBytes) : null,
       originalPdfName: uploadedFileName,
     });
 
-    showLoading(false);
-    showToast(
-      format === 'zugferd'
-        ? `ZUGFeRD PDF erfolgreich erstellt & gespeichert. (${safeNr})`
-        : `XRechnung XML erfolgreich exportiert. (${safeNr})`,
-      'success'
-    );
+    // SharePoint-Upload
+    showLoading(true, 'Wird in SharePoint gespeichert...');
+    try {
+      await spSaveExport({
+        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName },
+        xml,
+        pdfBytes,
+        format,
+      });
+      showLoading(false);
+      showToast(
+        format === 'zugferd'
+          ? `ZUGFeRD PDF exportiert & in SharePoint gespeichert. (${safeNr})`
+          : `XRechnung XML exportiert & in SharePoint gespeichert. (${safeNr})`,
+        'success'
+      );
+    } catch (spErr) {
+      showLoading(false);
+      console.warn('SharePoint save failed:', spErr);
+      showToast(
+        `Exportiert (lokal) · SharePoint-Fehler: ${spErr.message}`,
+        'info'
+      );
+    }
 
   } catch (err) {
     showLoading(false);

@@ -29,15 +29,35 @@
   <div class="verlauf-header">
     <div>
       <h2>📂 Exportverlauf</h2>
-      <p>Alle exportierten Rechnungen – gespeichert lokal in Ihrem Browser.</p>
+      <p id="verlauf-subtitle">Rechnungen aus SharePoint werden geladen…</p>
     </div>
-    <div style="display:flex; gap:10px; align-items:center;">
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
       <a href="index.html" class="btn btn-primary">+ Neue Rechnung</a>
-      <button class="btn btn-danger" id="btn-clear-all" style="display:none;" type="button">🗑 Alles löschen</button>
+      <button class="btn btn-secondary" id="btn-refresh" type="button" style="display:none;">🔄 Aktualisieren</button>
+      <a href="https://dihag.sharepoint.com/sites/IT/Lists/ERechnung/AllItems.aspx"
+         target="_blank" class="btn btn-secondary" id="btn-sp-open" style="display:none;">
+        🌐 In SharePoint öffnen
+      </a>
     </div>
   </div>
 
-  <div id="verlauf-container"></div>
+  <!-- SP-Fehler-Banner (wird bei Bedarf eingeblendet) -->
+  <div id="sp-error-banner" style="display:none;" class="sp-error-banner">
+    <span class="sp-error-icon">⚠️</span>
+    <div class="sp-error-text">
+      <strong id="sp-error-title">SharePoint nicht erreichbar</strong>
+      <span id="sp-error-msg"></span>
+    </div>
+    <button class="sp-error-close" onclick="document.getElementById('sp-error-banner').style.display='none'">✕</button>
+  </div>
+
+  <div id="verlauf-container">
+    <!-- Initaler Ladeindikator -->
+    <div class="verlauf-loading" id="verlauf-loading">
+      <span class="spinner"></span>
+      <p>SharePoint-Liste wird geladen…</p>
+    </div>
+  </div>
 
 </div>
 
@@ -50,35 +70,155 @@
 
 <!-- App Scripts -->
 <script src="js/auth.js"></script>
-<script src="js/xrechnung.js"></script>
 <script src="js/zugferd.js"></script>
 <script src="js/history.js"></script>
-<script>authInit();</script>
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    renderVerlauf();
+<script src="js/sharepoint.js"></script>
 
-    document.getElementById('btn-clear-all').addEventListener('click', () => {
-      if (confirm('Wirklich den gesamten Verlauf löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
-        clearHistory();
-        renderVerlauf();
-        showToast('Verlauf geleert.', 'info');
+<!-- Auth-Ready: nach Login SharePoint laden -->
+<script>
+  onAuthReady(() => loadVerlauf());
+</script>
+<script>authInit();</script>
+
+<script>
+/* ── Verlauf laden & rendern ── */
+async function loadVerlauf() {
+  showLoading(true);
+  try {
+    const items = await spGetExports();
+    showLoading(false);
+    renderSP(items);
+    document.getElementById('btn-refresh').style.display   = 'flex';
+    document.getElementById('btn-sp-open').style.display   = 'flex';
+    document.getElementById('verlauf-subtitle').textContent =
+      `${items.length} Einträge aus SharePoint · Liste: IT/ERechnung`;
+  } catch (err) {
+    showLoading(false);
+    showSPError(err);
+    // Fallback: localStorage
+    document.getElementById('verlauf-subtitle').textContent =
+      'SharePoint nicht verfügbar · Lokaler Browser-Cache';
+    renderVerlauf(); // history.js (localStorage)
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', () => loadVerlauf());
+}
+
+function showLoading(on) {
+  const el = document.getElementById('verlauf-loading');
+  if (el) el.style.display = on ? 'flex' : 'none';
+}
+
+function showSPError(err) {
+  const banner = document.getElementById('sp-error-banner');
+  banner.style.display = 'flex';
+  document.getElementById('sp-error-msg').textContent = err.message;
+
+  // Azure-Berechtigungs-Hinweis wenn nötig
+  if (err.message?.includes('403') || err.message?.includes('insufficient')) {
+    document.getElementById('sp-error-title').textContent =
+      'Fehlende Berechtigungen — Adminzustimmung erforderlich';
+  }
+}
+
+/* ── SharePoint-Tabelle rendern ── */
+function renderSP(items) {
+  const container = document.getElementById('verlauf-container');
+  container.innerHTML = '';
+
+  if (!items.length) {
+    container.innerHTML = `
+      <div class="verlauf-empty">
+        <span class="ve-icon">📂</span>
+        <h3>Noch keine Einträge</h3>
+        <p>Exportierte Rechnungen erscheinen hier automatisch.</p>
+      </div>`;
+    return;
+  }
+
+  const table = document.createElement('div');
+  table.className = 'verlauf-table-wrapper';
+  table.innerHTML = `
+    <table class="verlauf-table">
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Rechnungs-Nr.</th>
+          <th>Aussteller</th>
+          <th>Empfänger</th>
+          <th>Format</th>
+          <th class="text-right">Brutto</th>
+          <th>Dateien</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map(e => spRow(e)).join('')}
+      </tbody>
+    </table>`;
+  container.appendChild(table);
+
+  // Delete-Buttons verdrahten
+  container.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Diesen Eintrag aus SharePoint löschen?')) return;
+      btn.textContent = '…';
+      btn.disabled = true;
+      try {
+        await spDeleteItem(btn.dataset.del);
+        btn.closest('tr').remove();
+        showToast('Eintrag gelöscht.', 'info');
+      } catch (err) {
+        showToast('Löschen fehlgeschlagen: ' + err.message, 'error');
+        btn.textContent = '🗑';
+        btn.disabled = false;
       }
     });
   });
+}
 
-  function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
-    toast.innerHTML = `<span class="toast-icon">${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
-    container.appendChild(toast);
-    setTimeout(() => {
-      toast.classList.add('fade-out');
-      toast.addEventListener('animationend', () => toast.remove());
-    }, 4000);
-  }
+function spRow(e) {
+  const date   = e.createdAt ? new Date(e.createdAt).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '–';
+  const brutto = (e.grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt    = e.format || 'XRechnung';
+  const fmtCls = fmt.toLowerCase().includes('zugferd') ? 'zugferd' : 'xrechnung';
+  const esc    = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const xmlBtn = e.xmlUrl
+    ? `<a href="${esc(e.xmlUrl)}" target="_blank" class="btn btn-secondary btn-sm" title="XML in SharePoint öffnen">📄 XML</a>`
+    : '';
+  const pdfBtn = e.pdfUrl
+    ? `<a href="${esc(e.pdfUrl)}" target="_blank" class="btn btn-secondary btn-sm" title="ZUGFeRD PDF in SharePoint öffnen">📎 PDF</a>`
+    : '';
+
+  return `
+    <tr>
+      <td>${date}</td>
+      <td class="invoice-nr">${esc(e.rechnungsnummer)}</td>
+      <td>${esc(e.verkaeufer)}</td>
+      <td>${esc(e.kaeufer)}</td>
+      <td><span class="format-tag ${fmtCls}">${esc(fmt)}</span></td>
+      <td class="amount-cell">${brutto} €</td>
+      <td><div class="actions-cell">${xmlBtn}${pdfBtn}</div></td>
+      <td>
+        <button class="btn btn-danger btn-sm" data-del="${esc(e.id)}" title="Löschen">🗑</button>
+      </td>
+    </tr>`;
+}
+
+/* ── Toast ── */
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  toast.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span>${message}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    toast.addEventListener('animationend', () => toast.remove());
+  }, 4000);
+}
 </script>
 
 </body>
