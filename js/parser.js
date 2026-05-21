@@ -91,25 +91,26 @@ function extractSeller(fullText) {
   const r = {};
 
   // USt-IdNr — handle "DE 812 264 517" (with spaces)
-  const vatm = fullText.match(/USt-?IdNr\.?\s*[•·:\s]+\s*(DE[\s\d]{9,14})/i);
+  const vatm = fullText.match(/USt-?IdNr\.?\s*[^\w\n]{0,4}\s*(DE[\s\d]{9,14})/i);
   if (vatm) r.verkaeufervat = vatm[1].replace(/\s/g, '');
 
   // Steuernummer
-  const stm = fullText.match(/Steuer-?Nr\.?\s*[•·:\s]+\s*([\d]+\/[\d\/]+)/i);
+  const stm = fullText.match(/Steuer-?Nr\.?\s*[^\w\n]{0,4}\s*([\d]+\/[\d\/]+)/i);
   if (stm) r.verkaeufersteuernr = stm[1];
 
   // IBAN
-  const ibanm = fullText.match(/IBAN\s*[•·:\s]?\s*(DE\d{2}[\d\s]{15,25})/i);
+  const ibanm = fullText.match(/IBAN\s*[^\w\n]{0,4}\s*(DE\d{2}[\d\s]{15,25})/i);
   if (ibanm) r.iban = ibanm[1].replace(/\s/g, '');
 
   // BIC
-  const bicm = fullText.match(/BIC\s*[•·:\s]?\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)/i);
+  const bicm = fullText.match(/BIC\s*[^\w\n]{0,4}\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)/i);
   if (bicm) r.bic = bicm[1];
 
-  // Seller name + address from header/footer line: "Name • Straße • PLZ Stadt"
-  // Also: "Name - Str. - PLZ Stadt" (the inline address line)
-  const dotPat = /([A-ZÄÖÜ][^\n•·|]+(?:GmbH|AG|KG|OHG|SE|UG|e\.V\.))\s*[•·]\s*([^•·\n|]+(?:str(?:aße|\.)?|[Ww]eg|[Gg]asse|[Pp]latz)[^•·\n|]*)\s*[•·]\s*(\d{4,5})\s+([A-ZÄÖÜa-zäöüß\-]+)/i;
-  const dashPat = /([A-ZÄÖÜ][^\n\-]+(?:GmbH|AG|KG|OHG|SE|UG))\s*-\s*([^-\n]+(?:str(?:aße|\.)?|[Ww]eg)[^-\n]*)\s*-\s*(\d{4,5})\s+([A-ZÄÖÜa-zäöüß\-]+)/i;
+  // Seller name + address from footer/Absenderzeile
+  // Pattern 1: "Name • Straße • PLZ Stadt" — any non-word/non-hyphen separator char (•, ·, |, ●, ▪, …)
+  const dotPat = /([A-ZÄÖÜ].+?(?:GmbH|AG|KG|OHG|SE|UG|e\.V\.))\s*[^\wäöüÄÖÜß\s\n\-,\.]{1,3}\s*(.+?(?:str(?:aße|\.)?|[Ww]eg|[Gg]asse|[Pp]latz|[Ss]traße).+?)\s*[^\wäöüÄÖÜß\s\n\-,\.]{1,3}\s*(\d{4,5})\s+([A-ZÄÖÜa-zäöüß][A-ZÄÖÜa-zäöüß\-]+)/i;
+  // Pattern 2: "Name - Str. - PLZ Stadt" — space REQUIRED on both sides of dash (avoids matching hyphens inside "Stahl- und Hartgusswerk")
+  const dashPat = /([A-ZÄÖÜ].+?(?:GmbH|AG|KG|OHG|SE|UG))\s{1,3}-\s{1,3}(.+?(?:str(?:aße|\.)?|[Ww]eg|[Gg]asse|[Ss]tr\.).+?)\s{1,3}-\s{1,3}(\d{4,5})\s+([A-ZÄÖÜa-zäöüß][A-ZÄÖÜa-zäöüß\-]+)/i;
 
   for (const pat of [dotPat, dashPat]) {
     const m = fullText.match(pat);
@@ -136,7 +137,11 @@ function extractBuyer(fullText, leftText) {
 
   if (blockMatch) {
     const block = blockMatch[1];
-    const rawLines = block.split('\n').map(l => l.trim()).filter(l => l.length > 2 && !/^[-_]+$/.test(l));
+    // Filter out Absenderzeile: "Company GmbH - Straße - PLZ Stadt" (small sender line above address window)
+    const absenderPat = /^[A-ZÄÖÜ].+?(?:GmbH|AG|KG|UG)\s+-\s+.+?\s+-\s+\d{4,5}/;
+    const rawLines = block.split('\n').map(l => l.trim()).filter(l =>
+      l.length > 2 && !/^[-_]+$/.test(l) && !absenderPat.test(l)
+    );
 
     // First line = company name
     if (rawLines[0]) r.kaeufer = rawLines[0];
