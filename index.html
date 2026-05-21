@@ -60,6 +60,16 @@
     </div>
   </div>
 
+  <!-- Autofill Banner -->
+  <div id="autofill-banner" style="display:none;" class="autofill-banner">
+    <span class="autofill-icon">✅</span>
+    <div class="autofill-text">
+      <strong><span id="autofill-count">0</span> Felder automatisch erkannt und eingetragen</strong>
+      <span>Bitte prüfen Sie die eingetragenen Daten vor dem Export. Grün markierte Felder wurden automatisch befüllt.</span>
+    </div>
+    <button class="autofill-close" onclick="document.getElementById('autofill-banner').style.display='none'">✕</button>
+  </div>
+
   <!-- Main Layout: PDF-Viewer + Formular -->
   <div class="main-layout">
 
@@ -300,6 +310,7 @@
 <script src="js/xrechnung.js"></script>
 <script src="js/zugferd.js"></script>
 <script src="js/history.js"></script>
+<script src="js/parser.js"></script>
 <script src="js/app.js"></script>
 <script>authInit();</script>
 

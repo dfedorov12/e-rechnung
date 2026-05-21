@@ -788,6 +788,56 @@ body {
 
 .toast.fade-out { animation: slideOut 0.2s ease forwards; }
 
+/* ── Autofill Banner ── */
+.autofill-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.autofill-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+
+.autofill-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  color: #166534;
+}
+
+.autofill-text strong { font-size: 14px; }
+.autofill-text span   { color: #15803d; opacity: 0.9; }
+
+.autofill-close {
+  background: none;
+  border: none;
+  color: #166534;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.6;
+  transition: opacity var(--transition);
+  flex-shrink: 0;
+}
+.autofill-close:hover { opacity: 1; }
+
+/* ── Autofilled field highlight ── */
+input.autofilled,
+select.autofilled,
+textarea.autofilled {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+}
+
+/* positions-table autofilled cells */
+.positions-table td input.autofilled { background: #f0fdf4 !important; border-color: #86efac !important; }
+
 /* ── Auth Guard ── */
 body.auth-guard { visibility: hidden; }
 

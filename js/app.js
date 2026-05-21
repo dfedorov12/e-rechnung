@@ -67,8 +67,88 @@ async function handleFileUpload(file) {
     uploadedPdfBytes = new Uint8Array(e.target.result);
     updateUploadUI(file);
     await renderPDF(uploadedPdfBytes);
+    // Auto-fill form after PDF is loaded and pdfDocument is set
+    await autoFillFromPDF();
   };
   reader.readAsArrayBuffer(file);
+}
+
+/* ── Auto-Fill ── */
+async function autoFillFromPDF() {
+  if (!pdfDocument) return;
+  showLoading(true, 'Rechnungsdaten werden erkannt...');
+  try {
+    const data  = await extractInvoiceData(pdfDocument);
+    const count = fillFormFromExtracted(data);
+    showLoading(false);
+    if (count > 0) {
+      showAutofillBanner(count);
+      showToast(`${count} Felder automatisch erkannt. Bitte prüfen und ergänzen.`, 'success');
+    } else {
+      showToast('Keine Daten automatisch erkannt — bitte manuell ausfüllen.', 'info');
+    }
+  } catch (err) {
+    showLoading(false);
+    console.error('Parser error:', err);
+    showToast('Automatische Erkennung fehlgeschlagen: ' + err.message, 'error');
+  }
+}
+
+function fillFormFromExtracted(data) {
+  let count = 0;
+  const map = {
+    'verkaeufer':          data.verkaeufer,
+    'verkaeufer-strasse':  data.verkaeufstrasse,
+    'verkaeufer-plz':      data.verkaeufplz,
+    'verkaeufer-stadt':    data.verkaeufstadt,
+    'verkaeufer-land':     data.verkaeufland,
+    'verkaeufer-vat':      data.verkaeufervat,
+    'verkaeufer-steuernr': data.verkaeufersteuernr,
+    'iban':                data.iban,
+    'bic':                 data.bic,
+    'kaeufer':             data.kaeufer,
+    'kaeufer-strasse':     data.kaeuferstrasse,
+    'kaeufer-plz':         data.kaeuferplz,
+    'kaeufer-stadt':       data.kaeuferstadt,
+    'kaeufer-land':        data.kaeuferland,
+    'leitwegid':           data.leitwegid,
+    'rechnungsnummer':     data.rechnungsnummer,
+    'rechnungsdatum':      data.rechnungsdatum,
+    'lieferdatum':         data.lieferdatum,
+    'faelligkeitsdatum':   data.faelligkeitsdatum,
+    'zahlungsreferenz':    data.zahlungsreferenz || data.rechnungsnummer,
+    'notiz':               data.notiz,
+  };
+
+  for (const [id, val] of Object.entries(map)) {
+    if (val) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.value = val;
+        el.classList.add('autofilled');
+        el.addEventListener('input', () => el.classList.remove('autofilled'), { once: true });
+        count++;
+      }
+    }
+  }
+
+  if (data.positionen && data.positionen.length > 0) {
+    document.getElementById('positions-body').innerHTML = '';
+    rowCounter = 0;
+    data.positionen.forEach(p => addPositionRow(p));
+    count += data.positionen.length;
+    renumberRows();
+  }
+
+  updateTotals();
+  return count;
+}
+
+function showAutofillBanner(count) {
+  const banner = document.getElementById('autofill-banner');
+  if (!banner) return;
+  document.getElementById('autofill-count').textContent = count;
+  banner.style.display = 'flex';
 }
 
 function updateUploadUI(file) {
