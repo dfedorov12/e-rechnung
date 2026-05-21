@@ -1,14 +1,14 @@
 /**
  * SharePoint / Microsoft Graph API Integration
  * Liste: https://dihag.sharepoint.com/sites/IT/Lists/ERechnung
- * Dateien: Dokumente-Bibliothek / ERechnung/
+ * Dateien: Dokumente-Bibliothek / E-Rechnung/
  */
 
 const SP = {
   graphBase: 'https://graph.microsoft.com/v1.0',
   siteHost:  'dihag.sharepoint.com:/sites/IT',
-  listName:  'ERechnung',
-  folder:    'ERechnung',
+  listName:  'E-Rechnung',
+  folder:    'E-Rechnung',
   scopes: [
     'https://graph.microsoft.com/Sites.ReadWrite.All',
     'https://graph.microsoft.com/Files.ReadWrite.All',
