@@ -66,7 +66,9 @@ async function handleFileUpload(file) {
   reader.onload = async (e) => {
     uploadedPdfBytes = new Uint8Array(e.target.result);
     updateUploadUI(file);
-    await renderPDF(uploadedPdfBytes);
+    // PDF.js transferiert den ArrayBuffer zum Worker (zero-copy) → Original würde genullt.
+    // Deshalb eine Kopie übergeben, damit uploadedPdfBytes für pdf-lib intakt bleibt.
+    await renderPDF(uploadedPdfBytes.slice(0));
     // Auto-fill form after PDF is loaded and pdfDocument is set
     await autoFillFromPDF();
   };
