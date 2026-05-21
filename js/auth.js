@@ -29,8 +29,7 @@ async function authInit() {
       storeAuthStateInCookie: true,
     },
   });
-
-  await _msal.initialize();
+  // initialize() nur in MSAL 3.x — MSAL 2.x braucht das nicht
 
   // Redirect-Response verarbeiten (Rückkehr vom Login)
   let response = null;
