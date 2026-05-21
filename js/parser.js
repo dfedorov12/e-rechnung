@@ -90,8 +90,8 @@ function extractMetadata(rightText, fullText) {
 function extractSeller(fullText) {
   const r = {};
 
-  // USt-IdNr — handle "DE 812 264 517" (with spaces)
-  const vatm = fullText.match(/USt-?IdNr\.?\s*[^\w\n]{0,4}\s*(DE[\s\d]{9,14})/i);
+  // USt-IdNr — match "DE 812 264 517", "DE812264517", "DE  812  264  517", etc.
+  const vatm = fullText.match(/USt-?IdNr\.?\s*[^\w\n]{0,4}\s*(DE(?:\s*\d){9})/i);
   if (vatm) r.verkaeufervat = vatm[1].replace(/\s/g, '');
 
   // Steuernummer
