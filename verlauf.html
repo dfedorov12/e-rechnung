@@ -74,12 +74,6 @@
 <script src="js/history.js"></script>
 <script src="js/sharepoint.js"></script>
 
-<!-- Auth-Ready: nach Login SharePoint laden -->
-<script>
-  onAuthReady(() => loadVerlauf());
-</script>
-<script>authInit();</script>
-
 <script>
 /* ── Verlauf laden & rendern ── */
 async function loadVerlauf() {
@@ -220,6 +214,10 @@ function showToast(message, type = 'info') {
   }, 4000);
 }
 </script>
+
+<!-- Alle Funktionen sind jetzt definiert → Auth starten -->
+<script>onAuthReady(() => loadVerlauf());</script>
+<script>authInit();</script>
 
 </body>
 </html>
