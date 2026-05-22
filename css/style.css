@@ -1025,3 +1025,38 @@ body.auth-guard { visibility: hidden; }
   color: var(--gray-600);
   font-weight: 500;
 }
+
+/* ── App Footer / Disclaimer ── */
+.app-footer {
+  background: var(--gray-100);
+  border-top: 1px solid var(--gray-200);
+  margin-top: 40px;
+  padding: 20px 0;
+}
+
+.app-footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-footer-disclaimer {
+  font-size: 12px;
+  color: var(--gray-500);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.app-footer-disclaimer strong {
+  color: var(--gray-600);
+}
+
+.app-footer-version {
+  font-size: 11px;
+  color: var(--gray-400);
+  margin: 0;
+  letter-spacing: 0.3px;
+}
