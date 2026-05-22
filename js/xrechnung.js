@@ -6,7 +6,7 @@
 
 function buildXML(data, profile = 'xrechnung') {
   const guideline = profile === 'zugferd'
-    ? 'urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:en16931'
+    ? 'urn:cen.eu:en16931:2017'
     : 'urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0';
 
   const fmt = (n) => parseFloat(n || 0).toFixed(2);
