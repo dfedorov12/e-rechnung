@@ -139,9 +139,6 @@ function buildXML(data, profile = 'xrechnung') {
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <rsm:ExchangedDocumentContext>
-    <ram:BusinessProcessSpecifiedDocumentContextParameter>
-      <ram:ID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</ram:ID>
-    </ram:BusinessProcessSpecifiedDocumentContextParameter>
     <ram:GuidelineSpecifiedDocumentContextParameter>
       <ram:ID>${guideline}</ram:ID>
     </ram:GuidelineSpecifiedDocumentContextParameter>
