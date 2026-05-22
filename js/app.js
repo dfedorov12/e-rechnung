@@ -16,10 +16,29 @@ document.addEventListener('DOMContentLoaded', () => {
   addPositionRow();
   setupFormCalculations();
   setupDateDefaults();
+  setupBuyerEmailToggle();
   document.getElementById('btn-add-row').addEventListener('click', addPositionRow);
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
 });
+
+/* ── Käufer E-Mail Pflichtfeld-Logik ── */
+// E-Mail ist Pflicht (BT-49) wenn keine Leitweg-ID angegeben
+function setupBuyerEmailToggle() {
+  const leitwegInput = document.getElementById('leitwegid');
+  const emailLabel   = document.getElementById('kaeufer-email-label');
+  if (!leitwegInput || !emailLabel) return;
+
+  const requiredMark = emailLabel.querySelector('.required');
+
+  function update() {
+    const hasLeitweg = leitwegInput.value.trim() !== '';
+    if (requiredMark) requiredMark.style.display = hasLeitweg ? 'none' : '';
+  }
+
+  leitwegInput.addEventListener('input', update);
+  update(); // Initialzustand setzen
+}
 
 /* ── Upload Zone ── */
 function setupUploadZone() {
@@ -383,6 +402,11 @@ function validateForm(data) {
   // XRechnung BR-DE-5: Ansprechpartner (BT-41) ist Pflicht
   if (!data.verkaeufkontakt) {
     errors.push('Ansprechpartner des Rechnungsstellers');
+  }
+  // PEPPOL-EN16931-R010: Käufer elektronische Adresse (BT-49) ist Pflicht
+  // — Leitweg-ID (schemeID 0204) oder E-Mail (schemeID EM)
+  if (!data.leitwegid && !data.kaeufermail) {
+    errors.push('Leitweg-ID oder E-Mail des Rechnungsempfängers (elektronische Adresse)');
   }
 
   return errors;
