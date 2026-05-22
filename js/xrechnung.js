@@ -93,9 +93,18 @@ function buildXML(data, profile = 'xrechnung') {
   ].filter(Boolean).join('\n        ');
 
   // BG-6 SELLER CONTACT — mandatory for XRechnung (BR-DE-2)
+  // BT-41 PersonName is mandatory within BG-6 (BR-DE-5).
+  // Derive from email localpart if not explicitly provided.
+  const contactName = data.verkaeufkontakt ||
+    (data.verkaeuferemail
+      ? data.verkaeuferemail.split('@')[0]
+          .replace(/[._\-]/g, ' ')
+          .replace(/\b\w/g, l => l.toUpperCase())
+      : 'Ansprechpartner');
+
   const sellerContact = (data.verkaeufkontakt || data.verkaeuftel || data.verkaeuferemail)
     ? `<ram:DefinedTradeContact>
-          ${data.verkaeufkontakt ? `<ram:PersonName>${esc(data.verkaeufkontakt)}</ram:PersonName>` : ''}
+          <ram:PersonName>${esc(contactName)}</ram:PersonName>
           ${data.verkaeuftel ? `<ram:TelephoneUniversalCommunication><ram:CompleteNumber>${esc(data.verkaeuftel)}</ram:CompleteNumber></ram:TelephoneUniversalCommunication>` : ''}
           ${data.verkaeuferemail ? `<ram:EmailURIUniversalCommunication><ram:URIID>${esc(data.verkaeuferemail)}</ram:URIID></ram:EmailURIUniversalCommunication>` : ''}
         </ram:DefinedTradeContact>`
@@ -130,6 +139,9 @@ function buildXML(data, profile = 'xrechnung') {
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <rsm:ExchangedDocumentContext>
+    <ram:BusinessProcessSpecifiedDocumentContextParameter>
+      <ram:ID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</ram:ID>
+    </ram:BusinessProcessSpecifiedDocumentContextParameter>
     <ram:GuidelineSpecifiedDocumentContextParameter>
       <ram:ID>${guideline}</ram:ID>
     </ram:GuidelineSpecifiedDocumentContextParameter>
