@@ -299,12 +299,34 @@ function extractLineItems(fullText) {
   if (items.length > 0) return items;
 
   // ── Pattern C: Fallback — Nettowert als Einzelposition ──
+  // Try to read the actual product/service description from the text before the total.
   const netm   = fullText.match(/Nettowert?\s*[:\s]+\s*([\d.]+,[\d]{2})\s*€/i) ||
                  fullText.match(/Netto(?:betrag|summe)?\s*[:\s]+\s*([\d.]+,[\d]{2})/i);
   const mwstPct = fullText.match(/MwSt\s*[:\s]+\s*([\d,]+)\s*%/i);
   if (netm) {
+    const netIdx    = netm.index;
+    const preceding = fullText.substring(Math.max(0, netIdx - 1500), netIdx);
+
+    // Lines that are clearly NOT product descriptions
+    const skipLine = /^(Re\.?-?(?:Nr|Datum)|Rechnungs|Liefer(?:datum|ung)?[:\s]|Zahlungs|Kunden-?Nr|Bestell|Pos(?:ition)?\.?\s*\d|Artikel-?Nr\.?|Beschreibung|Bezeichnung|Menge\s|Einheit\s|Einzel|Gesamt|Netto|Brutto|MwSt|USt|Summe|Total|Betrag|Seite\s*\d|Bank|IBAN|BIC|Tel\.?|Fax|E-?Mail|www\.|An\s|Von\s|Firma|PLZ|DIHAG|SHB)/i;
+
+    const candidateLines = preceding
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l =>
+        l.length >= 5 &&
+        /[A-Za-zÄÖÜäöüß]{2,}/.test(l) &&  // at least 2 consecutive letters
+        !/^\d+[.,]\d{2}/.test(l) &&        // not starting with amount
+        !/^[\d\s.,/\-–]+$/.test(l) &&      // not purely numbers / separators
+        !skipLine.test(l)
+      );
+
+    const descRaw = candidateLines.length > 0
+      ? candidateLines[candidateLines.length - 1]
+      : '';
+
     items.push({
-      beschreibung: 'Lieferung / Leistung (aus Nettowert)',
+      beschreibung: descRaw.length >= 5 ? descRaw : 'Lieferung / Leistung (aus Nettowert)',
       menge:        1,
       einheit:      'Pausch.',
       einzelpreis:  _parseDE(netm[1]),

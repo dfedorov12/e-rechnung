@@ -82,11 +82,15 @@ function buildXML(data, profile = 'xrechnung') {
         <ram:RateApplicablePercent>${fmt(g.rate)}</ram:RateApplicablePercent>
       </ram:ApplicableTradeTax>`).join('');
 
-  const sellerVat = data.verkaeufervat
-    ? `<ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">${esc(data.verkaeufervat)}</ram:ID></ram:SpecifiedTaxRegistration>`
-    : data.verkaeufersteuernr
+  // EN 16931 allows multiple SpecifiedTaxRegistration entries (VA + FC)
+  const sellerVat = [
+    data.verkaeufervat
+      ? `<ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">${esc(data.verkaeufervat)}</ram:ID></ram:SpecifiedTaxRegistration>`
+      : '',
+    data.verkaeufersteuernr
       ? `<ram:SpecifiedTaxRegistration><ram:ID schemeID="FC">${esc(data.verkaeufersteuernr)}</ram:ID></ram:SpecifiedTaxRegistration>`
-      : '';
+      : '',
+  ].filter(Boolean).join('\n        ');
 
   const buyerRef = esc(data.leitwegid || data.rechnungsnummer);
   const note = data.notiz ? `<ram:IncludedNote><ram:Content>${esc(data.notiz)}</ram:Content></ram:IncludedNote>` : '';
