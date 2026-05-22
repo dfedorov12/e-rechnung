@@ -7,7 +7,7 @@
 function buildXML(data, profile = 'xrechnung') {
   const guideline = profile === 'zugferd'
     ? 'urn:cen.eu:en16931:2017'
-    : 'urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0';
+    : 'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
 
   const fmt = (n) => parseFloat(n || 0).toFixed(2);
   const fmtDate = (s) => {
@@ -139,6 +139,9 @@ function buildXML(data, profile = 'xrechnung') {
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <rsm:ExchangedDocumentContext>
+    ${profile !== 'zugferd' ? `<ram:BusinessProcessSpecifiedDocumentContextParameter>
+      <ram:ID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</ram:ID>
+    </ram:BusinessProcessSpecifiedDocumentContextParameter>` : ''}
     <ram:GuidelineSpecifiedDocumentContextParameter>
       <ram:ID>${guideline}</ram:ID>
     </ram:GuidelineSpecifiedDocumentContextParameter>
