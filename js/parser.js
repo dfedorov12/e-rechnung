@@ -146,6 +146,16 @@ function extractSeller(footerText, fullText) {
   const bicm = src.match(/BIC[\s:·•|]*\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)/i);
   if (bicm) r.bic = bicm[1];
 
+  // ── Telefon ───────────────────────────────────────────────────────────────
+  // Matches "Tel: +49 341 123456" or "Telefon: 0341/123456"
+  const telm = src.match(/Tel\.?(?:efon)?\s*[:\s•|]+([+\d][\d\s()\/\-\.]{5,20})/i);
+  if (telm) r.verkaeuftel = telm[1].trim().replace(/\s+/g, ' ');
+
+  // ── E-Mail ────────────────────────────────────────────────────────────────
+  const emailm = src.match(/E-?Mail\s*[:\s•|]+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i) ||
+                 src.match(/([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/);
+  if (emailm) r.verkaeuferemail = emailm[1].trim();
+
   // Name + Adresse — Suche bevorzugt in Fußzeile
   // Pattern 1: "Name · Straße · PLZ Stadt"  (beliebiges Sonderzeichen als Trenner)
   const dotPat = /([A-ZÄÖÜ].+?(?:GmbH|AG|KG|OHG|SE|UG|e\.V\.))\s*[^\wäöüÄÖÜß\s\n\-,\.]{1,3}\s*(.+?(?:str(?:aße|\.)?|[Ww]eg|[Gg]asse|[Pp]latz|[Ss]traße).+?)\s*[^\wäöüÄÖÜß\s\n\-,\.]{1,3}\s*(\d{4,5})\s+([A-ZÄÖÜa-zäöüß][A-ZÄÖÜa-zäöüß\-]+)/i;
@@ -285,6 +295,31 @@ function extractLineItems(fullText) {
   }
   if (items.length > 0) return items;
 
+  // ── Pattern A2: "Name: Einzelpreis €/Einheit Gesamtpreis €"  (SHB-Format) ──
+  // e.g. "Philips B Line 346B1C/00: 299,00 €/Stk 299,00 €"
+  const shbRe2 = /([A-Za-zÄÖÜäöüß0-9][^:\n]{3,80}?)\s*:\s*([\d]+[,.][\d]{2})\s*€\/([\w\.]+)\s+([\d]+[,.][\d]{2})\s*€/g;
+  while ((m = shbRe2.exec(fullText)) !== null) {
+    const desc = m[1].trim().replace(/^\d+\.?\s+/, '').trim();
+    if (!desc || desc.length < 3 || /^[-_\s]+$/.test(desc)) continue;
+
+    const unitPrice = _parseDE(m[2]);
+    const total     = _parseDE(m[4]);
+    const menge     = unitPrice > 0 ? Math.round((total / unitPrice) * 1000) / 1000 : 1;
+    const context   = fullText.substring(m.index, m.index + 400);
+    const mwstm     = context.match(/MwSt\.?\s*[:\s]+\s*([\d,]+)\s*%/i) ||
+                      context.match(/(\d{1,2})[,.]?0*\s*%/);
+    const mwst      = mwstm ? parseFloat(mwstm[1]) : 19;
+
+    items.push({
+      beschreibung: desc,
+      menge:        menge || 1,
+      einheit:      _unitCode(m[3]),
+      einzelpreis:  unitPrice,
+      mwst,
+    });
+  }
+  if (items.length > 0) return items;
+
   // ── Pattern B: Tabellen-Format "Bezeichnung  Menge  Einheit  Preis  MwSt%" ──
   const tableRe = /([A-Za-zÄÖÜäöüß0-9][^\n]{4,80})\s+([\d,]+)\s+(Stk|Std|h|kg|m|lfm|Psch|Pkt)\s+([\d,.]+)\s+(19|7|0),?0*\s*%/gi;
   while ((m = tableRe.exec(fullText)) !== null) {
@@ -325,8 +360,14 @@ function extractLineItems(fullText) {
       ? candidateLines[candidateLines.length - 1]
       : '';
 
+    // Strip trailing price info: ": 299,00 €/Stk 299,00 €"  or  "299,00 €/Stk"
+    const descClean = descRaw
+      .replace(/\s*:\s*[\d.,]+\s*€\/[\w\.]+.*$/i, '')
+      .replace(/\s+[\d.,]+\s*€\/[\w\.]+.*$/i, '')
+      .trim();
+
     items.push({
-      beschreibung: descRaw.length >= 5 ? descRaw : 'Lieferung / Leistung (aus Nettowert)',
+      beschreibung: descClean.length >= 5 ? descClean : 'Lieferung / Leistung (aus Nettowert)',
       menge:        1,
       einheit:      'Pausch.',
       einzelpreis:  _parseDE(netm[1]),

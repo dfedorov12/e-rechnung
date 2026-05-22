@@ -106,6 +106,9 @@ function fillFormFromExtracted(data) {
     'verkaeufer-land':     data.verkaeufland,
     'verkaeufer-vat':      data.verkaeufervat,
     'verkaeufer-steuernr': data.verkaeufersteuernr,
+    'verkaeufer-kontakt':  data.verkaeufkontakt,
+    'verkaeufer-tel':      data.verkaeuftel,
+    'verkaeufer-email':    data.verkaeuferemail,
     'iban':                data.iban,
     'bic':                 data.bic,
     'kaeufer':             data.kaeufer,
@@ -333,6 +336,9 @@ function collectFormData() {
     verkaeufland:      v('verkaeufer-land') || 'DE',
     verkaeufervat:     v('verkaeufer-vat'),
     verkaeufersteuernr: v('verkaeufer-steuernr'),
+    verkaeufkontakt:   v('verkaeufer-kontakt'),
+    verkaeuftel:       v('verkaeufer-tel'),
+    verkaeuferemail:   v('verkaeufer-email'),
     iban:              v('iban'),
     bic:               v('bic'),
     // Käufer
@@ -371,6 +377,10 @@ function validateForm(data) {
 
   if (!data.verkaeufervat && !data.verkaeufersteuernr) {
     errors.push('USt-IdNr. oder Steuernummer des Rechnungsstellers');
+  }
+  // XRechnung BR-DE-2: SELLER CONTACT (BG-6) ist Pflicht
+  if (!data.verkaeufkontakt && !data.verkaeuftel && !data.verkaeuferemail) {
+    errors.push('Kontaktdaten des Rechnungsstellers (Telefon oder E-Mail)');
   }
 
   return errors;

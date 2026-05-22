@@ -92,6 +92,15 @@ function buildXML(data, profile = 'xrechnung') {
       : '',
   ].filter(Boolean).join('\n        ');
 
+  // BG-6 SELLER CONTACT — mandatory for XRechnung (BR-DE-2)
+  const sellerContact = (data.verkaeufkontakt || data.verkaeuftel || data.verkaeuferemail)
+    ? `<ram:DefinedTradeContact>
+          ${data.verkaeufkontakt ? `<ram:PersonName>${esc(data.verkaeufkontakt)}</ram:PersonName>` : ''}
+          ${data.verkaeuftel ? `<ram:TelephoneUniversalCommunication><ram:CompleteNumber>${esc(data.verkaeuftel)}</ram:CompleteNumber></ram:TelephoneUniversalCommunication>` : ''}
+          ${data.verkaeuferemail ? `<ram:EmailURIUniversalCommunication><ram:URIID>${esc(data.verkaeuferemail)}</ram:URIID></ram:EmailURIUniversalCommunication>` : ''}
+        </ram:DefinedTradeContact>`
+    : '';
+
   const buyerRef = esc(data.leitwegid || data.rechnungsnummer);
   const note = data.notiz ? `<ram:IncludedNote><ram:Content>${esc(data.notiz)}</ram:Content></ram:IncludedNote>` : '';
   const dueDateXML = data.faelligkeitsdatum
@@ -143,6 +152,7 @@ function buildXML(data, profile = 'xrechnung') {
 
       <ram:SellerTradeParty>
         <ram:Name>${esc(data.verkaeufer)}</ram:Name>
+        ${sellerContact}
         <ram:PostalTradeAddress>
           <ram:PostcodeCode>${esc(data.verkaeufplz)}</ram:PostcodeCode>
           <ram:LineOne>${esc(data.verkaeufstrasse)}</ram:LineOne>
