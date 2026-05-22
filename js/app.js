@@ -17,27 +17,50 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFormCalculations();
   setupDateDefaults();
   setupBuyerEmailToggle();
+  setupRequiredFieldToggles();
   document.getElementById('btn-add-row').addEventListener('click', addPositionRow);
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
 });
 
-/* ── Käufer E-Mail Pflichtfeld-Logik ── */
-// E-Mail ist Pflicht (BT-49) wenn keine Leitweg-ID angegeben
+/* ── Pflichtfeld-Toggles für "mind. eines von zwei" ── */
 function setupBuyerEmailToggle() {
-  const leitwegInput = document.getElementById('leitwegid');
-  const emailLabel   = document.getElementById('kaeufer-email-label');
-  if (!leitwegInput || !emailLabel) return;
+  _mutualRequiredToggle('leitwegid', 'kaeufer-email-label', 'kaeufer-email', null);
+}
 
-  const requiredMark = emailLabel.querySelector('.required');
+function setupRequiredFieldToggles() {
+  // BR-DE-2: Verkäufer Telefon ↔ E-Mail (mind. eines)
+  _mutualRequiredToggle('verkaeufer-tel', 'verkaeufer-email-seller-label',
+                        'verkaeufer-email', 'verkaeufer-tel-label');
+  // USt-IdNr. ↔ Steuernummer (mind. eines)
+  _mutualRequiredToggle('verkaeufer-vat', 'verkaeufer-steuernr-label',
+                        'verkaeufer-steuernr', 'verkaeufer-vat-label');
+}
+
+/**
+ * Wenn inputA einen Wert hat → * auf labelB ausblenden (und umgekehrt).
+ * inputA / labelA = erstes Feld, inputB / labelB = zweites Feld.
+ * labelA kann null sein (dann nur einseitig).
+ */
+function _mutualRequiredToggle(inputAId, labelBId, inputBId, labelAId) {
+  const inputA  = document.getElementById(inputAId);
+  const inputB  = document.getElementById(inputBId);
+  const labelB  = document.getElementById(labelBId);
+  const labelA  = labelAId ? document.getElementById(labelAId) : null;
+  if (!inputA || !inputB) return;
 
   function update() {
-    const hasLeitweg = leitwegInput.value.trim() !== '';
-    if (requiredMark) requiredMark.style.display = hasLeitweg ? 'none' : '';
+    const aFilled = inputA.value.trim() !== '';
+    const bFilled = inputB.value.trim() !== '';
+    const markA = labelA ? labelA.querySelector('.required') : null;
+    const markB = labelB ? labelB.querySelector('.required') : null;
+    if (markB) markB.style.display = aFilled ? 'none' : '';
+    if (markA) markA.style.display = bFilled ? 'none' : '';
   }
 
-  leitwegInput.addEventListener('input', update);
-  update(); // Initialzustand setzen
+  inputA.addEventListener('input', update);
+  inputB.addEventListener('input', update);
+  update();
 }
 
 /* ── Upload Zone ── */
@@ -389,25 +412,36 @@ function v(id) {
 /* ── Validation ── */
 function validateForm(data) {
   const errors = [];
-  if (!data.verkaeufer) errors.push('Rechnungssteller Name');
-  if (!data.kaeufer) errors.push('Rechnungsempfänger Name');
-  if (!data.rechnungsnummer) errors.push('Rechnungsnummer');
-  if (!data.rechnungsdatum) errors.push('Rechnungsdatum');
+
+  // Rechnungssteller
+  if (!data.verkaeufer)       errors.push('Rechnungssteller: Name');
+  if (!data.verkaeufstrasse)  errors.push('Rechnungssteller: Straße & Hausnummer');
+  if (!data.verkaeufplz)      errors.push('Rechnungssteller: PLZ');
+  if (!data.verkaeufstadt)    errors.push('Rechnungssteller: Ort');
+  if (!data.verkaeufervat && !data.verkaeufersteuernr)
+    errors.push('Rechnungssteller: USt-IdNr. oder Steuernummer');
+  // BR-DE-5: Ansprechpartner Pflicht
+  if (!data.verkaeufkontakt)  errors.push('Rechnungssteller: Ansprechpartner');
+  // BR-DE-2: mind. Telefon oder E-Mail
+  if (!data.verkaeuftel && !data.verkaeuferemail)
+    errors.push('Rechnungssteller: Telefon oder E-Mail (mind. eines)');
+
+  // Rechnungsempfänger
+  if (!data.kaeufer)          errors.push('Rechnungsempfänger: Name');
+  if (!data.kaeuferstrasse)   errors.push('Rechnungsempfänger: Straße & Hausnummer');
+  if (!data.kaeuferplz)       errors.push('Rechnungsempfänger: PLZ');
+  if (!data.kaeuferstadt)     errors.push('Rechnungsempfänger: Ort');
+  // PEPPOL-R010: BT-49 — Leitweg-ID oder E-Mail
+  if (!data.leitwegid && !data.kaeufermail)
+    errors.push('Rechnungsempfänger: Leitweg-ID oder E-Mail (elektronische Adresse)');
+
+  // Rechnungsdaten
+  if (!data.rechnungsnummer)  errors.push('Rechnungsnummer');
+  if (!data.rechnungsdatum)   errors.push('Rechnungsdatum');
+
+  // Positionen
   if (data.positionen.length === 0) errors.push('Mindestens eine Position');
   if (data.positionen.some(p => !p.beschreibung)) errors.push('Beschreibung für alle Positionen');
-
-  if (!data.verkaeufervat && !data.verkaeufersteuernr) {
-    errors.push('USt-IdNr. oder Steuernummer des Rechnungsstellers');
-  }
-  // XRechnung BR-DE-5: Ansprechpartner (BT-41) ist Pflicht
-  if (!data.verkaeufkontakt) {
-    errors.push('Ansprechpartner des Rechnungsstellers');
-  }
-  // PEPPOL-EN16931-R010: Käufer elektronische Adresse (BT-49) ist Pflicht
-  // — Leitweg-ID (schemeID 0204) oder E-Mail (schemeID EM)
-  if (!data.leitwegid && !data.kaeufermail) {
-    errors.push('Leitweg-ID oder E-Mail des Rechnungsempfängers (elektronische Adresse)');
-  }
 
   return errors;
 }

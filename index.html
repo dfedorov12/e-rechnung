@@ -108,29 +108,29 @@
               <input type="text" id="verkaeufer" placeholder="Muster GmbH">
             </div>
             <div class="form-group full-width">
-              <label>Straße & Hausnummer</label>
+              <label>Straße & Hausnummer <span class="required">*</span></label>
               <input type="text" id="verkaeufer-strasse" placeholder="Musterstraße 1">
             </div>
             <div class="form-group">
-              <label>PLZ</label>
+              <label>PLZ <span class="required">*</span></label>
               <input type="text" id="verkaeufer-plz" placeholder="12345" maxlength="10">
             </div>
             <div class="form-group">
-              <label>Ort</label>
+              <label>Ort <span class="required">*</span></label>
               <input type="text" id="verkaeufer-stadt" placeholder="Musterstadt">
             </div>
             <div class="form-group">
-              <label>Land</label>
+              <label>Land <span class="required">*</span></label>
               <input type="text" id="verkaeufer-land" placeholder="DE" value="DE" maxlength="2">
             </div>
             <div class="form-group">
-              <label>USt-IdNr.</label>
+              <label id="verkaeufer-vat-label">USt-IdNr. <span class="required">*</span></label>
               <input type="text" id="verkaeufer-vat" placeholder="DE123456789">
-              <span class="hint">z. B. DE123456789</span>
             </div>
             <div class="form-group">
-              <label>Steuernummer (alternativ)</label>
+              <label id="verkaeufer-steuernr-label">Steuernummer <span class="required">*</span></label>
               <input type="text" id="verkaeufer-steuernr" placeholder="12/345/67890">
+              <span class="hint">USt-IdNr. oder Steuernummer — mind. eines Pflicht</span>
             </div>
             <div class="form-group">
               <label>IBAN</label>
@@ -148,13 +148,13 @@
               <input type="text" id="verkaeufer-kontakt" placeholder="Max Mustermann">
             </div>
             <div class="form-group">
-              <label>Telefon <span class="required">*</span></label>
+              <label id="verkaeufer-tel-label">Telefon <span class="required">*</span></label>
               <input type="text" id="verkaeufer-tel" placeholder="+49 341 123456">
-              <span class="hint">Mindestens Telefon oder E-Mail (BR-DE-2)</span>
             </div>
             <div class="form-group">
-              <label>E-Mail Kontakt</label>
+              <label id="verkaeufer-email-seller-label">E-Mail Kontakt <span class="required">*</span></label>
               <input type="email" id="verkaeufer-email" placeholder="info@firma.de">
+              <span class="hint">Telefon oder E-Mail — mind. eines Pflicht (BR-DE-2)</span>
             </div>
           </div>
         </div>
@@ -173,19 +173,19 @@
               <input type="text" id="kaeufer" placeholder="Empfänger GmbH">
             </div>
             <div class="form-group full-width">
-              <label>Straße & Hausnummer</label>
+              <label>Straße & Hausnummer <span class="required">*</span></label>
               <input type="text" id="kaeufer-strasse" placeholder="Empfängerstraße 2">
             </div>
             <div class="form-group">
-              <label>PLZ</label>
+              <label>PLZ <span class="required">*</span></label>
               <input type="text" id="kaeufer-plz" placeholder="54321" maxlength="10">
             </div>
             <div class="form-group">
-              <label>Ort</label>
+              <label>Ort <span class="required">*</span></label>
               <input type="text" id="kaeufer-stadt" placeholder="Empfängerstadt">
             </div>
             <div class="form-group">
-              <label>Land</label>
+              <label>Land <span class="required">*</span></label>
               <input type="text" id="kaeufer-land" placeholder="DE" value="DE" maxlength="2">
             </div>
             <div class="form-group">
