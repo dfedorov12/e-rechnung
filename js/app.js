@@ -378,9 +378,9 @@ function validateForm(data) {
   if (!data.verkaeufervat && !data.verkaeufersteuernr) {
     errors.push('USt-IdNr. oder Steuernummer des Rechnungsstellers');
   }
-  // XRechnung BR-DE-2: SELLER CONTACT (BG-6) ist Pflicht
-  if (!data.verkaeufkontakt && !data.verkaeuftel && !data.verkaeuferemail) {
-    errors.push('Kontaktdaten des Rechnungsstellers (Telefon oder E-Mail)');
+  // XRechnung BR-DE-5: Ansprechpartner (BT-41) ist Pflicht
+  if (!data.verkaeufkontakt) {
+    errors.push('Ansprechpartner des Rechnungsstellers');
   }
 
   return errors;
@@ -463,7 +463,7 @@ async function exportInvoice(format) {
 }
 
 function highlightErrors(data) {
-  const fields = ['verkaeufer', 'kaeufer', 'rechnungsnummer', 'rechnungsdatum'];
+  const fields = ['verkaeufer', 'verkaeufer-kontakt', 'kaeufer', 'rechnungsnummer', 'rechnungsdatum'];
   fields.forEach(id => {
     const el = document.getElementById(id);
     if (el && !el.value.trim()) {
