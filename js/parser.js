@@ -64,8 +64,11 @@ async function _extractTextSections(pdfDoc) {
   const leftColumnText = toLines(allItems.filter(i => i.x < i.pw * 0.48));
   const leftText       = allItems.filter(i => i.x < i.pw * 0.48).map(i => i.text).join(' ');
   const rightText      = toLines(allItems.filter(i => i.x > i.pw * 0.48));
-  // Footer = bottom 18 % of page (small y values in PDF coordinate space)
-  const footerText     = toLines(allItems.filter(i => i.y < i.ph * 0.18));
+  // Footer = bottom 22 % of page (small y values in PDF coordinate space)
+  // + last 15 lines of fullText as additional fallback (covers y-coordinate edge cases)
+  const footerByY    = toLines(allItems.filter(i => i.y < i.ph * 0.22));
+  const footerByEnd  = fullText.split('\n').slice(-15).join('\n');
+  const footerText   = footerByY + '\n' + footerByEnd;
 
   return { fullText, leftText, leftColumnText, rightText, footerText };
 }

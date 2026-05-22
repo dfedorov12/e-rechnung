@@ -7,7 +7,7 @@ let pdfDocument = null;
 let rowCounter = 0;
 
 /* ── PDF.js setup ── */
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';
 
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', () => {
