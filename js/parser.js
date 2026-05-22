@@ -35,10 +35,11 @@ async function _extractTextSections(pdfDoc) {
       if (!s || !s.trim()) continue;
       allItems.push({
         text: s,
-        x: item.transform[4],
-        y: item.transform[5],
+        x:  item.transform[4],
+        y:  item.transform[5],
         pw: vp.width,
         ph: vp.height,
+        w:  item.width || 0,   // advance width → gap detection for joined chars
       });
     }
   }
@@ -46,7 +47,11 @@ async function _extractTextSections(pdfDoc) {
   // Top → bottom, left → right
   allItems.sort((a, b) => b.y - a.y || a.x - b.x);
 
-  /** Cluster items into visual lines (±4 pt) and return newline-joined string */
+  /**
+   * Cluster items into visual lines (±4 pt) and return newline-joined string.
+   * Uses gap-based joining: gap < 2 pt between consecutive items → no space
+   * (fixes "Me uselwitz" → "Meuselwitz", "D-0 4610" → "D-04610").
+   */
   function toLines(items) {
     const map = {};
     for (const it of items) {
@@ -56,7 +61,15 @@ async function _extractTextSections(pdfDoc) {
     }
     return Object.values(map)
       .sort((a, b) => b[0].y - a[0].y)
-      .map(ls => ls.sort((a, b) => a.x - b.x).map(i => i.text).join(' '))
+      .map(ls => {
+        const sorted = ls.sort((a, b) => a.x - b.x);
+        return sorted.reduce((acc, it, i) => {
+          if (i === 0) return it.text;
+          const prev = sorted[i - 1];
+          const gap  = it.x - (prev.x + (prev.w || 0));
+          return acc + (gap < 2 ? '' : ' ') + it.text;
+        }, '');
+      })
       .join('\n');
   }
 
@@ -109,21 +122,28 @@ function extractSeller(footerText, fullText) {
   // footerText first → most reliable source for seller data
   const src = footerText + '\n' + fullText;
 
-  // USt-IdNr — "DE 812 264 517", "DE812264517", "DE  812  264  517"
-  // Separator between label and value: space, colon, middle-dot (·), pipe, etc.
-  const vatm = src.match(/USt-?Id\.?-?Nr\.?[\s:·|]*\s*(DE(?:\s*\d){9})/i);
+  // ── USt-IdNr ──────────────────────────────────────────────────────────────
+  // Separator: space / colon / · (U+00B7) / • (U+2022 bullet) / pipe
+  // Primary: label + value.  Fallback: "DE NNN NNN NNN" value pattern directly.
+  const _sep = /[\s:·•|]*/;
+  const vatm =
+    src.match(/USt-?Id\.?-?Nr\.?[\s:·•|]*\s*(DE(?:\s*\d){9})/i) ||
+    src.match(/(DE\s+\d{3}\s+\d{3}\s+\d{3})\b/);          // "DE 812 264 517"
   if (vatm) r.verkaeufervat = vatm[1].replace(/\s/g, '');
 
-  // Steuernummer — "232/118/07369"
-  const stm = src.match(/Steuer-?(?:Nr\.?|nummer)[\s:·|]*\s*(\d{1,3}\/\d{2,3}\/\d{4,8})/i);
+  // ── Steuernummer ──────────────────────────────────────────────────────────
+  // Primary: label + value.  Fallback: xxx/xxx/xxxxx pattern (unique in invoice).
+  const stm =
+    src.match(/Steuer-?(?:Nr\.?|nummer)[\s:·•|]*\s*(\d{1,3}\/\d{2,3}\/\d{4,8})/i) ||
+    src.match(/\b(\d{3}\/\d{3}\/\d{4,8})\b/);             // "232/118/07369"
   if (stm) r.verkaeufersteuernr = stm[1];
 
-  // IBAN
-  const ibanm = src.match(/IBAN[\s:·|]*\s*(DE\d{2}(?:[\s\d]{15,27}))/i);
+  // ── IBAN ──────────────────────────────────────────────────────────────────
+  const ibanm = src.match(/IBAN[\s:·•|]*\s*(DE\d{2}[\s\d]{15,27})/i);
   if (ibanm) r.iban = ibanm[1].replace(/\s/g, '');
 
-  // BIC
-  const bicm = src.match(/BIC[\s:·|]*\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)/i);
+  // ── BIC ───────────────────────────────────────────────────────────────────
+  const bicm = src.match(/BIC[\s:·•|]*\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)/i);
   if (bicm) r.bic = bicm[1];
 
   // Name + Adresse — Suche bevorzugt in Fußzeile
