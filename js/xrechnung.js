@@ -171,6 +171,9 @@ function buildXML(data, profile = 'xrechnung') {
           <ram:CityName>${esc(data.verkaeufstadt)}</ram:CityName>
           <ram:CountryID>${esc(data.verkaeufland || 'DE')}</ram:CountryID>
         </ram:PostalTradeAddress>
+        ${data.verkaeuferemail ? `<ram:URIUniversalCommunication>
+          <ram:URIID schemeID="EM">${esc(data.verkaeuferemail)}</ram:URIID>
+        </ram:URIUniversalCommunication>` : ''}
         ${sellerVat}
       </ram:SellerTradeParty>
 
@@ -182,6 +185,11 @@ function buildXML(data, profile = 'xrechnung') {
           <ram:CityName>${esc(data.kaeuferstadt)}</ram:CityName>
           <ram:CountryID>${esc(data.kaeuferland || 'DE')}</ram:CountryID>
         </ram:PostalTradeAddress>
+        ${data.leitwegid ? `<ram:URIUniversalCommunication>
+          <ram:URIID schemeID="0204">${esc(data.leitwegid)}</ram:URIID>
+        </ram:URIUniversalCommunication>` : (data.kaeufermail ? `<ram:URIUniversalCommunication>
+          <ram:URIID schemeID="EM">${esc(data.kaeufermail)}</ram:URIID>
+        </ram:URIUniversalCommunication>` : '')}
       </ram:BuyerTradeParty>
     </ram:ApplicableHeaderTradeAgreement>
 
