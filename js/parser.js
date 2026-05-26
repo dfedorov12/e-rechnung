@@ -71,13 +71,21 @@ async function extractInvoiceData(pdfDoc) {
 
   let result;
 
-  // Englischsprachige Industrierechnung (WGC / PIOMBINO-Format)
+  // Englischsprachige WGC-Rechnung (Item/Product/pcs.-Format)
   if (_isEnglishIndustrialInvoice(fullText)) {
     result = {
       ...extractMetadataEnglish(fullText),
       ...extractSellerEnglish(footerText, fullText),
       ...extractBuyerEnglish(leftColumnText, fullText),
       positionen: extractLineItemsEnglish(fullText),
+    };
+  // Deutschsprachige WGC-Rechnung (Pos/Artikel/Stück-Format)
+  } else if (_isGermanWGCInvoice(fullText)) {
+    result = {
+      ...extractMetadataGermanWGC(fullText),
+      ...extractSeller(footerText, fullText),
+      ...extractBuyerWGCGerman(leftColumnText, leftText, fullText),
+      positionen: extractLineItemsGermanWGC(fullText),
     };
   } else {
     result = {
@@ -96,13 +104,134 @@ async function extractInvoiceData(pdfDoc) {
 }
 
 /* ══════════════════════════════════════════════════════
-   Detektor: Englische Industrierechnung
-   Erkennt Format mit "Invoice Nr", "pcs." und Tabellenkopf
+   Detektoren: WGC-Rechnungsformate
 ══════════════════════════════════════════════════════ */
 function _isEnglishIndustrialInvoice(text) {
   return /Invoice\s*Nr[:\s]/i.test(text) &&
          /\bpcs\.\b/i.test(text) &&
          /Item\s+Product\s+Quantity\s+Unit\s+price/i.test(text);
+}
+
+function _isGermanWGCInvoice(text) {
+  return /Pos\s+Artikel\s+Menge\s+Einzelpreis/i.test(text) &&
+         /walze-coswig|walzengi/i.test(text);
+}
+
+/* ══════════════════════════════════════════════════════
+   DEUTSCHSPRACHIGE WGC-RECHNUNG
+   (TKP, NEUMAN, FAIR, VOESTDON — Pos/Artikel/Stück)
+══════════════════════════════════════════════════════ */
+
+function extractMetadataGermanWGC(fullText) {
+  const r = {};
+
+  // Rechnungsnummer: "Rechnung  Nr: 4260264"
+  const invM = fullText.match(/Rechnung\s+Nr[:\s]+(\d{4,12})/i);
+  if (invM) r.rechnungsnummer = invM[1];
+
+  // Datum-Zeile: "Lieferdatum Datum" + Datenzeile "08.05.26  12.05.26"
+  const dtM = fullText.match(
+    /Lieferdatum\s+Datum[\s\S]{0,200}?(\d{2}\.\d{2}\.\d{2})\s+(\d{2}\.\d{2}\.\d{2})/i
+  );
+  if (dtM) {
+    r.lieferdatum    = _deDate(_fixYear(dtM[1]));
+    r.rechnungsdatum = _deDate(_fixYear(dtM[2]));
+  }
+
+  // Fälligkeitsdatum: "zum 26.05.2026"
+  const dueM = fullText.match(/zum\s+(\d{2}\.\d{2}\.\d{4})/i);
+  if (dueM) r.faelligkeitsdatum = _deDate(dueM[1]);
+
+  return r;
+}
+
+/**
+ * Käufer für deutsche WGC-Rechnungen.
+ * Adressblock links oben; PLZ-Format oft "DE 59269 Beckum".
+ */
+function extractBuyerWGCGerman(leftColumnText, leftText, fullText) {
+  const r = extractBuyer(leftColumnText, leftText, fullText);
+
+  // Fallback: PLZ-Muster "DE 59269 Stadt" oder "CZ 73961 TRINEC"
+  if (!r.kaeuferplz && leftColumnText) {
+    const plzM = leftColumnText.match(
+      /\b([A-Z]{2})\s+(\d{4,5})\s+([A-ZÄÖÜ][A-ZÄÖÜa-zäöüß\s\-]+)/
+    );
+    if (plzM) {
+      r.kaeuferland  = plzM[1];
+      r.kaeuferplz   = plzM[2];
+      r.kaeuferstadt = plzM[3].trim().split(/\s{2,}/)[0];
+    }
+  }
+
+  return r;
+}
+
+/**
+ * Positionen für deutsche WGC-Rechnungen.
+ * Format: [Pos] Artikel Menge Stück Einzelpreis [%] Gesamtpreis
+ * Beschreibung steht auf der Folgezeile.
+ * MwSt wird aus der "MWSt." Summenzeile gelesen.
+ */
+function extractLineItemsGermanWGC(fullText) {
+  const items = [];
+  const lines = fullText.split('\n');
+
+  // Dokument-MwSt aus Summenzeile "MWSt.  nettobetrag  19,00  steuer"
+  const mwstDocM = fullText.match(/MWSt\.\s+[\d.,]+\s+(\d{1,2})(?:,\d+)?\s+[\d.,]+/i);
+  const mwstDoc  = mwstDocM ? parseFloat(mwstDocM[1]) : 0;
+
+  // Zeilen die keine Positionen sind
+  const skipRe = /^(?:Nettosumme|Zwischensumme|Endsumme|MWSt|Anzahlung|CDR|FDR|FAT|SAT|Rechnung\s+Nr|Seite\s*\d|Pos\s+Artikel|EUR\s|Versandart|Lieferbedingung|Zahlung|Hinweis|Warenursprung|HS-Code|Hiermit|Ware\s+bleibt|Zeitpunkt|Bank|Konto|IBAN|BIC|Wir\s+bitten)/i;
+
+  // Technische Detailzeilen (nach Beschreibung, überspringen)
+  const techRe = /^(?:Ihre\s+Bestellung|Auftrags-Nr|Kundenzeichn|Modellnummer|Abmessung|Werkstoff|Masse|Ober|Produktions|Verbringung|Abgang|Lieferreferenz|z\.\s*Zt\.|KE\d|Pattern\s|for\s+block|ncl\.|operational|Material\s+doc|External\s+ver)/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || skipRe.test(line)) continue;
+
+    // Positionszeile erkennen:
+    // [Pos] Code Menge Unit Preis [%] Gesamtpreis
+    // Unit: Stück (oft als St?ck o.ä.), VE, pcs, St.
+    const codeM = line.match(
+      /^(?:\d+(?:\.\d+)?\s+)?(\d{2,6})\s+(\d+)\s+(?:St|VE|Stk|pcs)/i
+    );
+    if (!codeM) continue;
+
+    const code  = codeM[1];
+    const menge = parseFloat(codeM[2]) || 1;
+
+    // Alle Währungsbeträge in der Zeile → letzter = Gesamtpreis
+    const amounts = (line.match(/[\d.]+,\d{2}/g) || []).map(_parseDE);
+    if (amounts.length < 1) continue;
+
+    const total       = amounts[amounts.length - 1];
+    const einzelpreis = menge > 0 ? total / menge : amounts[0];
+
+    // Beschreibung: erste relevante Folgezeile
+    let desc = code;
+    for (let j = i + 1; j <= i + 5 && j < lines.length; j++) {
+      const nl = lines[j].trim();
+      if (!nl || skipRe.test(nl) || techRe.test(nl)) continue;
+      // Nächste Positionszeile → Abbruch
+      if (/^(?:\d+(?:\.\d+)?\s+)?\d{2,6}\s+\d+\s+(?:St|VE|pcs)/i.test(nl)) break;
+      // Reine Zahlenzeile → Abbruch
+      if (/^[\d.,\s]+$/.test(nl)) break;
+      desc = nl;
+      break;
+    }
+
+    items.push({
+      beschreibung: `${code} – ${desc}`,
+      menge,
+      einheit:      'Stk',
+      einzelpreis,
+      mwst:         mwstDoc,
+    });
+  }
+
+  return items;
 }
 
 /* ══════════════════════════════════════════════════════
