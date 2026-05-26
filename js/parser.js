@@ -108,7 +108,7 @@ async function extractInvoiceData(pdfDoc) {
 ══════════════════════════════════════════════════════ */
 function _isEnglishIndustrialInvoice(text) {
   return /Invoice\s*Nr[:\s]/i.test(text) &&
-         /\bpcs\.\b/i.test(text) &&
+         /\bpcs\./i.test(text) &&
          /Item\s+Product\s+Quantity\s+Unit\s+price/i.test(text);
 }
 
