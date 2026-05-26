@@ -786,20 +786,24 @@ function extractLineItemsEnglish(fullText) {
 
 /**
  * Liefert den Netto-Erwartungswert für deutsche WGC-Rechnungen.
- * Priorität: letztes "Nettosumme"-Vorkommen (Gesamtseite).
- * Fallback ohne MwSt: letztes "Endsumme"-Vorkommen.
+ * Immer Endsumme als verbindlicher Gesamtbetrag (brutto oder netto).
+ * Falls MwSt-Satz vorhanden, wird der Nettobetrag zurückgerechnet:
+ *   net = Endsumme / (1 + MwSt/100)
+ * Bei MwSt-freien Rechnungen gilt:
+ *   net = Endsumme
  */
 function _extractNetTotalGermanWGC(fullText) {
-  const nets = [...fullText.matchAll(/Nettosumme\s+([\d.]+,\d{2})/gi)];
-  if (nets.length > 0) return _parseDE(nets[nets.length - 1][1]);
+  // Endsumme = verbindlicher Gesamtbetrag (brutto mit MwSt oder netto ohne MwSt)
+  const ends = [...fullText.matchAll(/Endsumme\s+([\d.]+,\d{2})/gi)];
+  if (ends.length === 0) return null;
+  const endsumme = _parseDE(ends[ends.length - 1][1]);
 
-  // Keine MwSt im Dokument → Endsumme = Nettobetrag (MwSt-frei)
-  const hasMwst = /MWSt\.\s+[\d.,]+\s+\d{1,2}(?:,\d+)?\s+[\d.,]+/i.test(fullText);
-  if (!hasMwst) {
-    const ends = [...fullText.matchAll(/Endsumme\s+([\d.]+,\d{2})/gi)];
-    if (ends.length > 0) return _parseDE(ends[ends.length - 1][1]);
-  }
-  return null;
+  // MwSt-Satz aus der Zusammenfassungszeile ermitteln
+  const mwstM = fullText.match(/MWSt\.\s+[\d.,]+\s+(\d{1,2})(?:,\d+)?\s+[\d.,]+/i);
+  const mwst  = mwstM ? parseFloat(mwstM[1]) : 0;
+
+  // Nettobetrag zurückrechnen
+  return mwst > 0 ? endsumme / (1 + mwst / 100) : endsumme;
 }
 
 /**
