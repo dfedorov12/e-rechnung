@@ -2,31 +2,96 @@
  * PDF Invoice Parser
  * Extracts structured invoice data from German PDF invoices using PDF.js text content.
  * Strategy:
- *   - footerText   → seller (USt-IdNr, Steuer-Nr, IBAN, BIC, Adresse)
- *   - leftColumnText → buyer (Adressfenster links oben)
- *   - rightText    → metadata (Rechnungsnummer, Datum, …)
+ *   - footerText      → seller (USt-IdNr, Steuer-Nr, IBAN, BIC, Adresse)
+ *   - leftColumnText  → buyer (Adressfenster links oben)
+ *   - rightText       → metadata (Rechnungsnummer, Datum, …)
+ *   - _COMPANY_REGISTRY → bekannte Rechnungssteller (WGC, SHB) werden am PDF
+ *                         erkannt und vollständig vorausgefüllt
  */
+
+/* ══════════════════════════════════════════════════════
+   Bekannte Rechnungssteller — Stammdaten-Registry
+   Erkennung erfolgt automatisch anhand von PDF-Inhalt.
+   Registry-Daten überschreiben extrahierte Seller-Felder
+   (kanonische Quelle für Adresse, USt-IdNr., Kontakt).
+══════════════════════════════════════════════════════ */
+const _COMPANY_REGISTRY = {
+
+  WGC: {
+    verkaeufer:         'Walzengießerei Coswig GmbH',
+    verkaeufstrasse:    'Grenzstraße 1',
+    verkaeufplz:        '01640',
+    verkaeufstadt:      'Coswig',
+    verkaeufland:       'DE',
+    verkaeuftel:        '+49 3523 950',
+    verkaeuferemail:    'wgc@walze-coswig.de',
+    verkaeufervat:      'DE140598967',
+    iban:               'DE33820700000130805501',
+    bic:                'DEUTDE8EXXX',
+    // detect: E-Mail-Domain oder Firmenname im PDF
+    _detect: /walze-coswig|walzengi.{0,6}erei\s+coswig|account\s+holder[:\s]+walzen/i,
+  },
+
+  SHB: {
+    verkaeufer:         'SHB Stahl- und Hartgusswerk Bösdorf GmbH',
+    verkaeufstrasse:    'Werkstraße 7',
+    verkaeufplz:        '04249',
+    verkaeufstadt:      'Leipzig',
+    verkaeufland:       'DE',
+    verkaeuftel:        '+49 341 42 79 0',
+    verkaeuferemail:    'giesserei@shb-guss.de',
+    verkaeufervat:      'DE812264517',
+    verkaeufersteuernr: '232/118/07369',
+    iban:               'DE07820700000338669500',
+    bic:                '',
+    // detect: E-Mail-Domain, Firmenname oder „Bösdorf" im PDF
+    _detect: /shb-guss|bösdorf|b.sdorf|stahl-?\s*und\s*hartguss|shb\s+stahl/i,
+  },
+
+};
+
+/**
+ * Erkennt den Rechnungssteller anhand des PDF-Volltexts.
+ * Gibt die Registry-Daten (ohne _detect) zurück oder null.
+ */
+function _detectCompany(fullText) {
+  for (const [, entry] of Object.entries(_COMPANY_REGISTRY)) {
+    if (entry._detect.test(fullText)) {
+      const { _detect, ...data } = entry;   // _detect nicht ins Ergebnis
+      return data;
+    }
+  }
+  return null;
+}
 
 async function extractInvoiceData(pdfDoc) {
   const { fullText, leftText, leftColumnText, rightText, footerText } =
     await _extractTextSections(pdfDoc);
 
-  // Englischsprachige Industrierechnung (Walzengiesserei / PIOMBINO-Format)
+  let result;
+
+  // Englischsprachige Industrierechnung (WGC / PIOMBINO-Format)
   if (_isEnglishIndustrialInvoice(fullText)) {
-    return {
+    result = {
       ...extractMetadataEnglish(fullText),
       ...extractSellerEnglish(footerText, fullText),
       ...extractBuyerEnglish(leftColumnText, fullText),
       positionen: extractLineItemsEnglish(fullText),
     };
+  } else {
+    result = {
+      ...extractMetadata(rightText, fullText),
+      ...extractSeller(footerText, fullText),
+      ...extractBuyer(leftColumnText, leftText, fullText),
+      positionen: extractLineItems(fullText),
+    };
   }
 
-  return {
-    ...extractMetadata(rightText, fullText),
-    ...extractSeller(footerText, fullText),
-    ...extractBuyer(leftColumnText, leftText, fullText),
-    positionen: extractLineItems(fullText),
-  };
+  // Bekannten Rechnungssteller erkennen → Stammdaten vollständig überschreiben
+  const company = _detectCompany(fullText);
+  if (company) Object.assign(result, company);
+
+  return result;
 }
 
 /* ══════════════════════════════════════════════════════
