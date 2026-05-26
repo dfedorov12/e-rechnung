@@ -26,6 +26,7 @@ const _COMPANY_REGISTRY = {
     verkaeuftel:        '+49 3523 950',
     verkaeuferemail:    'wgc@walze-coswig.de',
     verkaeufervat:      'DE140598967',
+    verkaeufersteuernr: '209/197/00034',
     iban:               'DE33820700000130805501',
     bic:                'DEUTDE8EXXX',
     // detect: E-Mail-Domain oder Firmenname im PDF
