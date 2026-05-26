@@ -13,6 +13,7 @@
   <nav class="site-nav">
     <a href="index.html">Konverter</a>
     <a href="verlauf.html" class="active">Verlauf</a>
+    <a href="einstellungen.html" id="nav-einstellungen" style="display:none;">Einstellungen</a>
   </nav>
   <div class="auth-user">
     <div class="auth-avatar" id="auth-initials">…</div>
@@ -34,10 +35,6 @@
     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
       <a href="index.html" class="btn btn-primary">+ Neue Rechnung</a>
       <button class="btn btn-secondary" id="btn-refresh" type="button" style="display:none;">🔄 Aktualisieren</button>
-      <a href="https://dihag.sharepoint.com/sites/IT/Lists/ERechnung/AllItems.aspx"
-         target="_blank" class="btn btn-secondary" id="btn-sp-open" style="display:none;">
-        🌐 In SharePoint öffnen
-      </a>
     </div>
   </div>
 
@@ -93,7 +90,6 @@ async function loadVerlauf(access) {
     applyTabFilter();
 
     document.getElementById('btn-refresh').style.display   = 'flex';
-    document.getElementById('btn-sp-open').style.display   = 'flex';
     document.getElementById('verlauf-subtitle').textContent =
       `${items.length} Einträge aus SharePoint · Liste: IT/ERechnung`;
   } catch (err) {
@@ -105,7 +101,11 @@ async function loadVerlauf(access) {
     renderVerlauf(); // history.js (localStorage)
   }
 
-  document.getElementById('btn-refresh').addEventListener('click', () => loadVerlauf(getCurrentUserAccess()));
+  const refreshBtn = document.getElementById('btn-refresh');
+  if (refreshBtn && !refreshBtn.dataset.bound) {
+    refreshBtn.dataset.bound = '1';
+    refreshBtn.addEventListener('click', () => loadVerlauf(getCurrentUserAccess()));
+  }
 }
 
 /* ── Tabs bauen ── */
@@ -303,7 +303,9 @@ function showToast(message, type = 'info') {
 
 <!-- Alle Funktionen sind jetzt definiert → Auth starten -->
 <script>
-onAuthReady(() => {
+onAuthReady(async () => {
+  await loadRuntimeAccessConfig();
+  initAdminNav();
   const access = getCurrentUserAccess();
   if (access.length === 0) {
     showAccessDenied();

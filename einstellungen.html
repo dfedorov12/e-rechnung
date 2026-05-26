@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Einstellungen | E-Rechnung Konverter | DIHAG</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="auth-guard">
+
+<header class="site-header">
+  <div class="site-logo">DIHAG <span>E-Rechnung</span></div>
+  <nav class="site-nav">
+    <a href="index.html">Konverter</a>
+    <a href="verlauf.html">Verlauf</a>
+    <a href="einstellungen.html" class="active" id="nav-einstellungen">Einstellungen</a>
+  </nav>
+  <div class="auth-user">
+    <div class="auth-avatar" id="auth-initials">…</div>
+    <div class="auth-user-text">
+      <span class="auth-user-name" id="auth-name"></span>
+      <span class="auth-user-email" id="auth-email"></span>
+    </div>
+    <button class="btn-auth-logout" onclick="authLogout()">Abmelden</button>
+  </div>
+</header>
+
+<div class="page-content">
+
+  <div class="verlauf-header">
+    <div>
+      <h2>⚙️ Einstellungen</h2>
+      <p>Zugriffsverwaltung – nur für Administratoren</p>
+    </div>
+  </div>
+
+  <!-- Kein-Zugriff-Box (initial versteckt) -->
+  <div id="admin-access-denied" style="display:none;">
+    <div class="access-denied-box">
+      <div class="access-denied-icon">🔒</div>
+      <h3>Kein Zugriff</h3>
+      <p>Diese Seite ist nur für Administratoren zugänglich.</p>
+    </div>
+  </div>
+
+  <!-- Einstellungen-Inhalt (initial versteckt) -->
+  <div id="settings-content" style="display:none;">
+
+    <div class="settings-info-banner">
+      <span>ℹ️</span>
+      <span>
+        Legen Sie fest, welche Benutzer (per UPN / Microsoft-Login-E-Mail) den Exportverlauf
+        der jeweiligen Gesellschaft einsehen dürfen. Änderungen werden direkt in SharePoint
+        gespeichert und sind sofort für alle Nutzer wirksam.
+      </span>
+    </div>
+
+    <div class="settings-grid">
+
+      <!-- WGC -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon"><span class="format-tag wgc" style="font-size:12px;">WGC</span></span>
+          <h3>Walzengießerei Coswig GmbH</h3>
+        </div>
+        <div class="card-body">
+          <div class="upn-list" id="upn-list-wgc"></div>
+          <div class="upn-add-row">
+            <input type="email" id="upn-input-wgc" placeholder="name@dihag.com" class="upn-input">
+            <button class="btn btn-primary btn-sm" onclick="addUpn('wgc')">+ Hinzufügen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SHB -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon"><span class="format-tag shb" style="font-size:12px;">SHB</span></span>
+          <h3>Stahl- und Hartgusswerk Bösdorf GmbH</h3>
+        </div>
+        <div class="card-body">
+          <div class="upn-list" id="upn-list-shb"></div>
+          <div class="upn-add-row">
+            <input type="email" id="upn-input-shb" placeholder="name@dihag.com" class="upn-input">
+            <button class="btn btn-primary btn-sm" onclick="addUpn('shb')">+ Hinzufügen</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Speichern -->
+    <div class="settings-save-row">
+      <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
+        💾 Änderungen speichern
+      </button>
+      <span class="settings-save-hint" id="settings-save-hint"></span>
+    </div>
+
+  </div><!-- /settings-content -->
+
+</div><!-- /page-content -->
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loading-overlay" style="display:none;">
+  <div class="loading-box">
+    <span class="spinner"></span>
+    <p id="loading-text">Wird gespeichert…</p>
+  </div>
+</div>
+
+<!-- Libraries -->
+<script src="js/vendor/msal-browser.min.js"></script>
+
+<!-- App Scripts -->
+<script src="js/auth.js"></script>
+<script src="js/access.js"></script>
+<script src="js/sharepoint.js"></script>
+
+<script>
+/* ── In-Memory Arbeitskopie der Config ── */
+let _editConfig = { wgc: [], shb: [] };
+
+/* ── Init nach Login ── */
+onAuthReady(async () => {
+  if (!isCurrentUserAdmin()) {
+    document.getElementById('admin-access-denied').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('settings-content').style.display = 'block';
+
+  // Lade Laufzeit-Config aus SharePoint
+  showOverlay(true);
+  try {
+    await loadRuntimeAccessConfig();
+    const cfg = _runtimeConfig || ACCESS_CONFIG_DEFAULT;
+    _editConfig = {
+      wgc: [...(cfg.wgc || [])],
+      shb: [...(cfg.shb || [])],
+    };
+  } catch (e) {
+    showToast('Konfiguration konnte nicht geladen werden: ' + e.message, 'error');
+    _editConfig = {
+      wgc: [...(ACCESS_CONFIG_DEFAULT.wgc || [])],
+      shb: [...(ACCESS_CONFIG_DEFAULT.shb || [])],
+    };
+  } finally {
+    showOverlay(false);
+  }
+
+  renderLists();
+});
+
+/* ── UPN-Listen rendern ── */
+function renderLists() {
+  ['wgc', 'shb'].forEach(g => {
+    const container = document.getElementById(`upn-list-${g}`);
+    container.innerHTML = '';
+    const upns = _editConfig[g] || [];
+    if (upns.length === 0) {
+      container.innerHTML = `<div class="upn-empty">Noch keine Benutzer eingetragen.</div>`;
+      return;
+    }
+    upns.forEach((upn, idx) => {
+      const row = document.createElement('div');
+      row.className = 'upn-row';
+      row.innerHTML = `
+        <span class="upn-avatar">${upn.slice(0,1).toUpperCase()}</span>
+        <span class="upn-text">${esc(upn)}</span>
+        <button class="btn btn-danger btn-sm" title="Entfernen" onclick="removeUpn('${g}',${idx})">✕</button>`;
+      container.appendChild(row);
+    });
+  });
+  updateHint('');
+}
+
+/* ── UPN hinzufügen ── */
+function addUpn(gesellschaft) {
+  const input = document.getElementById(`upn-input-${gesellschaft}`);
+  const upn = (input.value || '').trim().toLowerCase();
+  if (!upn) { showToast('Bitte eine E-Mail-Adresse eingeben.', 'error'); return; }
+  if (!upn.includes('@')) { showToast('Ungültige E-Mail-Adresse.', 'error'); return; }
+  if ((_editConfig[gesellschaft] || []).map(x => x.toLowerCase()).includes(upn)) {
+    showToast('Dieser Benutzer ist bereits eingetragen.', 'error'); return;
+  }
+  if (!_editConfig[gesellschaft]) _editConfig[gesellschaft] = [];
+  _editConfig[gesellschaft].push(upn);
+  input.value = '';
+  renderLists();
+  updateHint('ungespeicherte Änderungen');
+}
+
+/* ── UPN entfernen ── */
+function removeUpn(gesellschaft, idx) {
+  _editConfig[gesellschaft].splice(idx, 1);
+  renderLists();
+  updateHint('ungespeicherte Änderungen');
+}
+
+/* ── Speichern ── */
+async function saveSettings() {
+  showOverlay(true, 'Wird in SharePoint gespeichert…');
+  try {
+    await spSaveAccessConfig(_editConfig);
+    _runtimeConfig = JSON.parse(JSON.stringify(_editConfig)); // Cache aktualisieren
+    showOverlay(false);
+    showToast('Zugriffsrechte erfolgreich gespeichert.', 'success');
+    updateHint('Gespeichert ✓');
+  } catch (e) {
+    showOverlay(false);
+    showToast('Speichern fehlgeschlagen: ' + e.message, 'error');
+  }
+}
+
+/* ── Helpers ── */
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function updateHint(text) {
+  const el = document.getElementById('settings-save-hint');
+  if (el) el.textContent = text;
+}
+
+function showOverlay(on, text) {
+  const el = document.getElementById('loading-overlay');
+  if (!el) return;
+  el.style.display = on ? 'flex' : 'none';
+  if (text) {
+    const t = document.getElementById('loading-text');
+    if (t) t.textContent = text;
+  }
+}
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  toast.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span>${message}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    toast.addEventListener('animationend', () => toast.remove());
+  }, 4000);
+}
+
+/* Enter-Taste in UPN-Inputs */
+document.addEventListener('DOMContentLoaded', () => {
+  ['wgc', 'shb'].forEach(g => {
+    const input = document.getElementById(`upn-input-${g}`);
+    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') addUpn(g); });
+  });
+});
+</script>
+
+<script>authInit();</script>
+
+</body>
+</html>

@@ -116,6 +116,44 @@ async function spGetExports() {
 }
 
 /**
+ * Zugriffs-Config aus SharePoint laden.
+ * Datei: Dokumente/E-Rechnung/access-config.json
+ * @returns {object|null}
+ */
+async function spLoadAccessConfig() {
+  const token = await acquireToken(SP.scopes);
+  if (!token) return null;
+  await _spInit(token);
+  if (!_sp.driveId) return null;
+
+  const url = `${SP.graphBase}/drives/${_sp.driveId}/root:/${SP.folder}/access-config.json:/content`;
+  const resp = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+  });
+  if (!resp.ok) return null; // 404 = noch keine Config angelegt
+  return resp.json();
+}
+
+/**
+ * Zugriffs-Config in SharePoint speichern.
+ * @param {object} config  z.B. { wgc: ['user@dihag.com'], shb: [] }
+ */
+async function spSaveAccessConfig(config) {
+  const token = await acquireToken(SP.scopes);
+  if (!token) throw new Error('Nicht angemeldet');
+  await _spInit(token);
+  if (!_sp.driveId) throw new Error('Keine Dokument-Bibliothek gefunden.');
+
+  const json = JSON.stringify(config, null, 2);
+  await _uploadFile(
+    token,
+    `${SP.folder}/access-config.json`,
+    new TextEncoder().encode(json),
+    'application/json'
+  );
+}
+
+/**
  * Eintrag aus der SharePoint-Liste löschen.
  */
 async function spDeleteItem(itemId) {

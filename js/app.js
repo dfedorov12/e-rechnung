@@ -22,8 +22,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
 
-  // Gesellschaft-Selector nach Login befüllen (access.js)
-  onAuthReady(() => setupGesellschaftSelector());
+  // Runtime-Config laden, dann Selector + Admin-Nav initialisieren
+  onAuthReady(async () => {
+    await loadRuntimeAccessConfig();
+    initAdminNav();
+    setupGesellschaftSelector();
+  });
 });
 
 /**
