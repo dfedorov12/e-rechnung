@@ -203,7 +203,8 @@ function extractLineItemsGermanWGC(fullText) {
     const menge = parseFloat(codeM[2]) || 1;
 
     // Alle Währungsbeträge in der Zeile → letzter = Gesamtpreis
-    const amounts = (line.match(/[\d.]+,\d{2}/g) || []).map(_parseDE);
+    // Minus-Zeichen miterfassen (Gutschriften / Abzüge)
+    const amounts = (line.match(/-?[\d.]+,\d{2}/g) || []).map(_parseDE);
     if (amounts.length < 1) continue;
 
     const total       = amounts[amounts.length - 1];
@@ -231,7 +232,8 @@ function extractLineItemsGermanWGC(fullText) {
     });
   }
 
-  return items;
+  // Endsumme-Prüfung: stimmt die Summe der Positionen mit der Nettosumme überein?
+  return _validateAndFallback(items, _extractNetTotalGermanWGC(fullText), mwstDoc);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -754,7 +756,70 @@ function extractLineItemsEnglish(fullText) {
     });
   }
 
-  return items;
+  // Total-Prüfung: stimmt die Summe der Positionen mit dem Invoice-Total überein?
+  return _validateAndFallback(items, _extractNetTotalEnglish(fullText), 0);
+}
+
+/* ══════════════════════════════════════════════════════
+   Endsumme-Validierung & Fallback-Position
+══════════════════════════════════════════════════════ */
+
+/**
+ * Liefert den Netto-Erwartungswert für deutsche WGC-Rechnungen.
+ * Priorität: letztes "Nettosumme"-Vorkommen (Gesamtseite).
+ * Fallback ohne MwSt: letztes "Endsumme"-Vorkommen.
+ */
+function _extractNetTotalGermanWGC(fullText) {
+  const nets = [...fullText.matchAll(/Nettosumme\s+([\d.]+,\d{2})/gi)];
+  if (nets.length > 0) return _parseDE(nets[nets.length - 1][1]);
+
+  // Keine MwSt im Dokument → Endsumme = Nettobetrag (MwSt-frei)
+  const hasMwst = /MWSt\.\s+[\d.,]+\s+\d{1,2}(?:,\d+)?\s+[\d.,]+/i.test(fullText);
+  if (!hasMwst) {
+    const ends = [...fullText.matchAll(/Endsumme\s+([\d.]+,\d{2})/gi)];
+    if (ends.length > 0) return _parseDE(ends[ends.length - 1][1]);
+  }
+  return null;
+}
+
+/**
+ * Liefert den Netto-Erwartungswert für englische WGC-Rechnungen.
+ * Nimmt die ERSTE eigenständige "Total BETRAG"-Zeile
+ * (vor einem etwaigen Prepayment-Abzug auf einer Folgezeile).
+ */
+function _extractNetTotalEnglish(fullText) {
+  const m = fullText.match(/^\s*Total\s+([\d.]+,\d{2})\s*$/m);
+  return m ? _parseDE(m[1]) : null;
+}
+
+/**
+ * Prüft ob die Summe der extrahierten Positionen mit dem erwarteten
+ * Nettobetrag übereinstimmt (Toleranz ±1,00 €).
+ * Bei Abweichung: eine Sammelposition mit dem korrekten Nettobetrag.
+ *
+ * @param {object[]} items        - Extrahierte Positionen
+ * @param {number|null} netExpected - Erwarteter Nettobetrag aus PDF
+ * @param {number} mwstDoc        - MwSt-Satz für die Sammelposition
+ */
+function _validateAndFallback(items, netExpected, mwstDoc) {
+  if (netExpected === null || items.length === 0) return items;
+
+  const netExtracted = items.reduce((s, it) => s + it.einzelpreis * it.menge, 0);
+  if (Math.abs(netExtracted - netExpected) <= 1.0) return items;
+
+  // Differenz zu groß → Sammelposition mit korrektem Betrag
+  console.warn(
+    `[parser] Positions-Summe ${netExtracted.toFixed(2)} weicht von Endsumme ` +
+    `${netExpected.toFixed(2)} ab (Δ ${(netExtracted - netExpected).toFixed(2)}). ` +
+    'Verwende Sammelposition.'
+  );
+  return [{
+    beschreibung: 'Lieferung und Leistung laut Rechnung (Endsumme aus PDF)',
+    menge:        1,
+    einheit:      'Pausch.',
+    einzelpreis:  netExpected,
+    mwst:         mwstDoc,
+  }];
 }
 
 /* ══════════════════════════════════════════════════════
