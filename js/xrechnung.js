@@ -27,7 +27,7 @@ function buildXML(data, profile = 'xrechnung') {
 
   lines.forEach(p => {
     const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0);
-    const rate = parseFloat(p.mwst || 19);
+    const rate = (p.mwst != null && p.mwst !== '') ? parseFloat(p.mwst) : 19;
     const key = String(rate);
     if (!vatGroups[key]) vatGroups[key] = { base: 0, amount: 0, rate };
     vatGroups[key].base += net;
@@ -42,7 +42,7 @@ function buildXML(data, profile = 'xrechnung') {
 
   const lineXML = lines.map((p, i) => {
     const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0);
-    const rate = parseFloat(p.mwst || 19);
+    const rate = (p.mwst != null && p.mwst !== '') ? parseFloat(p.mwst) : 19;
     const unitCode = mapUnit(p.einheit || 'Stk');
     return `
     <ram:IncludedSupplyChainTradeLineItem>
@@ -246,7 +246,7 @@ function calcTotals(positionen) {
   const vatGroups = {};
   positionen.forEach(p => {
     const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0);
-    const rate = parseFloat(p.mwst || 19);
+    const rate = (p.mwst != null && p.mwst !== '') ? parseFloat(p.mwst) : 19;
     const key = String(rate);
     if (!vatGroups[key]) vatGroups[key] = { base: 0, amount: 0, rate };
     vatGroups[key].base += net;
