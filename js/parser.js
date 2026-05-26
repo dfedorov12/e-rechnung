@@ -11,12 +11,32 @@ async function extractInvoiceData(pdfDoc) {
   const { fullText, leftText, leftColumnText, rightText, footerText } =
     await _extractTextSections(pdfDoc);
 
+  // Englischsprachige Industrierechnung (Walzengiesserei / PIOMBINO-Format)
+  if (_isEnglishIndustrialInvoice(fullText)) {
+    return {
+      ...extractMetadataEnglish(fullText),
+      ...extractSellerEnglish(footerText, fullText),
+      ...extractBuyerEnglish(leftColumnText, fullText),
+      positionen: extractLineItemsEnglish(fullText),
+    };
+  }
+
   return {
     ...extractMetadata(rightText, fullText),
     ...extractSeller(footerText, fullText),
     ...extractBuyer(leftColumnText, leftText, fullText),
     positionen: extractLineItems(fullText),
   };
+}
+
+/* ══════════════════════════════════════════════════════
+   Detektor: Englische Industrierechnung
+   Erkennt Format mit "Invoice Nr", "pcs." und Tabellenkopf
+══════════════════════════════════════════════════════ */
+function _isEnglishIndustrialInvoice(text) {
+  return /Invoice\s*Nr[:\s]/i.test(text) &&
+         /\bpcs\.\b/i.test(text) &&
+         /Item\s+Product\s+Quantity\s+Unit\s+price/i.test(text);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -379,6 +399,170 @@ function extractLineItems(fullText) {
 }
 
 /* ══════════════════════════════════════════════════════
+   ENGLISCHE INDUSTRIERECHNUNG — Spezialisierte Extraktion
+   (Walzengiesserei Coswig / PIOMBINO-Format)
+══════════════════════════════════════════════════════ */
+
+/**
+ * Metadaten: Rechnungsnummer, Datum (DD.MM.YY → 4-stellig),
+ * Lieferdatum, Fälligkeitsdatum
+ */
+function extractMetadataEnglish(fullText) {
+  const r = {};
+
+  // Rechnungsnummer: "Invoice Nr: 4240007"
+  const invM = fullText.match(/Invoice\s*Nr[:\s]+(\d{4,12})/i);
+  if (invM) r.rechnungsnummer = invM[1].trim();
+
+  // Datum-Zeile nach Header "Delivery note Delivery date Date":
+  // Datenzeile enthält "3240007  08.01.24  08.01.24" (Delivery date + Invoice date)
+  const dtRowM = fullText.match(
+    /Delivery\s+note\s+Delivery\s+date\s+Date[\s\S]{0,200}?(\d{2}\.\d{2}\.\d{2})\s+(\d{2}\.\d{2}\.\d{2})/i
+  );
+  if (dtRowM) {
+    r.lieferdatum    = _deDate(_fixYear(dtRowM[1]));
+    r.rechnungsdatum = _deDate(_fixYear(dtRowM[2]));
+  }
+
+  // Fälligkeitsdatum: "until 15.01.2024 net = 8.095,21 EUR"
+  const dueM = fullText.match(/until\s+(\d{2}\.\d{2}\.\d{4})/i);
+  if (dueM) r.faelligkeitsdatum = _deDate(dueM[1]);
+
+  return r;
+}
+
+/**
+ * Verkäufer: Name aus "Account holder:", IBAN, BIC, E-Mail
+ * (Adresse ist in diesem PDF-Format nicht enthalten)
+ */
+function extractSellerEnglish(footerText, fullText) {
+  const r = {};
+  const src = footerText + '\n' + fullText;
+
+  // Name aus "Account holder: Walzengiesserei Coswig GmbH"
+  const ahM = fullText.match(/Account\s+holder[:\s]+(.+)/i);
+  if (ahM) r.verkaeufer = ahM[1].trim().replace(/\s{2,}/g, ' ');
+
+  // IBAN
+  const ibanM = src.match(/IBAN[:\s·•|]+([A-Z]{2}\d{2}[\s\d]{10,30})/i);
+  if (ibanM) r.iban = ibanM[1].replace(/\s/g, '');
+
+  // BIC: sowohl "BIC:" als auch "BIC code:"
+  const bicM = src.match(/BIC(?:\s+code)?[:\s·•|]+([A-Z]{6}[A-Z0-9]{2,5})/i);
+  if (bicM) r.bic = bicM[1];
+
+  // E-Mail (Operator-Zeile: "andreasbuchs@walze-coswig.de")
+  const emailM = src.match(/([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/);
+  if (emailM) r.verkaeuferemail = emailM[1];
+
+  return r;
+}
+
+/**
+ * Käufer: Firmenname (international: S.p.A., Ltd, Inc. …),
+ * Adresse, PLZ, Stadt, Land aus dem Adressblock links oben.
+ * Käufer-USt-IdNr aus "Your VAT reg. no.:"
+ */
+function extractBuyerEnglish(leftColumnText, fullText) {
+  const r = {};
+
+  // Käufer-USt-IdNr: "Your VAT reg. no.: IT01804670493"
+  const vatM = fullText.match(/Your\s+VAT\s+reg\.?\s*no\.?\s*[:\s]+([A-Z]{2}[\dA-Z]{2,12})/i);
+  if (vatM) r.kaeufervatnr = vatM[1];  // gespeichert für Anzeige / Notiz
+
+  if (!leftColumnText) return r;
+
+  // Internationale Rechtsformen
+  const intlForms = /S\.p\.A\.|S\.A\.|S\.r\.l\.|Ltd\.?|Inc\.?|Corp\.?|GmbH|AG|B\.V\.|N\.V\.|Oy|A\/S|PLC/i;
+
+  const lines = leftColumnText
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 1);
+
+  const ci = lines.findIndex(l => intlForms.test(l));
+  if (ci < 0) return r;
+
+  r.kaeufer = lines[ci];
+
+  // Zeilen nach Firmenname auswerten
+  const skipLine = /^(Administrative|Office|Department|Attn|c\/o|P\.O\.\s*Box|Abt\.)/i;
+
+  for (const line of lines.slice(ci + 1)) {
+    // PLZ + Stadt: "57025 PIOMBINO (LI)" oder "D-04610 Meuselwitz"
+    const plzM = line.match(/[A-Z]?-?(\d{4,6})\s+([A-ZÄÖÜ][A-ZÄÖÜa-zäöüß\s\-()/]+?)(?:\s+\([A-Z]{2}\))?$/);
+    if (plzM && !r.kaeuferplz) {
+      r.kaeuferplz   = plzM[1];
+      r.kaeuferstadt = plzM[2].trim();
+      continue;
+    }
+
+    // Land: Zeile nur aus Großbuchstaben "ITALIEN", "GERMANY" …
+    if (/^[A-ZÄÖÜ\s]{4,20}$/.test(line) && !r.kaeuferland) {
+      r.kaeuferland = _countryCode(line.trim());
+      continue;
+    }
+
+    // Straße: erste sinnvolle Zeile, keine Skip-Zeile, noch keine PLZ
+    if (!r.kaeuferstrasse && !r.kaeuferplz && !skipLine.test(line)) {
+      r.kaeuferstrasse = line;
+    }
+  }
+
+  return r;
+}
+
+/**
+ * Positionen: Produktcode + "N pcs." + Einzelpreis + Gesamtpreis
+ * Beschreibung aus der Folgezeile.
+ * Überspringt Prepayment-Zeilen (Anzahlungen).
+ * MwSt immer 0 % (innergemeinschaftliche Lieferung).
+ */
+function extractLineItemsEnglish(fullText) {
+  const items  = [];
+  const lines  = fullText.split('\n');
+
+  // Muster: [Pos] ProduktCode ... N pcs. Einzelpreis Gesamtpreis
+  // z. B. "1    31857                             1 pcs.   55.187,37     55.187,37"
+  // oder  "     14166                             1 pcs.   6.549,64       6.549,64"
+  const itemRe = /(?:^\s*\d+\s+)?(\d{4,6})\s[\s\S]*?(\d+)\s+pcs\.\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Summen-/Anzahlungs-/Steuerzeilen überspringen
+    if (/^\s*(Total|Prepayment|Tax|Note to|We confirm|We kindly|Country of|Herewith)\b/i.test(line)) continue;
+
+    const m = line.match(itemRe);
+    if (!m) continue;
+
+    const productCode = m[1];
+    const menge       = parseFloat(m[2]) || 1;
+    const einzelpreis = _parseDE(m[3]);
+
+    // Beschreibung: nächste Nicht-Leer-Zeile, die keine technische Detailzeile ist
+    let desc = productCode;
+    for (let j = i + 1; j < lines.length && j <= i + 4; j++) {
+      const nl = lines[j].trim();
+      if (!nl) continue;
+      if (/^(Your Order|Our order|Drawing|Dimensions|Quality|Weight|Surface|No of|Prepayment|Total|\d{4,6}\s)/i.test(nl)) break;
+      desc = nl;
+      break;
+    }
+
+    items.push({
+      beschreibung: `${productCode} – ${desc}`,
+      menge,
+      einheit:      'Stk',
+      einzelpreis,
+      mwst:         0,  // VAT-exempt: steuerfreie innergemeinschaftliche Lieferung
+    });
+  }
+
+  return items;
+}
+
+/* ══════════════════════════════════════════════════════
    Helpers
 ══════════════════════════════════════════════════════ */
 function _try(text, patterns, fn) {
@@ -406,4 +590,35 @@ function _unitCode(u) {
     LS: 'Pausch.', Psch: 'Pausch.',
   };
   return map[u] || 'Stk';
+}
+
+/**
+ * Zweistelliges Jahr → vierstellig: "24" → "2024", "99" → "1999"
+ * "08.01.24" → "08.01.2024"
+ */
+function _fixYear(dateStr) {
+  return dateStr.replace(/^(\d{2}\.\d{2}\.)(\d{2})$/, (_, dm, yy) => {
+    const year = parseInt(yy, 10) + (parseInt(yy, 10) >= 50 ? 1900 : 2000);
+    return dm + year;
+  });
+}
+
+/**
+ * Ländername (englisch/deutsch) → ISO 3166-1 Alpha-2
+ */
+function _countryCode(name) {
+  const map = {
+    'ITALIEN': 'IT', 'ITALY': 'IT',
+    'DEUTSCHLAND': 'DE', 'GERMANY': 'DE',
+    'FRANKREICH': 'FR', 'FRANCE': 'FR',
+    'ÖSTERREICH': 'AT', 'AUSTRIA': 'AT',
+    'SPANIEN': 'ES', 'SPAIN': 'ES',
+    'NIEDERLANDE': 'NL', 'NETHERLANDS': 'NL',
+    'BELGIEN': 'BE', 'BELGIUM': 'BE',
+    'SCHWEIZ': 'CH', 'SWITZERLAND': 'CH',
+    'GROSSBRITANNIEN': 'GB', 'UNITED KINGDOM': 'GB',
+    'TSCHECHIEN': 'CZ', 'CZECH REPUBLIC': 'CZ',
+    'POLEN': 'PL', 'POLAND': 'PL',
+  };
+  return map[name.toUpperCase()] || name.slice(0, 2).toUpperCase();
 }
