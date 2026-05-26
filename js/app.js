@@ -21,7 +21,32 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-add-row').addEventListener('click', addPositionRow);
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
+
+  // Gesellschaft-Selector nach Login befüllen (access.js)
+  onAuthReady(() => setupGesellschaftSelector());
 });
+
+/**
+ * Gesellschaft-Dropdown dynamisch nach Zugriffskonfiguration befüllen.
+ * Nur die Gesellschaften anzeigen, auf die der User Zugriff hat.
+ */
+function setupGesellschaftSelector() {
+  const sel = document.getElementById('gesellschaft');
+  if (!sel) return;
+  const access = typeof getCurrentUserAccess === 'function' ? getCurrentUserAccess() : [];
+  sel.innerHTML = '';
+  if (access.length === 0) {
+    // Fallback: beide anzeigen (z.B. wenn access.js nicht geladen)
+    sel.innerHTML = '<option value="WGC">WGC</option><option value="SHB">SHB</option>';
+    return;
+  }
+  access.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g.toUpperCase();
+    opt.textContent = (typeof GESELLSCHAFT_LABELS !== 'undefined' ? GESELLSCHAFT_LABELS[g] : null) || g.toUpperCase();
+    sel.appendChild(opt);
+  });
+}
 
 /* ── Pflichtfeld-Toggles für "mind. eines von zwei" ── */
 function setupBuyerEmailToggle() {
@@ -399,6 +424,7 @@ function collectFormData() {
     faelligkeitsdatum: v('faelligkeitsdatum'),
     zahlungsreferenz:  v('zahlungsreferenz'),
     notiz:             v('notiz'),
+    gesellschaft:      v('gesellschaft') || 'WGC',
     // Positionen
     positionen:        collectPositionen(),
   };

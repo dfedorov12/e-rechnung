@@ -740,8 +740,87 @@ body {
 
 .format-tag.xrechnung { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
 .format-tag.zugferd { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.format-tag.wgc { background: #faf5ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+.format-tag.shb { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 
 .actions-cell { display: flex; gap: 6px; }
+
+/* ── Verlauf Tabs (WGC / SHB / Alle) ── */
+.verlauf-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: var(--gray-100);
+  padding: 4px;
+  border-radius: 10px;
+  width: fit-content;
+}
+
+.verlauf-tab-btn {
+  padding: 7px 20px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.verlauf-tab-btn:hover { color: var(--gray-800); background: var(--gray-200); }
+
+.verlauf-tab-btn.active {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 1px 4px rgba(0,0,0,.10);
+}
+
+/* ── Kein Zugriff ── */
+.access-denied-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 32px;
+  text-align: center;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+}
+
+.access-denied-icon { font-size: 48px; margin-bottom: 16px; }
+.access-denied-box h3 { font-size: 20px; font-weight: 700; color: var(--gray-800); margin-bottom: 8px; }
+.access-denied-box p { font-size: 14px; color: var(--gray-500); margin-bottom: 4px; }
+
+/* ── Export Gesellschaft-Selector ── */
+.export-gesellschaft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.export-gesellschaft label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  white-space: nowrap;
+}
+
+.export-gesellschaft select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.export-gesellschaft select option { background: #1e3a5f; color: #fff; }
 
 /* ── Toast ── */
 .toast-container {

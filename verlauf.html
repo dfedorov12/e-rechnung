@@ -70,18 +70,28 @@
 
 <!-- App Scripts -->
 <script src="js/auth.js"></script>
+<script src="js/access.js"></script>
 <script src="js/zugferd.js"></script>
 <script src="js/history.js"></script>
 <script src="js/sharepoint.js"></script>
 
 <script>
+/* ── Zustand ── */
+let _allItems   = [];   // alle geladenen SP-Einträge
+let _activeTab  = null; // 'WGC' | 'SHB' | null (= alle)
+
 /* ── Verlauf laden & rendern ── */
-async function loadVerlauf() {
+async function loadVerlauf(access) {
   showLoading(true);
   try {
     const items = await spGetExports();
+    _allItems = items;
     showLoading(false);
-    renderSP(items);
+
+    // Tabs aufbauen (nur wenn Zugriff auf mehrere Gesellschaften)
+    buildTabs(access);
+    applyTabFilter();
+
     document.getElementById('btn-refresh').style.display   = 'flex';
     document.getElementById('btn-sp-open').style.display   = 'flex';
     document.getElementById('verlauf-subtitle').textContent =
@@ -95,7 +105,64 @@ async function loadVerlauf() {
     renderVerlauf(); // history.js (localStorage)
   }
 
-  document.getElementById('btn-refresh').addEventListener('click', () => loadVerlauf());
+  document.getElementById('btn-refresh').addEventListener('click', () => loadVerlauf(getCurrentUserAccess()));
+}
+
+/* ── Tabs bauen ── */
+function buildTabs(access) {
+  // Alten Tab-Container entfernen falls vorhanden
+  const old = document.getElementById('verlauf-tabs');
+  if (old) old.remove();
+
+  if (!access || access.length <= 1) {
+    // Nur eine Gesellschaft → kein Tab nötig, Filter setzen
+    _activeTab = access && access.length === 1 ? access[0].toUpperCase() : null;
+    return;
+  }
+
+  // Mehrere Gesellschaften → Tabs anzeigen
+  _activeTab = access[0].toUpperCase(); // Standard: erste Gesellschaft
+
+  const tabs = document.createElement('div');
+  tabs.id = 'verlauf-tabs';
+  tabs.className = 'verlauf-tabs';
+
+  // Tab "Alle"
+  const allBtn = document.createElement('button');
+  allBtn.className = 'verlauf-tab-btn';
+  allBtn.textContent = 'Alle';
+  allBtn.dataset.tab = 'ALL';
+  allBtn.addEventListener('click', () => setTab('ALL', tabs));
+  tabs.appendChild(allBtn);
+
+  access.forEach(g => {
+    const btn = document.createElement('button');
+    btn.className = 'verlauf-tab-btn' + (g.toUpperCase() === _activeTab ? ' active' : '');
+    btn.textContent = (typeof GESELLSCHAFT_LABELS !== 'undefined' ? GESELLSCHAFT_LABELS[g] : null) || g.toUpperCase();
+    btn.dataset.tab = g.toUpperCase();
+    btn.addEventListener('click', () => setTab(g.toUpperCase(), tabs));
+    tabs.appendChild(btn);
+  });
+
+  // Tabs vor dem Container einfügen
+  const container = document.getElementById('verlauf-container');
+  container.parentNode.insertBefore(tabs, container);
+}
+
+function setTab(tab, tabsEl) {
+  _activeTab = tab === 'ALL' ? null : tab;
+  tabsEl.querySelectorAll('.verlauf-tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  applyTabFilter();
+}
+
+/* ── Gefilterte Anzeige ── */
+function applyTabFilter() {
+  const visible = _activeTab
+    ? _allItems.filter(e => (e.gesellschaft || 'WGC').toUpperCase() === _activeTab)
+    : _allItems;
+  renderSP(visible);
 }
 
 function showLoading(on) {
@@ -140,8 +207,9 @@ function renderSP(items) {
           <th>Rechnungs-Nr.</th>
           <th>Aussteller</th>
           <th>Empfänger</th>
+          <th>Gesellschaft</th>
           <th>Format</th>
-          <th class="text-right">Brutto</th>
+          <th class="text-right">Betrag</th>
           <th>Dateien</th>
           <th></th>
         </tr>
@@ -173,9 +241,11 @@ function renderSP(items) {
 
 function spRow(e) {
   const date   = e.createdAt ? new Date(e.createdAt).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '–';
-  const brutto = (e.grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const betrag = (e.grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmt    = e.format || 'XRechnung';
   const fmtCls = fmt.toLowerCase().includes('zugferd') ? 'zugferd' : 'xrechnung';
+  const ges    = (e.gesellschaft || 'WGC').toUpperCase();
+  const gesCls = ges === 'SHB' ? 'shb' : 'wgc';
   const esc    = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   const xmlBtn = e.xmlUrl
@@ -191,13 +261,29 @@ function spRow(e) {
       <td class="invoice-nr">${esc(e.rechnungsnummer)}</td>
       <td>${esc(e.verkaeufer)}</td>
       <td>${esc(e.kaeufer)}</td>
+      <td><span class="format-tag ${gesCls}">${esc(ges)}</span></td>
       <td><span class="format-tag ${fmtCls}">${esc(fmt)}</span></td>
-      <td class="amount-cell">${brutto} €</td>
+      <td class="amount-cell">${betrag} €</td>
       <td><div class="actions-cell">${xmlBtn}${pdfBtn}</div></td>
       <td>
         <button class="btn btn-danger btn-sm" data-del="${esc(e.id)}" title="Löschen">🗑</button>
       </td>
     </tr>`;
+}
+
+/* ── Kein Zugriff ── */
+function showAccessDenied() {
+  showLoading(false);
+  const account = getAuthUser();
+  const upn = account ? account.username : '–';
+  document.getElementById('verlauf-subtitle').textContent = 'Kein Zugriff für diesen Account';
+  document.getElementById('verlauf-container').innerHTML = `
+    <div class="access-denied-box">
+      <div class="access-denied-icon">🔒</div>
+      <h3>Kein Zugriff</h3>
+      <p>Ihr Account <strong>${upn}</strong> ist nicht für den Exportverlauf freigeschaltet.</p>
+      <p>Bitte wenden Sie sich an Ihren Administrator, um Zugriff zu erhalten.</p>
+    </div>`;
 }
 
 /* ── Toast ── */
@@ -216,7 +302,16 @@ function showToast(message, type = 'info') {
 </script>
 
 <!-- Alle Funktionen sind jetzt definiert → Auth starten -->
-<script>onAuthReady(() => loadVerlauf());</script>
+<script>
+onAuthReady(() => {
+  const access = getCurrentUserAccess();
+  if (access.length === 0) {
+    showAccessDenied();
+  } else {
+    loadVerlauf(access);
+  }
+});
+</script>
 <script>authInit();</script>
 
 </body>

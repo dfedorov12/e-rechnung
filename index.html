@@ -291,6 +291,12 @@
         <div class="export-info">
           <h3>Exportieren</h3>
           <p>XRechnung: reines XML · ZUGFeRD: Ihr PDF mit eingebettetem XML (EN 16931)</p>
+          <div class="export-gesellschaft">
+            <label for="gesellschaft">Gesellschaft</label>
+            <select id="gesellschaft">
+              <!-- wird nach Login dynamisch befüllt (access.js) -->
+            </select>
+          </div>
         </div>
         <div class="export-buttons">
           <button class="btn-export btn-xrechnung" id="btn-export-xrechnung" type="button">
@@ -345,6 +351,7 @@
 
 <!-- App Scripts -->
 <script src="js/auth.js"></script>
+<script src="js/access.js"></script>
 <script src="js/xrechnung.js"></script>
 <script src="js/zugferd.js"></script>
 <script src="js/history.js"></script>
