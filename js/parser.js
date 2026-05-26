@@ -181,44 +181,56 @@ function extractLineItemsGermanWGC(fullText) {
   const mwstDocM = fullText.match(/MWSt\.\s+[\d.,]+\s+(\d{1,2})(?:,\d+)?\s+[\d.,]+/i);
   const mwstDoc  = mwstDocM ? parseFloat(mwstDocM[1]) : 0;
 
-  // Zeilen die keine Positionen sind
-  const skipRe = /^(?:Nettosumme|Zwischensumme|Endsumme|MWSt|Anzahlung|CDR|FDR|FAT|SAT|Rechnung\s+Nr|Seite\s*\d|Pos\s+Artikel|EUR\s|Versandart|Lieferbedingung|Zahlung|Hinweis|Warenursprung|HS-Code|Hiermit|Ware\s+bleibt|Zeitpunkt|Bank|Konto|IBAN|BIC|Wir\s+bitten)/i;
+  // Strukturzeilen, die definitiv keine Positionen oder Beschreibungen sind
+  const skipRe = /^(?:Nettosumme|Zwischensumme|Endsumme|MWSt|Anzahlung|CDR|FDR|FAT|SAT|Rechnung\s+Nr|Seite\s*\d|Pos\s+Artikel|^EUR\b|Versandart|Lieferbedingung|Zahlung|Hinweis|Warenursprung|HS-Code|Hiermit|Ware\s+bleibt|Zeitpunkt|Bank|Konto|IBAN|BIC|Wir\s+bitten)/i;
 
-  // Technische Detailzeilen (nach Beschreibung, überspringen)
-  const techRe = /^(?:Ihre\s+Bestellung|Auftrags-Nr|Kundenzeichn|Modellnummer|Abmessung|Werkstoff|Masse|Ober|Produktions|Verbringung|Abgang|Lieferreferenz|z\.\s*Zt\.|KE\d|Pattern\s|for\s+block|ncl\.|operational|Material\s+doc|External\s+ver)/i;
+  // WGC-spezifische technische Detailzeilen (Bestellreferenzen, Maßdaten, Werkstoff …)
+  // BEWUSST ENG: echte Beschreibungen wie "Material documentation", "Shielding block"
+  // oder "External verification" dürfen NICHT hier stehen!
+  const techRe = /^(?:Ihre\s+Bestellung|Auftrags-Nr|Kundenzeichn|Modellnummer|Abmessung|Werkstoff|Masse\s*[\/|]|Ober|Produktions|Verbringung|Abgang|Lieferreferenz|z\.\s*Zt\.|KE\d|Pattern\s+\d)/i;
+
+  // Positionszeile: [Nr.] ArtikelCode Menge Einheit [...]
+  // \s* statt \s+: toleriert PDF.js-Glyphen ohne Zwischenraum (gap < 2 pt)
+  // Einheiten: St(ück)/VE/Stk/ME/Pce/pcs
+  const itemRe = /^(?:\d+(?:\.\d+)?\s+)?(\d{2,6})\s+(\d+)\s*(?:St|VE|Stk|ME|Pce|pcs)/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line || skipRe.test(line)) continue;
 
-    // Positionszeile erkennen:
-    // [Pos] Code Menge Unit Preis [%] Gesamtpreis
-    // Unit: Stück (oft als St?ck o.ä.), VE, pcs, St.
-    const codeM = line.match(
-      /^(?:\d+(?:\.\d+)?\s+)?(\d{2,6})\s+(\d+)\s+(?:St|VE|Stk|pcs)/i
-    );
+    const codeM = line.match(itemRe);
     if (!codeM) continue;
 
     const code  = codeM[1];
     const menge = parseFloat(codeM[2]) || 1;
 
-    // Alle Währungsbeträge in der Zeile → letzter = Gesamtpreis
-    // Minus-Zeichen miterfassen (Gutschriften / Abzüge)
-    const amounts = (line.match(/-?[\d.]+,\d{2}/g) || []).map(_parseDE);
-    if (amounts.length < 1) continue;
+    // Beträge in der aktuellen Zeile — Minus-Zeichen miterfassen (Gutschriften)
+    let amounts = (line.match(/-?[\d.]+,\d{2}/g) || []).map(_parseDE);
+
+    // Fallback: Beträge auf der nächsten Zeile (manche PDFs brechen die Zeile um)
+    if (amounts.length === 0) {
+      for (let k = i + 1; k <= i + 2 && k < lines.length; k++) {
+        const nl = lines[k].trim();
+        if (nl && /^[-\d.,\s]+$/.test(nl)) {
+          amounts = (nl.match(/-?[\d.]+,\d{2}/g) || []).map(_parseDE);
+          break;
+        }
+      }
+    }
+    if (amounts.length === 0) continue;
 
     const total       = amounts[amounts.length - 1];
     const einzelpreis = menge > 0 ? total / menge : amounts[0];
 
-    // Beschreibung: erste relevante Folgezeile
+    // Beschreibung: erste sinnvolle Folgezeile (nicht techn. Detail, nicht Nummer, nicht zu kurz)
     let desc = code;
-    for (let j = i + 1; j <= i + 5 && j < lines.length; j++) {
+    for (let j = i + 1; j <= i + 6 && j < lines.length; j++) {
       const nl = lines[j].trim();
-      if (!nl || skipRe.test(nl) || techRe.test(nl)) continue;
-      // Nächste Positionszeile → Abbruch
-      if (/^(?:\d+(?:\.\d+)?\s+)?\d{2,6}\s+\d+\s+(?:St|VE|pcs)/i.test(nl)) break;
-      // Reine Zahlenzeile → Abbruch
-      if (/^[\d.,\s]+$/.test(nl)) break;
+      if (!nl) continue;
+      if (skipRe.test(nl) || techRe.test(nl)) continue;   // Strukturzeile / techn. Detail
+      if (itemRe.test(nl)) break;                           // nächste Position beginnt
+      if (/^[-\d.,\s]{2,}$/.test(nl)) continue;            // reine Zahlenzeile
+      if (nl.length < 3) continue;                          // zu kurz
       desc = nl;
       break;
     }
@@ -252,33 +264,38 @@ async function _extractTextSections(pdfDoc) {
       if (!s || !s.trim()) continue;
       allItems.push({
         text: s,
-        x:  item.transform[4],
-        y:  item.transform[5],
-        pw: vp.width,
-        ph: vp.height,
-        w:  item.width || 0,   // advance width → gap detection for joined chars
+        x:   item.transform[4],
+        y:   item.transform[5],
+        pw:  vp.width,
+        ph:  vp.height,
+        w:   item.width || 0,
+        page: p,            // ← Seitennummer: verhindert y-Überlappung zwischen Seiten
       });
     }
   }
 
-  // Top → bottom, left → right
-  allItems.sort((a, b) => b.y - a.y || a.x - b.x);
-
   /**
    * Cluster items into visual lines (±4 pt) and return newline-joined string.
-   * Uses gap-based joining: gap < 2 pt between consecutive items → no space
-   * (fixes "Me uselwitz" → "Meuselwitz", "D-0 4610" → "D-04610").
+   *
+   * WICHTIG: Jede Seite hat einen eigenen Cluster-Namespace.
+   * Ohne diese Trennung würden Items von Seite 2 (gleicher y-Bereich wie Seite 1)
+   * zwischen Items von Seite 1 einsortiert und die Zeilenreihenfolge zerstören.
+   *
+   * Sortierung: Seite aufsteigend → innerhalb Seite y absteigend (oben zuerst)
+   *             → innerhalb Zeile x aufsteigend (links zuerst).
+   * Gap-Joining: gap < 2 pt → kein Leerzeichen
+   *   (behebt "Me uselwitz" → "Meuselwitz", "D-0 4610" → "D-04610").
    */
   function toLines(items) {
-    const map = {};
+    const rows = new Map();
     for (const it of items) {
-      const ky = Math.round(it.y / 4) * 4;
-      if (!map[ky]) map[ky] = [];
-      map[ky].push(it);
+      const key = `${it.page || 0}|${Math.round(it.y / 4) * 4}`;
+      if (!rows.has(key)) rows.set(key, { page: it.page || 0, y: it.y, ls: [] });
+      rows.get(key).ls.push(it);
     }
-    return Object.values(map)
-      .sort((a, b) => b[0].y - a[0].y)
-      .map(ls => {
+    return [...rows.values()]
+      .sort((a, b) => a.page - b.page || b.y - a.y)
+      .map(({ ls }) => {
         const sorted = ls.sort((a, b) => a.x - b.x);
         return sorted.reduce((acc, it, i) => {
           if (i === 0) return it.text;
@@ -292,13 +309,16 @@ async function _extractTextSections(pdfDoc) {
 
   const fullText       = toLines(allItems);
   const leftColumnText = toLines(allItems.filter(i => i.x < i.pw * 0.48));
-  const leftText       = allItems.filter(i => i.x < i.pw * 0.48).map(i => i.text).join(' ');
+  const leftText       = allItems
+    .filter(i => i.x < i.pw * 0.48)
+    .sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x)
+    .map(i => i.text).join(' ');
   const rightText      = toLines(allItems.filter(i => i.x > i.pw * 0.48));
-  // Footer = bottom 22 % of page (small y values in PDF coordinate space)
-  // + last 15 lines of fullText as additional fallback (covers y-coordinate edge cases)
-  const footerByY    = toLines(allItems.filter(i => i.y < i.ph * 0.22));
-  const footerByEnd  = fullText.split('\n').slice(-15).join('\n');
-  const footerText   = footerByY + '\n' + footerByEnd;
+  // Footer = bottom 22 % jeder Seite (y < ph*0.22 in PDF-Koordinaten)
+  // + letzte 15 Zeilen als Fallback (Seller-Daten die per y nicht erwischt werden)
+  const footerByY   = toLines(allItems.filter(i => i.y < i.ph * 0.22));
+  const footerByEnd = fullText.split('\n').slice(-15).join('\n');
+  const footerText  = footerByY + '\n' + footerByEnd;
 
   return { fullText, leftText, leftColumnText, rightText, footerText };
 }
