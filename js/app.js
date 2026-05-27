@@ -5,6 +5,8 @@ let currentPage = 1;
 let totalPages = 1;
 let pdfDocument = null;
 let rowCounter = 0;
+let zoomFactor = 1.0;
+const ZOOM_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
 
 /* ── PDF.js setup ── */
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';
@@ -248,6 +250,7 @@ async function renderPDF(pdfBytes) {
     pdfDocument = await loadingTask.promise;
     totalPages = pdfDocument.numPages;
     currentPage = 1;
+    zoomFactor = 1.0;   // Zoom bei neuer PDF zurücksetzen
     updatePageNav();
     await renderPage(currentPage);
   } catch (err) {
@@ -262,26 +265,54 @@ async function renderPage(pageNum) {
   const canvas = document.getElementById('pdf-canvas');
   const ctx = canvas.getContext('2d');
 
-  // DPR: auf HiDPI-/Retina-Screens (DPR=2) doppelt so viele Pixel rendern
-  const dpr = Math.min(window.devicePixelRatio || 1, 3); // max 3× gegen Speicher-Overflow
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const viewportRaw = page.getViewport({ scale: 1 });
   const maxWidth = wrapper.clientWidth - 32;
 
-  // CSS-Skalierung: PDF füllt das Panel (kein künstlicher Deckel mehr)
-  const cssScale = maxWidth / viewportRaw.width;
-  // Physische Pixel = CSS-Skala × DPR → scharfes Bild auf allen Screens
+  // Fit-to-width × Zoom-Faktor × DPR
+  const cssScale = (maxWidth / viewportRaw.width) * zoomFactor;
   const viewport = page.getViewport({ scale: cssScale * dpr });
 
-  // Canvas in physischen Pixeln (groß, für HiDPI)
   canvas.width  = viewport.width;
   canvas.height = viewport.height;
-  // CSS-Anzeigegröße bleibt wie gehabt (normale Punktgröße)
   canvas.style.width   = (viewport.width  / dpr) + 'px';
   canvas.style.height  = (viewport.height / dpr) + 'px';
   canvas.style.display = 'block';
   document.getElementById('pdf-placeholder').style.display = 'none';
 
   await page.render({ canvasContext: ctx, viewport }).promise;
+  _updateZoomUI();
+}
+
+/* ── Zoom ── */
+function _updateZoomUI() {
+  const pct = Math.round(zoomFactor * 100);
+  const el = document.getElementById('zoom-level');
+  if (el) el.textContent = pct + '%';
+  const btnOut = document.getElementById('btn-zoom-out');
+  const btnIn  = document.getElementById('btn-zoom-in');
+  const btnFit = document.getElementById('btn-zoom-fit');
+  if (btnOut) btnOut.disabled = !pdfDocument || zoomFactor <= ZOOM_STEPS[0];
+  if (btnIn)  btnIn.disabled  = !pdfDocument || zoomFactor >= ZOOM_STEPS[ZOOM_STEPS.length - 1];
+  if (btnFit) btnFit.disabled = !pdfDocument;
+}
+
+function zoomIn() {
+  if (!pdfDocument) return;
+  const next = ZOOM_STEPS.find(z => z > zoomFactor + 0.01);
+  if (next) { zoomFactor = next; renderPage(currentPage); }
+}
+
+function zoomOut() {
+  if (!pdfDocument) return;
+  const prev = [...ZOOM_STEPS].reverse().find(z => z < zoomFactor - 0.01);
+  if (prev !== undefined) { zoomFactor = prev; renderPage(currentPage); }
+}
+
+function zoomReset() {
+  if (!pdfDocument) return;
+  zoomFactor = 1.0;
+  renderPage(currentPage);
 }
 
 function setupPdfNav() {
@@ -290,6 +321,26 @@ function setupPdfNav() {
   });
   document.getElementById('btn-next-page').addEventListener('click', async () => {
     if (currentPage < totalPages) { currentPage++; updatePageNav(); await renderPage(currentPage); }
+  });
+
+  // Zoom-Buttons
+  document.getElementById('btn-zoom-in') .addEventListener('click', zoomIn);
+  document.getElementById('btn-zoom-out').addEventListener('click', zoomOut);
+  document.getElementById('btn-zoom-fit').addEventListener('click', zoomReset);
+
+  // Ctrl+Scroll zum Zoomen im PDF-Panel
+  document.getElementById('pdf-canvas-wrapper').addEventListener('wheel', e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    e.deltaY < 0 ? zoomIn() : zoomOut();
+  }, { passive: false });
+
+  // Tastenkürzel: Strg+Plus / Strg+Minus / Strg+0
+  document.addEventListener('keydown', e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    if (e.key === '+' || e.key === '=' || e.key === 'Add') { e.preventDefault(); zoomIn(); }
+    else if (e.key === '-' || e.key === '_' || e.key === 'Subtract') { e.preventDefault(); zoomOut(); }
+    else if (e.key === '0') { e.preventDefault(); zoomReset(); }
   });
 }
 

@@ -272,6 +272,33 @@ body {
   gap: 8px;
 }
 
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pdf-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--gray-600);
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.pdf-zoom #zoom-level {
+  min-width: 36px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--gray-700);
+  user-select: none;
+}
+
 .pdf-nav {
   display: flex;
   align-items: center;
@@ -280,38 +307,44 @@ body {
   color: var(--gray-600);
 }
 
-.pdf-nav button {
+.pdf-nav button,
+.pdf-zoom button {
   width: 28px;
   height: 28px;
-  border: 1px solid var(--gray-300);
+  border: 1px solid transparent;
   border-radius: 4px;
-  background: #fff;
+  background: transparent;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition);
+  color: var(--gray-700);
 }
 
-.pdf-nav button:hover { background: var(--gray-100); border-color: var(--primary); }
-.pdf-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-zoom-fit { font-size: 13px !important; }
+
+.pdf-nav button:hover,
+.pdf-zoom button:hover { background: var(--gray-200); border-color: var(--gray-300); }
+
+.pdf-nav button:disabled,
+.pdf-zoom button:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .pdf-canvas-wrapper {
   background: var(--gray-200);
   min-height: 400px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 16px;
   overflow: auto;
   max-height: 70vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .pdf-canvas-wrapper canvas {
   box-shadow: var(--shadow-md);
-  max-width: 100%;
-  height: auto;
+  flex-shrink: 0;  /* nie kleiner schrumpfen als gerendert */
 }
 
 .pdf-placeholder {

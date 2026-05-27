@@ -79,10 +79,18 @@
     <div class="pdf-viewer-panel">
       <div class="panel-header">
         <h3>📄 PDF-Vorschau</h3>
-        <div class="pdf-nav">
-          <button id="btn-prev-page" disabled title="Vorherige Seite">‹</button>
-          <span id="page-info">–</span>
-          <button id="btn-next-page" disabled title="Nächste Seite">›</button>
+        <div class="pdf-toolbar">
+          <div class="pdf-zoom">
+            <button id="btn-zoom-out" disabled title="Verkleinern (Strg+−)">−</button>
+            <span id="zoom-level">100%</span>
+            <button id="btn-zoom-in"  disabled title="Vergrößern (Strg++)">+</button>
+            <button id="btn-zoom-fit" disabled title="Breite anpassen" class="btn-zoom-fit">⊞</button>
+          </div>
+          <div class="pdf-nav">
+            <button id="btn-prev-page" disabled title="Vorherige Seite">‹</button>
+            <span id="page-info">–</span>
+            <button id="btn-next-page" disabled title="Nächste Seite">›</button>
+          </div>
         </div>
       </div>
       <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
