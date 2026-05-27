@@ -262,13 +262,22 @@ async function renderPage(pageNum) {
   const canvas = document.getElementById('pdf-canvas');
   const ctx = canvas.getContext('2d');
 
+  // DPR: auf HiDPI-/Retina-Screens (DPR=2) doppelt so viele Pixel rendern
+  const dpr = Math.min(window.devicePixelRatio || 1, 3); // max 3× gegen Speicher-Overflow
   const viewportRaw = page.getViewport({ scale: 1 });
   const maxWidth = wrapper.clientWidth - 32;
-  const scale = Math.min(1.5, maxWidth / viewportRaw.width);
-  const viewport = page.getViewport({ scale });
 
-  canvas.width = viewport.width;
+  // CSS-Skalierung: PDF füllt das Panel (kein künstlicher Deckel mehr)
+  const cssScale = maxWidth / viewportRaw.width;
+  // Physische Pixel = CSS-Skala × DPR → scharfes Bild auf allen Screens
+  const viewport = page.getViewport({ scale: cssScale * dpr });
+
+  // Canvas in physischen Pixeln (groß, für HiDPI)
+  canvas.width  = viewport.width;
   canvas.height = viewport.height;
+  // CSS-Anzeigegröße bleibt wie gehabt (normale Punktgröße)
+  canvas.style.width   = (viewport.width  / dpr) + 'px';
+  canvas.style.height  = (viewport.height / dpr) + 'px';
   canvas.style.display = 'block';
   document.getElementById('pdf-placeholder').style.display = 'none';
 
