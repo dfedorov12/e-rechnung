@@ -130,8 +130,10 @@ async function spGetExports() {
 function _detectGesellschaft(verkaeufer) {
   const v = (verkaeufer || '').toLowerCase();
   if (v.includes('bösdorf') || v.includes('boesdorf') ||
-      v.includes('hartguss') || v.includes(' shb')) return 'SHB';
-  return 'WGC';
+      v.includes('hartguss') || v.includes(' shb'))  return 'SHB';
+  if (v.includes('coswig')  || v.includes('walzen')  ||
+      v.includes(' wgc'))                             return 'WGC';
+  return '';
 }
 
 /**

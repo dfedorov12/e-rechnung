@@ -244,8 +244,9 @@ function spRow(e) {
   const betrag = (e.grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmt    = e.format || 'XRechnung';
   const fmtCls = fmt.toLowerCase().includes('zugferd') ? 'zugferd' : 'xrechnung';
-  const ges    = (e.gesellschaft || 'WGC').toUpperCase();
+  const ges    = (e.gesellschaft || '').toUpperCase();
   const gesCls = ges === 'SHB' ? 'shb' : 'wgc';
+  const gesBadge = ges ? `<span class="format-tag ${gesCls}">${esc(ges)}</span>` : '–';
   const esc    = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   const xmlBtn = e.xmlUrl
@@ -261,7 +262,7 @@ function spRow(e) {
       <td class="invoice-nr">${esc(e.rechnungsnummer)}</td>
       <td>${esc(e.verkaeufer)}</td>
       <td>${esc(e.kaeufer)}</td>
-      <td><span class="format-tag ${gesCls}">${esc(ges)}</span></td>
+      <td>${gesBadge}</td>
       <td><span class="format-tag ${fmtCls}">${esc(fmt)}</span></td>
       <td class="amount-cell">${betrag} €</td>
       <td><div class="actions-cell">${xmlBtn}${pdfBtn}</div></td>
