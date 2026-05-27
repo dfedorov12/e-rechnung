@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Verlauf | E-Rechnung Konverter | DIHAG</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="auth-guard">
@@ -244,10 +245,10 @@ function spRow(e) {
   const betrag = (e.grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmt    = e.format || 'XRechnung';
   const fmtCls = fmt.toLowerCase().includes('zugferd') ? 'zugferd' : 'xrechnung';
+  const esc    = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const ges    = (e.gesellschaft || '').toUpperCase();
   const gesCls = ges === 'SHB' ? 'shb' : 'wgc';
   const gesBadge = ges ? `<span class="format-tag ${gesCls}">${esc(ges)}</span>` : '–';
-  const esc    = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   const xmlBtn = e.xmlUrl
     ? `<a href="${esc(e.xmlUrl)}" target="_blank" class="btn btn-secondary btn-sm" title="XML in SharePoint öffnen">📄 XML</a>`

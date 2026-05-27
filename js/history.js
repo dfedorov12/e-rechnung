@@ -51,11 +51,13 @@ function renderVerlauf() {
         <h3>Noch kein Verlauf</h3>
         <p>Exportierte Rechnungen erscheinen hier automatisch.</p>
       </div>`;
-    document.getElementById('btn-clear-all').style.display = 'none';
+    const btnClear = document.getElementById('btn-clear-all');
+    if (btnClear) btnClear.style.display = 'none';
     return;
   }
 
-  document.getElementById('btn-clear-all').style.display = 'flex';
+  const btnClearAll = document.getElementById('btn-clear-all');
+  if (btnClearAll) btnClearAll.style.display = 'flex';
 
   container.innerHTML = `
     <div class="verlauf-table-wrapper">
