@@ -97,22 +97,41 @@ async function spGetExports() {
     token
   );
 
-  return (resp.value || []).map(item => ({
-    id:             item.id,
-    createdAt:      item.createdDateTime,
-    rechnungsnummer: item.fields.Title               || '',
-    rechnungsdatum:  item.fields.Rechnungsdatum      || '',
-    verkaeufer:      item.fields.Rechnungssteller    || '',
-    kaeufer:         item.fields.Rechnungsempfaenger || '',
-    netTotal:        item.fields.Nettobetrag         || 0,
-    vatTotal:        item.fields.MwStBetrag          || 0,
-    grossTotal:      item.fields.Bruttobetrag        || 0,
-    format:          item.fields.Format              || 'XRechnung',
-    gesellschaft:    item.fields.Gesellschaft        || 'WGC',
-    xmlUrl:          item.fields.XMLDateiUrl         || '',
-    pdfUrl:          item.fields.ZUGFeRDPdfUrl       || '',
-    originalPdf:     item.fields.OriginalPdfName     || '',
-  }));
+  return (resp.value || []).map(item => {
+    const verkaeufer = item.fields.Rechnungssteller || '';
+    // Gesellschaft: gespeicherter Wert hat Vorrang; bei fehlenden Alteinträgen
+    // wird die Gesellschaft aus dem Ausstellernamen erkannt.
+    const gesellschaft = item.fields.Gesellschaft || _detectGesellschaft(verkaeufer);
+    return {
+      id:              item.id,
+      createdAt:       item.createdDateTime,
+      rechnungsnummer: item.fields.Title               || '',
+      rechnungsdatum:  item.fields.Rechnungsdatum      || '',
+      verkaeufer,
+      kaeufer:         item.fields.Rechnungsempfaenger || '',
+      netTotal:        item.fields.Nettobetrag         || 0,
+      vatTotal:        item.fields.MwStBetrag          || 0,
+      grossTotal:      item.fields.Bruttobetrag        || 0,
+      format:          item.fields.Format              || 'XRechnung',
+      gesellschaft,
+      xmlUrl:          item.fields.XMLDateiUrl         || '',
+      pdfUrl:          item.fields.ZUGFeRDPdfUrl       || '',
+      originalPdf:     item.fields.OriginalPdfName     || '',
+    };
+  });
+}
+
+/**
+ * Gesellschaft aus dem Ausstellernamen ableiten (Fallback für Alteinträge).
+ * WGC  → enthält "Coswig" oder "walzen" oder "WGC"
+ * SHB  → enthält "Bösdorf", "Boesdorf", "Hartguss" oder "SHB"
+ * Default: WGC
+ */
+function _detectGesellschaft(verkaeufer) {
+  const v = (verkaeufer || '').toLowerCase();
+  if (v.includes('bösdorf') || v.includes('boesdorf') ||
+      v.includes('hartguss') || v.includes(' shb')) return 'SHB';
+  return 'WGC';
 }
 
 /**
