@@ -43,8 +43,9 @@ const _COMPANY_REGISTRY = {
     verkaeuferemail:    'giesserei@shb-guss.de',
     verkaeufervat:      'DE812264517',
     verkaeufersteuernr: '232/118/07369',
-    iban:               'DE07820700000338669500',
-    bic:                '',
+    // Zahlungskonto laut Rechnungsfuß ("Wir erbitten die Zahlungen … IBAN: DE 77 … 01")
+    iban:               'DE77820700000338669501',
+    bic:                'DEUTDE8EXXX',
     // detect: E-Mail-Domain, Firmenname oder „Bösdorf" im PDF
     _detect: /shb-guss|bösdorf|b.sdorf|stahl-?\s*und\s*hartguss|shb\s+stahl/i,
   },
@@ -66,7 +67,7 @@ function _detectCompany(fullText) {
 }
 
 async function extractInvoiceData(pdfDoc) {
-  const { fullText, leftText, leftColumnText, rightText, footerText } =
+  const { fullText, leftText, leftColumnText, rightText, footerText, buyerBlock } =
     await _extractTextSections(pdfDoc);
 
   let result;
@@ -86,6 +87,14 @@ async function extractInvoiceData(pdfDoc) {
       ...extractSeller(footerText, fullText),
       ...extractBuyerWGCGerman(leftColumnText, leftText, fullText),
       positionen: extractLineItemsGermanWGC(fullText),
+    };
+  // SHB-Rechnung (Bezeichnung/Preis/Nettowert-Format)
+  } else if (_isGermanSHBInvoice(fullText)) {
+    result = {
+      ...extractMetadataGermanSHB(fullText),
+      ...extractSeller(footerText, fullText),
+      ...extractBuyerGermanSHB(buyerBlock, fullText),
+      positionen: extractLineItemsGermanSHB(fullText),
     };
   } else {
     result = {
@@ -115,6 +124,12 @@ function _isEnglishIndustrialInvoice(text) {
 function _isGermanWGCInvoice(text) {
   return /Pos\s+Artikel\s+Menge\s+Einzelpreis/i.test(text) &&
          /walze-coswig|walzengi/i.test(text);
+}
+
+function _isGermanSHBInvoice(text) {
+  return /Rechnungs-Nr\.\s*:/i.test(text) &&
+         /Nettowert\s*:/i.test(text) &&
+         /(shb-guss|bösdorf|b.sdorf|Hartgusswerk)/i.test(text);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -249,6 +264,149 @@ function extractLineItemsGermanWGC(fullText) {
 }
 
 /* ══════════════════════════════════════════════════════
+   SHB-RECHNUNG (Stahl- und Hartgusswerk Bösdorf GmbH)
+   Format: Bezeichnung / Preis €/ME Gesamt / Nettowert
+══════════════════════════════════════════════════════ */
+
+function extractMetadataGermanSHB(fullText) {
+  const r = {};
+
+  // Rechnungsnummer: "Rechnungs-Nr. : 2600290"
+  const nrM = fullText.match(/Rechnungs-Nr\.\s*:\s*(\d{4,12})/i);
+  if (nrM) r.rechnungsnummer = nrM[1];
+
+  // Rechnungsdatum: "Re.-Datum : 08.05.2026"
+  const datM = fullText.match(/Re\.-Datum\s*:\s*(\d{2}\.\d{2}\.\d{4})/i);
+  if (datM) r.rechnungsdatum = _deDate(datM[1]);
+
+  // Leistungs-/Lieferdatum: "Leistungs-Dat. : 08.05.2026"
+  const leistM = fullText.match(/Leistungs-Dat\.\s*:\s*(\d{2}\.\d{2}\.\d{4})/i);
+  if (leistM) r.lieferdatum = _deDate(leistM[1]);
+
+  // Fälligkeit: "Zahlungseingang : Bis zum 07.07.2026 netto"
+  const faellM = fullText.match(/Zahlungseingang\s*:\s*Bis\s+zum\s+(\d{2}\.\d{2}\.\d{4})/i);
+  if (faellM) r.faelligkeitsdatum = _deDate(faellM[1]);
+
+  return r;
+}
+
+/**
+ * Käufer aus dem SHB-Adressfenster (Seite 1, links oben).
+ * Block-Aufbau: [Name (1-2 Zeilen)] [Abteilung] [Straße/Postfach] [D-PLZ Ort]
+ */
+function extractBuyerGermanSHB(buyerBlock, fullText) {
+  const r = { kaeuferland: 'DE' };
+
+  const lines = (buyerBlock || '')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    // SHB-Absenderzeile entfernen ("...Hartgusswerk Bösdorf GmbH - Werkstr. 7...")
+    .filter(l => !/Hartgusswerk\s+B.sdorf|Werkstr\.\s*7/i.test(l))
+    .slice(0, 8);
+
+  if (lines.length === 0) return r;
+
+  // PLZ/Ort: "D-16748 Hennigsdorf"  (Länderpräfix D-, dann PLZ, dann Ort)
+  const plzIdx = lines.findIndex(l => /^[A-Z]{0,2}-?\d{4,5}\s+\S/.test(l));
+  if (plzIdx >= 0) {
+    const plzM = lines[plzIdx].match(/^([A-Z]{0,2})-?(\d{4,5})\s+(.+)$/);
+    if (plzM) {
+      r.kaeuferland  = (!plzM[1] || plzM[1] === 'D') ? 'DE' : plzM[1];
+      r.kaeuferplz   = plzM[2];
+      r.kaeuferstadt = plzM[3].trim();
+    }
+    // Straße = Zeile direkt vor der PLZ-Zeile
+    if (plzIdx >= 1) r.kaeuferstrasse = lines[plzIdx - 1];
+  }
+
+  // Name = erste Zeile; fehlt die Rechtsform, zweite (ziffernlose) Zeile anhängen
+  // (z.B. "KOMATSU" + "Germany GmbH")
+  const legalForm = /\b(GmbH|AG|KG|SE|mbH|e\.K\.|OHG|Co\b|S\.p\.A\.)/i;
+  let name = lines[0];
+  if (!legalForm.test(name) && lines.length > 1 && legalForm.test(lines[1]) && !/\d/.test(lines[1])) {
+    name = `${name} ${lines[1]}`;
+  }
+  r.kaeufer = name;
+
+  return r;
+}
+
+/**
+ * Positionen für SHB-Rechnungen.
+ *   0001 ...
+ *   Bezeichnung : <Text> <Menge> <Einheit>
+ *   Preis | Modelleinrichtung : <Einzel> €/<Einheit> <Gesamt> €
+ *   MTZ | ETZ : <Einzel> €/kg <Gesamt> €   (Zuschläge → eigene Position)
+ * Einzelpreis wird als Gesamt/Menge gesetzt → Summe bleibt exakt.
+ */
+function extractLineItemsGermanSHB(fullText) {
+  const items = [];
+  const lines = fullText.split('\n');
+
+  const mwstM   = fullText.match(/MwSt\s*:\s*(\d{1,2})(?:,\d+)?\s*%/i);
+  const mwstDoc = mwstM ? parseFloat(mwstM[1]) : 19;
+
+  // Preiszeile:  LABEL : EINZEL €/EINHEIT  GESAMT €
+  const priceRe = /^(Preis|Modelleinrichtung|MTZ|ETZ)\s*:\s*(-?[\d.]+,\d{2})\s*€\s*\/\s*([A-Za-zäöüÄÖÜ.]+)\s+(-?[\d.]+,\d{2})\s*€/i;
+  // Bezeichnung mit nachgestellter Menge+Einheit
+  const bezRe   = /^Bezeichnung\s*:\s*(.+?)\s+(\d+(?:,\d+)?)\s+(Stk|St[üu]ck|St|Anz|Pos\.?|kg|t)\s*$/i;
+
+  let desc = null, menge = 1, einheit = 'Stk', posNr = null;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // Ende des Positionsbereichs
+    if (/^Nettowert\s*:/i.test(line)) break;
+
+    // Positionsnummer "0001 ..."
+    const posM = line.match(/^(0\d{3})\b/);
+    if (posM) posNr = posM[1];
+
+    // Bezeichnung
+    const bezM = line.match(bezRe);
+    if (bezM) {
+      desc    = bezM[1].trim();
+      menge   = _parseDE(bezM[2]) || 1;
+      einheit = bezM[3];
+      continue;
+    }
+    // Bezeichnung ohne erkennbare Menge/Einheit
+    const bezPlain = line.match(/^Bezeichnung\s*:\s*(.+)$/i);
+    if (bezPlain) { desc = bezPlain[1].trim(); menge = 1; einheit = 'Stk'; continue; }
+
+    // Preiszeile
+    const pM = line.match(priceRe);
+    if (pM) {
+      const label  = pM[1];
+      const gesamt = _parseDE(pM[4]);
+
+      if (/^(MTZ|ETZ)$/i.test(label)) {
+        // Teuerungszuschlag → eigene Position
+        const name = /MTZ/i.test(label)
+          ? 'MTZ – Materialteuerungszuschlag'
+          : 'ETZ – Energieteuerungszuschlag';
+        items.push({ beschreibung: name, menge: 1, einheit: 'Pausch.', einzelpreis: gesamt, mwst: mwstDoc });
+      } else {
+        // Hauptposition (Preis / Modelleinrichtung)
+        const m = menge > 0 ? menge : 1;
+        items.push({
+          beschreibung: `${posNr ? posNr + ' – ' : ''}${desc || label}`,
+          menge:        m,
+          einheit:      _unitCode(einheit),
+          einzelpreis:  gesamt / m,   // Gesamt/Menge → Summe bleibt exakt
+          mwst:         mwstDoc,
+        });
+      }
+    }
+  }
+
+  return _validateAndFallback(items, _extractNetTotalGermanSHB(fullText), mwstDoc);
+}
+
+/* ══════════════════════════════════════════════════════
    Text Extraction
 ══════════════════════════════════════════════════════ */
 async function _extractTextSections(pdfDoc) {
@@ -320,7 +478,11 @@ async function _extractTextSections(pdfDoc) {
   const footerByEnd = fullText.split('\n').slice(-15).join('\n');
   const footerText  = footerByY + '\n' + footerByEnd;
 
-  return { fullText, leftText, leftColumnText, rightText, footerText };
+  // Käufer-Adressfenster: Seite 1, linke Spalte, oberes Drittel (y > ph*0.68).
+  // Isoliert den Empfänger-Adressblock von der rechts stehenden Metadaten-Spalte.
+  const buyerBlock  = toLines(allItems.filter(i => i.page === 1 && i.x < i.pw * 0.48 && i.y > i.ph * 0.68));
+
+  return { fullText, leftText, leftColumnText, rightText, footerText, buyerBlock };
 }
 
 /* ══════════════════════════════════════════════════════
@@ -804,6 +966,15 @@ function _extractNetTotalGermanWGC(fullText) {
 
   // Nettobetrag zurückrechnen
   return mwst > 0 ? endsumme / (1 + mwst / 100) : endsumme;
+}
+
+/**
+ * Liefert den Netto-Erwartungswert für SHB-Rechnungen.
+ * "Nettowert : 59.000,00 €" ist der ausgewiesene Nettobetrag.
+ */
+function _extractNetTotalGermanSHB(fullText) {
+  const m = [...fullText.matchAll(/Nettowert\s*:\s*([\d.]+,\d{2})/gi)];
+  return m.length ? _parseDE(m[m.length - 1][1]) : null;
 }
 
 /**
