@@ -10,7 +10,9 @@
 
 const OCR = {
   lang:  'deu',
-  scale: 2.5,   // Render-Auflösung (höher = genauer, aber langsamer)
+  // ~200 dpi: verifizierte Auflösung für vollständige Positions- und
+  // Datumserkennung. Niedriger (144/180 dpi) verliert Datum bzw. Zuschlagszeilen.
+  scale: 2.78,
   // Absolute URLs (vom Worker-Kontext aus korrekt auflösbar)
   base:  new URL('js/vendor/tesseract/', document.baseURI).href,
 };
