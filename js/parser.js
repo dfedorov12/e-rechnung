@@ -66,9 +66,24 @@ function _detectCompany(fullText) {
   return null;
 }
 
+/**
+ * Bequemer Einstieg: sammelt Text-Items aus dem PDF (PDF.js-Textebene)
+ * und extrahiert daraus die Rechnungsdaten.
+ */
 async function extractInvoiceData(pdfDoc) {
+  const items = await collectPdfItems(pdfDoc);
+  return extractInvoiceDataFromItems(items);
+}
+
+/**
+ * Extrahiert Rechnungsdaten aus einer Liste von Text-Items.
+ * Items stammen entweder aus der PDF-Textebene (collectPdfItems)
+ * oder aus der OCR-Texterkennung (ocr.js → ocrCollectItems).
+ * Item-Form: { text, x, y, pw, ph, w, page }
+ */
+function extractInvoiceDataFromItems(allItems) {
   const { fullText, leftText, leftColumnText, rightText, footerText, buyerBlock } =
-    await _extractTextSections(pdfDoc);
+    _buildSections(allItems);
 
   let result;
 
@@ -336,8 +351,10 @@ function extractBuyerGermanSHB(buyerBlock, fullText) {
  * Positionen für SHB-Rechnungen.
  *   0001 ...
  *   Bezeichnung : <Text> <Menge> <Einheit>
- *   Preis | Modelleinrichtung : <Einzel> €/<Einheit> <Gesamt> €
- *   MTZ | ETZ : <Einzel> €/kg <Gesamt> €   (Zuschläge → eigene Position)
+ *   Preis [...] : <Einzel> €/<Einheit> <Gesamt> €     (Hauptposition)
+ *   Modelleinrichtung : <Einzel> €/Pos. <Gesamt> €    (Hauptposition)
+ *   MTZ | ETZ : <Einzel> €/kg <Gesamt> €              (Zuschlag → eigene Position)
+ * Auch kombinierte Zeilen ("Preis inkl. ETZ/MTZ nach VB 2.045,69 €/Stk 20.456,90 €").
  * Einzelpreis wird als Gesamt/Menge gesetzt → Summe bleibt exakt.
  */
 function extractLineItemsGermanSHB(fullText) {
@@ -347,8 +364,9 @@ function extractLineItemsGermanSHB(fullText) {
   const mwstM   = fullText.match(/MwSt\s*:\s*(\d{1,2})(?:,\d+)?\s*%/i);
   const mwstDoc = mwstM ? parseFloat(mwstM[1]) : 19;
 
-  // Preiszeile:  LABEL : EINZEL €/EINHEIT  GESAMT €
-  const priceRe = /^(Preis|Modelleinrichtung|MTZ|ETZ)\s*:\s*(-?[\d.]+,\d{2})\s*€\s*\/\s*([A-Za-zäöüÄÖÜ.]+)\s+(-?[\d.]+,\d{2})\s*€/i;
+  // Preiszeile generisch:  LABEL  EINZEL €/EINHEIT  GESAMT €
+  // (LABEL beliebig, mit/ohne Doppelpunkt — toleriert "Preis inkl. ETZ/MTZ nach VB")
+  const priceRe = /^(.+?)\s*:?\s*(-?[\d.]+,\d{2})\s*€\s*\/\s*([A-Za-zäöüÄÖÜ.]+)\s+(-?[\d.]+,\d{2})\s*€\s*$/i;
   // Bezeichnung mit nachgestellter Menge+Einheit
   const bezRe   = /^Bezeichnung\s*:\s*(.+?)\s+(\d+(?:,\d+)?)\s+(Stk|St[üu]ck|St|Anz|Pos\.?|kg|t)\s*$/i;
 
@@ -380,17 +398,18 @@ function extractLineItemsGermanSHB(fullText) {
     // Preiszeile
     const pM = line.match(priceRe);
     if (pM) {
-      const label  = pM[1];
+      const label  = pM[1].trim();
       const gesamt = _parseDE(pM[4]);
 
-      if (/^(MTZ|ETZ)$/i.test(label)) {
-        // Teuerungszuschlag → eigene Position
-        const name = /MTZ/i.test(label)
+      // Zuschlag nur wenn das Label MIT MTZ/ETZ BEGINNT (eigenständige Zeile).
+      // "Preis inkl. ETZ/MTZ …" beginnt mit "Preis" → Hauptposition.
+      if (/^MTZ\b/i.test(label) || /^ETZ\b/i.test(label)) {
+        const name = /^MTZ/i.test(label)
           ? 'MTZ – Materialteuerungszuschlag'
           : 'ETZ – Energieteuerungszuschlag';
         items.push({ beschreibung: name, menge: 1, einheit: 'Pausch.', einzelpreis: gesamt, mwst: mwstDoc });
       } else {
-        // Hauptposition (Preis / Modelleinrichtung)
+        // Hauptposition (Preis / Modelleinrichtung / Preis inkl. …)
         const m = menge > 0 ? menge : 1;
         items.push({
           beschreibung: `${posNr ? posNr + ' – ' : ''}${desc || label}`,
@@ -409,7 +428,13 @@ function extractLineItemsGermanSHB(fullText) {
 /* ══════════════════════════════════════════════════════
    Text Extraction
 ══════════════════════════════════════════════════════ */
-async function _extractTextSections(pdfDoc) {
+
+/**
+ * Sammelt Text-Items aus der PDF.js-Textebene.
+ * Item-Form: { text, x, y, pw, ph, w, page }.
+ * Koordinaten in PDF-Punkten, y von unten (PDF-Konvention).
+ */
+async function collectPdfItems(pdfDoc) {
   const allItems = [];
 
   for (let p = 1; p <= pdfDoc.numPages; p++) {
@@ -432,38 +457,48 @@ async function _extractTextSections(pdfDoc) {
     }
   }
 
-  /**
-   * Cluster items into visual lines (±4 pt) and return newline-joined string.
-   *
-   * WICHTIG: Jede Seite hat einen eigenen Cluster-Namespace.
-   * Ohne diese Trennung würden Items von Seite 2 (gleicher y-Bereich wie Seite 1)
-   * zwischen Items von Seite 1 einsortiert und die Zeilenreihenfolge zerstören.
-   *
-   * Sortierung: Seite aufsteigend → innerhalb Seite y absteigend (oben zuerst)
-   *             → innerhalb Zeile x aufsteigend (links zuerst).
-   * Gap-Joining: gap < 2 pt → kein Leerzeichen
-   *   (behebt "Me uselwitz" → "Meuselwitz", "D-0 4610" → "D-04610").
-   */
-  function toLines(items) {
-    const rows = new Map();
-    for (const it of items) {
-      const key = `${it.page || 0}|${Math.round(it.y / 4) * 4}`;
-      if (!rows.has(key)) rows.set(key, { page: it.page || 0, y: it.y, ls: [] });
-      rows.get(key).ls.push(it);
-    }
-    return [...rows.values()]
-      .sort((a, b) => a.page - b.page || b.y - a.y)
-      .map(({ ls }) => {
-        const sorted = ls.sort((a, b) => a.x - b.x);
-        return sorted.reduce((acc, it, i) => {
-          if (i === 0) return it.text;
-          const prev = sorted[i - 1];
-          const gap  = it.x - (prev.x + (prev.w || 0));
-          return acc + (gap < 2 ? '' : ' ') + it.text;
-        }, '');
-      })
-      .join('\n');
+  return allItems;
+}
+
+/**
+ * Cluster items into visual lines (±4 pt) and return newline-joined string.
+ *
+ * WICHTIG: Jede Seite hat einen eigenen Cluster-Namespace.
+ * Ohne diese Trennung würden Items von Seite 2 (gleicher y-Bereich wie Seite 1)
+ * zwischen Items von Seite 1 einsortiert und die Zeilenreihenfolge zerstören.
+ *
+ * Sortierung: Seite aufsteigend → innerhalb Seite y absteigend (oben zuerst)
+ *             → innerhalb Zeile x aufsteigend (links zuerst).
+ * Gap-Joining: gap < 2 pt → kein Leerzeichen
+ *   (behebt "Me uselwitz" → "Meuselwitz", "D-0 4610" → "D-04610").
+ */
+function _toLines(items) {
+  const rows = new Map();
+  for (const it of items) {
+    const key = `${it.page || 0}|${Math.round(it.y / 4) * 4}`;
+    if (!rows.has(key)) rows.set(key, { page: it.page || 0, y: it.y, ls: [] });
+    rows.get(key).ls.push(it);
   }
+  return [...rows.values()]
+    .sort((a, b) => a.page - b.page || b.y - a.y)
+    .map(({ ls }) => {
+      const sorted = ls.sort((a, b) => a.x - b.x);
+      return sorted.reduce((acc, it, i) => {
+        if (i === 0) return it.text;
+        const prev = sorted[i - 1];
+        const gap  = it.x - (prev.x + (prev.w || 0));
+        return acc + (gap < 2 ? '' : ' ') + it.text;
+      }, '');
+    })
+    .join('\n');
+}
+
+/**
+ * Baut aus Text-Items die Abschnitts-Strings, auf denen die Extraktoren arbeiten.
+ * Identisch für PDF.js-Items und OCR-Items (gleiche Item-Form).
+ */
+function _buildSections(allItems) {
+  const toLines = _toLines;
 
   const fullText       = toLines(allItems);
   const leftColumnText = toLines(allItems.filter(i => i.x < i.pw * 0.48));
@@ -997,10 +1032,11 @@ function _extractNetTotalEnglish(fullText) {
  * @param {number} mwstDoc        - MwSt-Satz für die Sammelposition
  */
 function _validateAndFallback(items, netExpected, mwstDoc) {
-  if (netExpected === null || items.length === 0) return items;
+  if (netExpected === null) return items;
 
   const netExtracted = items.reduce((s, it) => s + it.einzelpreis * it.menge, 0);
-  if (Math.abs(netExtracted - netExpected) <= 1.0) return items;
+  // Positionen vorhanden und Summe passt → unverändert übernehmen
+  if (items.length > 0 && Math.abs(netExtracted - netExpected) <= 1.0) return items;
 
   // Differenz zu groß → Sammelposition mit korrektem Betrag
   console.warn(

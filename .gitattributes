@@ -1,0 +1,4 @@
+# Vendored Tesseract-Dateien unverändert lassen (keine EOL-Konvertierung)
+js/vendor/tesseract/** binary
+js/vendor/tesseract/*.js -text
+js/vendor/tesseract/lang/* binary

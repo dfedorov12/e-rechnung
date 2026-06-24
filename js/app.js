@@ -153,12 +153,36 @@ async function autoFillFromPDF() {
   if (!pdfDocument) return;
   showLoading(true, 'Rechnungsdaten werden erkannt...');
   try {
-    const data  = await extractInvoiceData(pdfDocument);
+    // 1) Text aus der PDF-Textebene sammeln
+    let items   = await collectPdfItems(pdfDocument);
+    const txtLen = items.reduce((n, it) => n + it.text.trim().length, 0);
+    let viaOcr  = false;
+
+    // 2) Kaum Text vorhanden → gescanntes PDF → OCR-Texterkennung
+    if (txtLen < 40) {
+      if (typeof ocrCollectItems !== 'function') {
+        showLoading(false);
+        showToast('Gescanntes PDF erkannt — Texterkennung nicht verfügbar. Bitte Felder manuell ausfüllen.', 'info');
+        return;
+      }
+      showLoading(true, 'Gescanntes PDF — Texterkennung (OCR) läuft…');
+      items = await ocrCollectItems(pdfDocument, prog => {
+        const pct = prog.status === 'recognizing' ? ` ${Math.round(prog.progress * 100)} %` : '';
+        showLoading(true, `Texterkennung (OCR) – Seite ${prog.page}/${prog.total}${pct}`);
+      });
+      viaOcr = true;
+    }
+
+    // 3) Aus den Items (PDF oder OCR) Rechnungsdaten extrahieren
+    const data  = extractInvoiceDataFromItems(items);
     const count = fillFormFromExtracted(data);
     showLoading(false);
     if (count > 0) {
       showAutofillBanner(count);
-      showToast(`${count} Felder automatisch erkannt. Bitte prüfen und ergänzen.`, 'success');
+      showToast(
+        `${count} Felder automatisch erkannt${viaOcr ? ' (per OCR)' : ''}. Bitte prüfen und ergänzen.`,
+        'success'
+      );
     } else {
       showToast('Keine Daten automatisch erkannt — bitte manuell ausfüllen.', 'info');
     }
