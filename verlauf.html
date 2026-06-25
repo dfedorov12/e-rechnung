@@ -34,6 +34,11 @@
       <p id="verlauf-subtitle">Rechnungen aus SharePoint werden geladen…</p>
     </div>
     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <div class="verlauf-search" id="verlauf-search-box" style="display:none;">
+        <span class="verlauf-search-icon">🔍</span>
+        <input type="text" id="verlauf-search" placeholder="Suchen (Nr., Aussteller, Empfänger…)" autocomplete="off">
+        <button type="button" id="verlauf-search-clear" class="verlauf-search-clear" title="Suche zurücksetzen" style="display:none;">✕</button>
+      </div>
       <a href="index.html" class="btn btn-primary">+ Neue Rechnung</a>
       <button class="btn btn-secondary" id="btn-refresh" type="button" style="display:none;">🔄 Aktualisieren</button>
     </div>
@@ -75,8 +80,11 @@
 
 <script>
 /* ── Zustand ── */
-let _allItems   = [];   // alle geladenen SP-Einträge
-let _activeTab  = null; // 'WGC' | 'SHB' | null (= alle)
+let _allItems   = [];      // alle geladenen SP-Einträge
+let _activeTab  = null;    // 'WGC' | 'SHB' | null (= alle)
+let _searchTerm = '';      // Freitext-Filter
+let _sortKey    = 'date';  // 'date' | 'nr' | 'verkaeufer' | 'kaeufer' | 'betrag'
+let _sortDir    = 'desc';  // 'asc' | 'desc'
 
 /* ── Verlauf laden & rendern ── */
 async function loadVerlauf(access) {
@@ -88,11 +96,11 @@ async function loadVerlauf(access) {
 
     // Tabs aufbauen (nur wenn Zugriff auf mehrere Gesellschaften)
     buildTabs(access);
-    applyTabFilter();
+    applyFilters();
 
-    document.getElementById('btn-refresh').style.display   = 'flex';
-    document.getElementById('verlauf-subtitle').textContent =
-      `${items.length} Einträge aus SharePoint · Liste: IT/ERechnung`;
+    document.getElementById('btn-refresh').style.display     = 'flex';
+    document.getElementById('verlauf-search-box').style.display = 'flex';
+    setupSearch();
   } catch (err) {
     showLoading(false);
     showSPError(err);
@@ -155,15 +163,86 @@ function setTab(tab, tabsEl) {
   tabsEl.querySelectorAll('.verlauf-tab-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
-  applyTabFilter();
+  applyFilters();
 }
 
-/* ── Gefilterte Anzeige ── */
-function applyTabFilter() {
-  const visible = _activeTab
-    ? _allItems.filter(e => (e.gesellschaft || 'WGC').toUpperCase() === _activeTab)
-    : _allItems;
-  renderSP(visible);
+/* ── Suche verdrahten ── */
+function setupSearch() {
+  const input = document.getElementById('verlauf-search');
+  const clear = document.getElementById('verlauf-search-clear');
+  if (!input || input.dataset.bound) return;
+  input.dataset.bound = '1';
+  input.addEventListener('input', () => {
+    _searchTerm = input.value.trim().toLowerCase();
+    clear.style.display = _searchTerm ? 'flex' : 'none';
+    applyFilters();
+  });
+  clear.addEventListener('click', () => {
+    input.value = '';
+    _searchTerm = '';
+    clear.style.display = 'none';
+    applyFilters();
+    input.focus();
+  });
+}
+
+/* ── Sortierung umschalten (Spaltenklick) ── */
+function setSort(key) {
+  if (_sortKey === key) {
+    _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _sortKey = key;
+    _sortDir = key === 'date' || key === 'betrag' ? 'desc' : 'asc';
+  }
+  applyFilters();
+}
+
+/* ── Filter + Sortierung + Anzeige ── */
+function applyFilters() {
+  let rows = _allItems.slice();
+
+  // 1) Gesellschaft (Tab)
+  if (_activeTab) {
+    rows = rows.filter(e => (e.gesellschaft || 'WGC').toUpperCase() === _activeTab);
+  }
+
+  // 2) Freitextsuche über mehrere Felder
+  if (_searchTerm) {
+    rows = rows.filter(e => [
+      e.rechnungsnummer, e.verkaeufer, e.kaeufer, e.gesellschaft, e.format,
+      (e.grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 }),
+    ].join(' ').toLowerCase().includes(_searchTerm));
+  }
+
+  // 3) Sortierung
+  rows.sort(_compareRows);
+
+  // 4) Untertitel mit Trefferzahl
+  const sub = document.getElementById('verlauf-subtitle');
+  if (sub) {
+    sub.textContent = (_searchTerm || _activeTab)
+      ? `${rows.length} von ${_allItems.length} Einträgen · Liste: IT/ERechnung`
+      : `${_allItems.length} Einträge aus SharePoint · Liste: IT/ERechnung`;
+  }
+
+  renderSP(rows);
+}
+
+/* Vergleichsfunktion gemäß _sortKey / _sortDir */
+function _compareRows(a, b) {
+  const dir = _sortDir === 'asc' ? 1 : -1;
+  let va, vb;
+  switch (_sortKey) {
+    case 'nr':         va = a.rechnungsnummer || ''; vb = b.rechnungsnummer || ''; return va.localeCompare(vb, 'de', { numeric: true }) * dir;
+    case 'verkaeufer': va = a.verkaeufer || '';      vb = b.verkaeufer || '';      return va.localeCompare(vb, 'de') * dir;
+    case 'kaeufer':    va = a.kaeufer || '';          vb = b.kaeufer || '';          return va.localeCompare(vb, 'de') * dir;
+    case 'betrag':     return ((a.grossTotal || 0) - (b.grossTotal || 0)) * dir;
+    case 'date':
+    default:
+      va = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      vb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return (va - vb) * dir;
+  }
 }
 
 function showLoading(on) {
@@ -189,14 +268,22 @@ function renderSP(items) {
   container.innerHTML = '';
 
   if (!items.length) {
-    container.innerHTML = `
-      <div class="verlauf-empty">
-        <span class="ve-icon">📂</span>
-        <h3>Noch keine Einträge</h3>
-        <p>Exportierte Rechnungen erscheinen hier automatisch.</p>
-      </div>`;
+    const filtered = _searchTerm || _activeTab;
+    container.innerHTML = filtered
+      ? `<div class="verlauf-empty">
+           <span class="ve-icon">🔍</span>
+           <h3>Keine Treffer</h3>
+           <p>Für die aktuelle Filterung gibt es keine Einträge.</p>
+         </div>`
+      : `<div class="verlauf-empty">
+           <span class="ve-icon">📂</span>
+           <h3>Noch keine Einträge</h3>
+           <p>Exportierte Rechnungen erscheinen hier automatisch.</p>
+         </div>`;
     return;
   }
+
+  const arrow = key => _sortKey === key ? `<span class="sort-arrow">${_sortDir === 'asc' ? '▲' : '▼'}</span>` : '';
 
   const table = document.createElement('div');
   table.className = 'verlauf-table-wrapper';
@@ -204,13 +291,13 @@ function renderSP(items) {
     <table class="verlauf-table">
       <thead>
         <tr>
-          <th>Datum</th>
-          <th>Rechnungs-Nr.</th>
-          <th>Aussteller</th>
-          <th>Empfänger</th>
+          <th class="sortable" data-sort="date">Datum${arrow('date')}</th>
+          <th class="sortable" data-sort="nr">Rechnungs-Nr.${arrow('nr')}</th>
+          <th class="sortable" data-sort="verkaeufer">Aussteller${arrow('verkaeufer')}</th>
+          <th class="sortable" data-sort="kaeufer">Empfänger${arrow('kaeufer')}</th>
           <th>Gesellschaft</th>
           <th>Format</th>
-          <th class="text-right">Betrag</th>
+          <th class="text-right sortable" data-sort="betrag">Betrag${arrow('betrag')}</th>
           <th>Dateien</th>
           <th></th>
         </tr>
@@ -221,6 +308,11 @@ function renderSP(items) {
     </table>`;
   container.appendChild(table);
 
+  // Sortierbare Spaltenköpfe verdrahten
+  table.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => setSort(th.dataset.sort));
+  });
+
   // Delete-Buttons verdrahten
   container.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -229,6 +321,7 @@ function renderSP(items) {
       btn.disabled = true;
       try {
         await spDeleteItem(btn.dataset.del);
+        _allItems = _allItems.filter(e => String(e.id) !== String(btn.dataset.del));
         btn.closest('tr').remove();
         showToast('Eintrag gelöscht.', 'info');
       } catch (err) {
