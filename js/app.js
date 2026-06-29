@@ -637,7 +637,7 @@ async function exportInvoice(format) {
   }
 }
 
-/* ── Mail erstellen (.eml mit angehängter Rechnung) ── */
+/* ── Mail erstellen ── */
 async function createInvoiceMail() {
   const data = collectFormData();
   const errors = validateForm(data);
@@ -645,6 +645,15 @@ async function createInvoiceMail() {
     showToast('Pflichtfelder fehlen: ' + errors.slice(0, 3).join(', ') + (errors.length > 3 ? ' ...' : ''), 'error');
     highlightErrors(data);
     return;
+  }
+
+  // Mail-Token möglichst früh holen (frische Nutzer-Geste fürs Consent-Popup).
+  // Schlägt fehl, wenn Mail.ReadWrite nicht freigegeben → später .eml-Fallback.
+  let mailToken = null;
+  try {
+    mailToken = await acquireTokenPopupSafe(['https://graph.microsoft.com/Mail.ReadWrite']);
+  } catch (e) {
+    console.warn('Mail.ReadWrite nicht verfügbar — .eml-Fallback:', e);
   }
 
   // Format: ZUGFeRD wenn ein PDF vorliegt (lesbar + eingebettetes XML), sonst XRechnung-XML
@@ -664,12 +673,37 @@ async function createInvoiceMail() {
       attachments.push({ filename: `${safeNr}_xrechnung.xml`, mime: 'application/xml', base64: _utf8ToBase64('﻿' + xml) });
     }
 
-    const eml = _buildInvoiceEml(data, grossTotal, useZugferd, attachments);
-    downloadBlob(new TextEncoder().encode(eml), `${safeNr}_mail.eml`, 'message/rfc822');
+    const { subject, body } = _mailSubjectBody(data, grossTotal, useZugferd);
 
+    // 1) Direkt in Outlook als Entwurf anlegen (Microsoft Graph, kein Download)
+    if (mailToken) {
+      showLoading(true, 'Entwurf wird in Outlook erstellt …');
+      try {
+        const draft = await _createOutlookDraft(mailToken, data, subject, body, attachments);
+        showLoading(false);
+        if (draft.webLink) window.open(draft.webLink, '_blank', 'noopener');
+        showToast(
+          `E-Mail-Entwurf in Outlook erstellt (Ordner „Entwürfe").` +
+          (data.kaeufermail ? '' : ' Bitte Empfänger ergänzen.'),
+          'success'
+        );
+        return;
+      } catch (gErr) {
+        console.warn('Outlook-Direktanlage fehlgeschlagen — .eml-Fallback:', gErr);
+        // weiter zum .eml-Fallback
+      }
+    }
+
+    // 2) Fallback: .eml-Datei (öffnet sich per Doppelklick in Outlook)
+    const eml = _buildInvoiceEml(data, subject, body, attachments);
+    downloadBlob(new TextEncoder().encode(eml), `${safeNr}_mail.eml`, 'message/rfc822');
     showLoading(false);
-    const empf = data.kaeufermail || '(kein Empfänger hinterlegt — bitte in Outlook ergänzen)';
-    showToast(`E-Mail-Vorlage erstellt → ${empf}. Die .eml-Datei öffnet sich in Outlook.`, 'success');
+    showToast(
+      mailToken
+        ? 'Outlook-Direktanlage nicht möglich — .eml-Datei erstellt (per Doppelklick in Outlook öffnen).'
+        : 'E-Mail-Vorlage als .eml erstellt — per Doppelklick in Outlook öffnen (Anhang inklusive).',
+      'info'
+    );
   } catch (err) {
     showLoading(false);
     console.error(err);
@@ -677,11 +711,35 @@ async function createInvoiceMail() {
   }
 }
 
-/**
- * Baut eine RFC822-.eml-Datei. "X-Unsent: 1" sorgt dafür, dass Outlook
- * die Datei als bearbeitbaren Entwurf (mit Anhang) öffnet statt als Eingang.
- */
-function _buildInvoiceEml(data, grossTotal, useZugferd, attachments) {
+/** Erstellt einen Outlook-Entwurf mit Anhang direkt im Postfach (Graph). */
+async function _createOutlookDraft(token, data, subject, body, attachments) {
+  const message = {
+    subject,
+    body: { contentType: 'Text', content: body },
+    toRecipients: data.kaeufermail
+      ? [{ emailAddress: { address: data.kaeufermail, name: data.kaeufer || undefined } }]
+      : [],
+    attachments: attachments.map(a => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name:         a.filename,
+      contentType:  a.mime,
+      contentBytes: a.base64,
+    })),
+  };
+  const resp = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
+    method:  'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body:    JSON.stringify(message),
+  });
+  if (!resp.ok) {
+    const msg = await resp.text();
+    throw new Error(`Graph ${resp.status}: ${msg.slice(0, 200)}`);
+  }
+  return resp.json();
+}
+
+/** Betreff + Textvorlage für die Rechnungsmail. */
+function _mailSubjectBody(data, grossTotal, useZugferd) {
   const datum  = data.rechnungsdatum ? new Date(data.rechnungsdatum).toLocaleDateString('de-DE') : '';
   const betrag = (grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatLabel = useZugferd ? 'ZUGFeRD (PDF mit eingebettetem XML)' : 'XRechnung (XML)';
@@ -698,6 +756,14 @@ Mit freundlichen Grüßen
 ${data.verkaeufkontakt || ''}
 ${data.verkaeufer}${data.verkaeuftel ? '\nTel.: ' + data.verkaeuftel : ''}${data.verkaeuferemail ? '\n' + data.verkaeuferemail : ''}`;
 
+  return { subject, body };
+}
+
+/**
+ * Baut eine RFC822-.eml-Datei. "X-Unsent: 1" sorgt dafür, dass Outlook
+ * die Datei als bearbeitbaren Entwurf (mit Anhang) öffnet statt als Eingang.
+ */
+function _buildInvoiceEml(data, subject, body, attachments) {
   const b    = 'BND_' + Date.now().toString(36);
   const wrap = s => s.replace(/.{1,76}/g, '$&\r\n').trimEnd();
 

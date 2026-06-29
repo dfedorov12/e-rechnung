@@ -106,6 +106,25 @@ async function acquireToken(scopes) {
   }
 }
 
+/**
+ * Access-Token per Popup anfordern (statt Redirect) — erhält den
+ * Formularzustand der Seite. Für interaktive Aktionen wie "Mail erstellen".
+ * Wirft, wenn der Consent verweigert/blockiert wird → Aufrufer kann fallbacken.
+ */
+async function acquireTokenPopupSafe(scopes) {
+  if (!_msal || !_account) throw new Error('Nicht angemeldet');
+  try {
+    const result = await _msal.acquireTokenSilent({ scopes, account: _account });
+    return result.accessToken;
+  } catch (e) {
+    if (e instanceof msal.InteractionRequiredAuthError) {
+      const result = await _msal.acquireTokenPopup({ scopes, account: _account });
+      return result.accessToken;
+    }
+    throw e;
+  }
+}
+
 function _showAuthError(err) {
   document.body.classList.remove('auth-guard');
   document.body.innerHTML = `
