@@ -660,6 +660,7 @@ body {
 
 .btn-export.btn-xrechnung { border-color: rgba(125,211,252,0.5); }
 .btn-export.btn-zugferd { border-color: rgba(134,239,172,0.5); }
+.btn-export.btn-mail { border-color: rgba(253,224,71,0.55); }
 
 /* ── Verlauf Page ── */
 .verlauf-header {

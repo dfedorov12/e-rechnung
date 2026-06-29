@@ -40,7 +40,7 @@ const _COMPANY_REGISTRY = {
     verkaeufstadt:      'Leipzig',
     verkaeufland:       'DE',
     verkaeuftel:        '+49 341 42 79 0',
-    verkaeuferemail:    'giesserei@shb-guss.de',
+    verkaeuferemail:    'sales@shb-guss.de',
     verkaeufervat:      'DE812264517',
     verkaeufersteuernr: '232/118/07369',
     // Zahlungskonto laut Rechnungsfuß ("Wir erbitten die Zahlungen … IBAN: DE 77 … 01")

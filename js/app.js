@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-add-row').addEventListener('click', addPositionRow);
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
+  document.getElementById('btn-mail').addEventListener('click', () => createInvoiceMail());
 
   // Runtime-Config laden, dann Selector + Admin-Nav initialisieren
   onAuthReady(async () => {
@@ -634,6 +635,110 @@ async function exportInvoice(format) {
     console.error(err);
     showToast('Fehler beim Erstellen: ' + err.message, 'error');
   }
+}
+
+/* ── Mail erstellen (.eml mit angehängter Rechnung) ── */
+async function createInvoiceMail() {
+  const data = collectFormData();
+  const errors = validateForm(data);
+  if (errors.length > 0) {
+    showToast('Pflichtfelder fehlen: ' + errors.slice(0, 3).join(', ') + (errors.length > 3 ? ' ...' : ''), 'error');
+    highlightErrors(data);
+    return;
+  }
+
+  // Format: ZUGFeRD wenn ein PDF vorliegt (lesbar + eingebettetes XML), sonst XRechnung-XML
+  const useZugferd = !!uploadedPdfBytes;
+  showLoading(true, useZugferd ? 'ZUGFeRD wird erstellt …' : 'XRechnung wird erstellt …');
+
+  try {
+    const xml = buildXML(data, useZugferd ? 'zugferd' : 'xrechnung');
+    const { grossTotal } = calcTotals(data.positionen);
+    const safeNr = sanitizeFilename(data.rechnungsnummer);
+
+    const attachments = [];
+    if (useZugferd) {
+      const pdfBytes = await embedXMLIntoPDF(uploadedPdfBytes, xml, 'zugferd');
+      attachments.push({ filename: `${safeNr}_zugferd.pdf`, mime: 'application/pdf', base64: bytesToBase64(pdfBytes) });
+    } else {
+      attachments.push({ filename: `${safeNr}_xrechnung.xml`, mime: 'application/xml', base64: _utf8ToBase64('﻿' + xml) });
+    }
+
+    const eml = _buildInvoiceEml(data, grossTotal, useZugferd, attachments);
+    downloadBlob(new TextEncoder().encode(eml), `${safeNr}_mail.eml`, 'message/rfc822');
+
+    showLoading(false);
+    const empf = data.kaeufermail || '(kein Empfänger hinterlegt — bitte in Outlook ergänzen)';
+    showToast(`E-Mail-Vorlage erstellt → ${empf}. Die .eml-Datei öffnet sich in Outlook.`, 'success');
+  } catch (err) {
+    showLoading(false);
+    console.error(err);
+    showToast('Fehler beim Erstellen der Mail: ' + err.message, 'error');
+  }
+}
+
+/**
+ * Baut eine RFC822-.eml-Datei. "X-Unsent: 1" sorgt dafür, dass Outlook
+ * die Datei als bearbeitbaren Entwurf (mit Anhang) öffnet statt als Eingang.
+ */
+function _buildInvoiceEml(data, grossTotal, useZugferd, attachments) {
+  const datum  = data.rechnungsdatum ? new Date(data.rechnungsdatum).toLocaleDateString('de-DE') : '';
+  const betrag = (grossTotal || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatLabel = useZugferd ? 'ZUGFeRD (PDF mit eingebettetem XML)' : 'XRechnung (XML)';
+
+  const subject = `Rechnung ${data.rechnungsnummer} – ${data.verkaeufer}`;
+  const body =
+`Sehr geehrte Damen und Herren,
+
+anbei erhalten Sie unsere Rechnung ${data.rechnungsnummer}${datum ? ' vom ' + datum : ''} über ${betrag} €.
+
+Die Rechnung liegt als ${formatLabel} gemäß EN 16931 bei.
+
+Mit freundlichen Grüßen
+${data.verkaeufkontakt || ''}
+${data.verkaeufer}${data.verkaeuftel ? '\nTel.: ' + data.verkaeuftel : ''}${data.verkaeuferemail ? '\n' + data.verkaeuferemail : ''}`;
+
+  const b    = 'BND_' + Date.now().toString(36);
+  const wrap = s => s.replace(/.{1,76}/g, '$&\r\n').trimEnd();
+
+  const lines = [];
+  // Kein From: → Outlook nutzt das Standardkonto des Benutzers
+  lines.push(`To: ${data.kaeufermail ? _emlAddr(data.kaeufer, data.kaeufermail) : ''}`);
+  lines.push(`Subject: =?UTF-8?B?${_utf8ToBase64(subject)}?=`);
+  lines.push('X-Unsent: 1');
+  lines.push('MIME-Version: 1.0');
+  lines.push(`Content-Type: multipart/mixed; boundary="${b}"`);
+  lines.push('');
+  // Textteil
+  lines.push(`--${b}`);
+  lines.push('Content-Type: text/plain; charset="utf-8"');
+  lines.push('Content-Transfer-Encoding: base64');
+  lines.push('');
+  lines.push(wrap(_utf8ToBase64(body.replace(/\n/g, '\r\n'))));
+  // Anhänge
+  for (const att of attachments) {
+    lines.push(`--${b}`);
+    lines.push(`Content-Type: ${att.mime}; name="${att.filename}"`);
+    lines.push('Content-Transfer-Encoding: base64');
+    lines.push(`Content-Disposition: attachment; filename="${att.filename}"`);
+    lines.push('');
+    lines.push(wrap(att.base64));
+  }
+  lines.push(`--${b}--`);
+  return lines.join('\r\n');
+}
+
+/** Adressfeld "Name <mail>" – Anzeigename bei Sonderzeichen RFC2047-kodiert. */
+function _emlAddr(name, email) {
+  if (!name) return email;
+  const ascii = /^[\x20-\x7E]*$/.test(name);
+  const disp  = ascii ? `"${name.replace(/"/g, '')}"` : `=?UTF-8?B?${_utf8ToBase64(name)}?=`;
+  return `${disp} <${email}>`;
+}
+
+/** UTF-8-sicheres Base64 (für Umlaute in Betreff/Adressen/XML). */
+function _utf8ToBase64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
 }
 
 function highlightErrors(data) {
