@@ -1332,3 +1332,27 @@ body.auth-guard { visibility: hidden; }
   color: var(--gray-500);
   font-style: italic;
 }
+
+/* ── XML → PDF Seite ── */
+.xml-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.xml-summary-table td {
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 13px;
+}
+
+.xml-summary-table tr:last-child td { border-bottom: none; }
+
+.xml-summary-table .xs-label {
+  color: var(--gray-500);
+  width: 42%;
+}
+
+.xml-summary-table .xs-value {
+  color: var(--gray-800);
+  word-break: break-word;
+}

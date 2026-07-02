@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XML zu PDF | E-Rechnung Konverter | DIHAG</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="auth-guard">
+
+<header class="site-header">
+  <div class="site-logo">DIHAG <span>E-Rechnung</span></div>
+  <nav class="site-nav">
+    <a href="index.html">Konverter</a>
+    <a href="xml-zu-pdf.html" class="active">XML → PDF</a>
+    <a href="verlauf.html">Verlauf</a>
+    <a href="einstellungen.html" id="nav-einstellungen" style="display:none;">Einstellungen</a>
+  </nav>
+  <div class="auth-user">
+    <div class="auth-avatar" id="auth-initials">…</div>
+    <div class="auth-user-text">
+      <span class="auth-user-name" id="auth-name"></span>
+      <span class="auth-user-email" id="auth-email"></span>
+    </div>
+    <button class="btn-auth-logout" onclick="authLogout()">Abmelden</button>
+  </div>
+</header>
+
+<div class="page-content">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-icon">📄</div>
+    <div>
+      <h1>E-Rechnung (XML) in PDF umwandeln</h1>
+      <p>Laden Sie eine empfangene E-Rechnung als XML hoch — XRechnung oder ZUGFeRD-XML,
+         in CII- oder UBL-Syntax. Die App erzeugt daraus ein lesbares PDF mit allen
+         Rechnungsdaten, Positionen und Summen.</p>
+      <div class="hero-badges">
+        <span class="badge">XRechnung (CII)</span>
+        <span class="badge">XRechnung (UBL)</span>
+        <span class="badge">EN 16931</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="upload-zone">
+    <input type="file" id="xml-input" accept=".xml,text/xml,application/xml">
+    <div class="upload-placeholder">
+      <span class="upload-icon">📤</span>
+      <h3>XML hier ablegen oder klicken</h3>
+      <p>XRechnung / ZUGFeRD-XML (CII oder UBL)</p>
+      <button class="btn-upload" type="button">XML auswählen</button>
+    </div>
+    <div class="file-info">
+      <span class="file-info-icon">📄</span>
+      <div class="file-info-text">
+        <strong id="file-name-display"></strong>
+        <span id="file-size-display"></span>
+      </div>
+      <button class="btn-change-file" id="btn-change-file" type="button">Andere Datei</button>
+    </div>
+  </div>
+
+  <!-- Ergebnis -->
+  <div id="result-area" style="display:none;">
+    <div class="main-layout">
+
+      <!-- PDF-Vorschau -->
+      <div class="pdf-viewer-panel">
+        <div class="panel-header">
+          <h3>📄 PDF-Vorschau</h3>
+          <div class="pdf-nav">
+            <button id="btn-prev-page" disabled title="Vorherige Seite">‹</button>
+            <span id="page-info">–</span>
+            <button id="btn-next-page" disabled title="Nächste Seite">›</button>
+          </div>
+        </div>
+        <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
+          <canvas id="pdf-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Zusammenfassung -->
+      <div class="form-panel">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🧾</span>
+            <h3>Erkannte Rechnungsdaten</h3>
+          </div>
+          <div class="card-body">
+            <table class="xml-summary-table" id="xml-summary"></table>
+          </div>
+        </div>
+
+        <div class="export-section">
+          <div class="export-info">
+            <h3>PDF herunterladen</h3>
+            <p id="export-hint">Lesbares PDF der E-Rechnung</p>
+          </div>
+          <div class="export-buttons">
+            <button class="btn-export btn-zugferd" id="btn-download-pdf" type="button">
+              <span class="export-format">PDF</span>
+              <span class="export-label">Herunterladen</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /page-content -->
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loading-overlay" style="display:none;">
+  <div class="loading-box">
+    <span class="spinner"></span>
+    <p id="loading-text">Verarbeitung…</p>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Libraries (lokal, kein CDN) -->
+<script src="js/vendor/msal-browser.min.js"></script>
+<script src="js/vendor/pdf.min.js"></script>
+<script src="js/vendor/pdf-lib.min.js"></script>
+
+<!-- App Scripts -->
+<script src="js/auth.js"></script>
+<script src="js/access.js"></script>
+<script src="js/xmlinvoice.js"></script>
+<script src="js/xml2pdf.js"></script>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';
+
+/* ── Zustand ── */
+let _pdfBytes = null;
+let _pdfDoc   = null;
+let _pageNum  = 1;
+let _fileBase = 'rechnung';
+
+/* ── Upload-Zone ── */
+document.addEventListener('DOMContentLoaded', () => {
+  const zone  = document.getElementById('upload-zone');
+  const input = document.getElementById('xml-input');
+
+  zone.addEventListener('click', e => {
+    if (e.target.id !== 'btn-change-file') input.click();
+  });
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => { if (input.files[0]) handleFile(input.files[0]); });
+
+  document.getElementById('btn-change-file').addEventListener('click', e => {
+    e.stopPropagation();
+    input.click();
+  });
+
+  document.getElementById('btn-download-pdf').addEventListener('click', downloadPdf);
+  document.getElementById('btn-prev-page').addEventListener('click', () => gotoPage(_pageNum - 1));
+  document.getElementById('btn-next-page').addEventListener('click', () => gotoPage(_pageNum + 1));
+});
+
+/* ── Datei verarbeiten ── */
+async function handleFile(file) {
+  if (!/\.xml$/i.test(file.name)) {
+    showToast('Bitte eine XML-Datei auswählen.', 'error');
+    return;
+  }
+  _fileBase = file.name.replace(/\.xml$/i, '');
+
+  showLoading(true, 'XML wird gelesen…');
+  try {
+    const xmlText = await file.text();
+    const data = parseInvoiceXML(xmlText);
+
+    showLoading(true, 'PDF wird erzeugt…');
+    _pdfBytes = await buildInvoicePdf(data);
+
+    // Datei-Info anzeigen
+    document.getElementById('upload-zone').classList.add('has-file');
+    document.getElementById('file-name-display').textContent = file.name;
+    document.getElementById('file-size-display').textContent =
+      (file.size / 1024).toFixed(1) + ' KB · ' + data.syntax + '-Syntax';
+
+    renderSummary(data);
+    await renderPreview();
+
+    document.getElementById('result-area').style.display = 'block';
+    showLoading(false);
+    showToast('E-Rechnung erfolgreich konvertiert.', 'success');
+  } catch (err) {
+    showLoading(false);
+    console.error(err);
+    showToast('Konvertierung fehlgeschlagen: ' + err.message, 'error');
+  }
+}
+
+/* ── Zusammenfassung ── */
+function renderSummary(d) {
+  const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const eur = n => (n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' €';
+  const dt  = s => s ? s.split('-').reverse().join('.') : '–';
+  const rows = [
+    ['Rechnungsnummer', esc(d.rechnungsnummer) || '–'],
+    ['Rechnungsdatum',  dt(d.rechnungsdatum)],
+    ['Aussteller',      esc(d.verkaeufer) || '–'],
+    ['Empfänger',       esc(d.kaeufer) || '–'],
+    ['Positionen',      d.positionen.length],
+    ['Nettobetrag',     eur(d.netTotal)],
+    ['MwSt.',           eur(d.vatTotal)],
+    ['Gesamtbetrag',    `<strong>${eur(d.grossTotal)}</strong>`],
+    ['Fällig am',       dt(d.faelligkeitsdatum)],
+    ['Syntax',          d.syntax],
+  ];
+  document.getElementById('xml-summary').innerHTML =
+    rows.map(([k, v]) => `<tr><td class="xs-label">${k}</td><td class="xs-value">${v}</td></tr>`).join('');
+}
+
+/* ── PDF-Vorschau (pdf.js) ── */
+async function renderPreview() {
+  _pdfDoc  = await pdfjsLib.getDocument({ data: _pdfBytes.slice(0) }).promise;
+  _pageNum = 1;
+  await renderPage();
+}
+
+async function renderPage() {
+  const page    = await _pdfDoc.getPage(_pageNum);
+  const wrapper = document.getElementById('pdf-canvas-wrapper');
+  const canvas  = document.getElementById('pdf-canvas');
+  const ctx     = canvas.getContext('2d');
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const raw = page.getViewport({ scale: 1 });
+  const cssScale = (wrapper.clientWidth - 32) / raw.width;
+  const vp  = page.getViewport({ scale: cssScale * dpr });
+
+  canvas.width  = vp.width;
+  canvas.height = vp.height;
+  canvas.style.width  = (vp.width  / dpr) + 'px';
+  canvas.style.height = (vp.height / dpr) + 'px';
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+  document.getElementById('page-info').textContent = `Seite ${_pageNum} / ${_pdfDoc.numPages}`;
+  document.getElementById('btn-prev-page').disabled = _pageNum <= 1;
+  document.getElementById('btn-next-page').disabled = _pageNum >= _pdfDoc.numPages;
+}
+
+async function gotoPage(n) {
+  if (!_pdfDoc || n < 1 || n > _pdfDoc.numPages) return;
+  _pageNum = n;
+  await renderPage();
+}
+
+/* ── Download ── */
+function downloadPdf() {
+  if (!_pdfBytes) return;
+  const blob = new Blob([_pdfBytes], { type: 'application/pdf' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = _fileBase + '.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('PDF heruntergeladen.', 'success');
+}
+
+/* ── UI-Helfer ── */
+function showLoading(visible, msg = 'Verarbeitung…') {
+  const overlay = document.getElementById('loading-overlay');
+  const t = document.getElementById('loading-text');
+  if (t) t.textContent = msg;
+  overlay.style.display = visible ? 'flex' : 'none';
+}
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  toast.innerHTML = `<span class="toast-icon">${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    toast.addEventListener('animationend', () => toast.remove());
+  }, 4000);
+}
+</script>
+
+<script>onAuthReady(() => initAdminNav());</script>
+<script>authInit();</script>
+
+</body>
+</html>
