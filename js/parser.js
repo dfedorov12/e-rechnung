@@ -92,7 +92,7 @@ function extractInvoiceDataFromItems(allItems) {
     result = {
       ...extractMetadataEnglish(fullText),
       ...extractSellerEnglish(footerText, fullText),
-      ...extractBuyerEnglish(leftColumnText, fullText),
+      ...extractBuyerEnglish(buyerBlock, leftColumnText, fullText),
       positionen: extractLineItemsEnglish(fullText),
     };
   // Deutschsprachige WGC-Rechnung (Pos/Artikel/Stück-Format)
@@ -100,7 +100,7 @@ function extractInvoiceDataFromItems(allItems) {
     result = {
       ...extractMetadataGermanWGC(fullText),
       ...extractSeller(footerText, fullText),
-      ...extractBuyerWGCGerman(leftColumnText, leftText, fullText),
+      ...extractBuyerWGCGerman(buyerBlock, leftColumnText, leftText, fullText),
       positionen: extractLineItemsGermanWGC(fullText),
     };
   // SHB-Rechnung (Bezeichnung/Preis/Nettowert-Format)
@@ -190,9 +190,14 @@ function extractMetadataGermanWGC(fullText) {
 
 /**
  * Käufer für deutsche WGC-Rechnungen.
- * Adressblock links oben; PLZ-Format oft "DE 59269 Beckum".
+ * Primär: isoliertes Adressfenster (Seite 1 links oben) — verhindert
+ * Fehltreffer aus Konditionen-/Bestellzeilen weiter unten.
+ * Fallback: bisherige Extraktion aus der linken Spalte.
  */
-function extractBuyerWGCGerman(leftColumnText, leftText, fullText) {
+function extractBuyerWGCGerman(buyerBlock, leftColumnText, leftText, fullText) {
+  const w = _parseBuyerWindow(buyerBlock);
+  if (w.kaeufer && w.kaeuferplz) return w;
+
   const r = extractBuyer(leftColumnText, leftText, fullText);
 
   // Fallback: PLZ-Muster "DE 59269 Stadt" oder "CZ 73961 TRINEC"
@@ -207,6 +212,8 @@ function extractBuyerWGCGerman(leftColumnText, leftText, fullText) {
     }
   }
 
+  // Fenster-Teilergebnisse haben Vorrang, wo vorhanden
+  for (const [k, v] of Object.entries(w)) if (v) r[k] = v;
   return r;
 }
 
@@ -920,54 +927,82 @@ function extractSellerEnglish(footerText, fullText) {
 }
 
 /**
- * Käufer: Firmenname (international: S.p.A., Ltd, Inc. …),
- * Adresse, PLZ, Stadt, Land aus dem Adressblock links oben.
+ * Käufer: Firmenname, Adresse, PLZ, Stadt, Land — primär aus dem
+ * isolierten Adressfenster (Seite 1, links oben), Fallback linke Spalte.
  * Käufer-USt-IdNr aus "Your VAT reg. no.:"
  */
-function extractBuyerEnglish(leftColumnText, fullText) {
+function extractBuyerEnglish(buyerBlock, leftColumnText, fullText) {
   const r = {};
 
   // Käufer-USt-IdNr: "Your VAT reg. no.: IT01804670493"
   const vatM = fullText.match(/Your\s+VAT\s+reg\.?\s*no\.?\s*[:\s]+([A-Z]{2}[\dA-Z]{2,12})/i);
   if (vatM) r.kaeufervatnr = vatM[1];  // gespeichert für Anzeige / Notiz
 
-  if (!leftColumnText) return r;
+  // Primär das Adressfenster nutzen — die linke Spalte enthält weiter unten
+  // Konditionen ("Pricing DAP …", "Payment …"), die sonst als Adresse
+  // fehlinterpretiert werden (INCOTERMS matcht z. B. auf "Inc").
+  const src = (buyerBlock && buyerBlock.trim()) ? buyerBlock : (leftColumnText || '');
+  return Object.assign(r, _parseBuyerWindow(src));
+}
 
-  // Internationale Rechtsformen
-  const intlForms = /S\.p\.A\.|S\.A\.|S\.r\.l\.|Ltd\.?|Inc\.?|Corp\.?|GmbH|AG|B\.V\.|N\.V\.|Oy|A\/S|PLC/i;
+/**
+ * Adressfenster (Name / [Abteilung] / Straße / PLZ Ort / [Land]) parsen.
+ * Gemeinsame Logik für englische und deutsche WGC-Rechnungen.
+ */
+function _parseBuyerWindow(src) {
+  const r = {};
 
-  const lines = leftColumnText
+  const lines = (src || '')
     .split('\n')
     .map(l => l.trim())
-    .filter(l => l.length > 1);
+    .filter(l => l.length > 1)
+    .filter(l => !/walze-coswig|walzengie/i.test(l))   // Absenderzeile
+    .filter(l => !/^Your\s+VAT|^Ihre\s+USt|^Operator|^Bearbeiter|^Invoice\s+Nr|^Rechnung\s+Nr|@/i.test(l));
 
-  const ci = lines.findIndex(l => intlForms.test(l));
-  if (ci < 0) return r;
+  if (!lines.length) return r;
 
+  // Internationale Rechtsformen — mit Wortgrenzen (kein Treffer in "INCOTERMS")
+  const intlForms = /(?:^|\s)(?:S\.p\.A\.?|S\.A\.?|S\.?C\.?A\.?|SCA|S\.r\.l\.?|a\.s\.?|Ltd\.?|Inc\.?|Corp\.?|GmbH|AG|SE|KG|B\.V\.?|N\.V\.?|Oy|A\/S|AB|PLC|SAS)(?=[\s,.;)]|$)/i;
+
+  // Firmenzeile: erste Zeile mit Rechtsform — sonst erste Zeile des Fensters
+  let ci = lines.findIndex(l => intlForms.test(l));
+  if (ci < 0) ci = 0;
   r.kaeufer = lines[ci];
 
-  // Zeilen nach Firmenname auswerten
-  const skipLine = /^(Administrative|Office|Department|Attn|c\/o|P\.O\.\s*Box|Abt\.)/i;
+  const after = lines.slice(ci + 1);
 
-  for (const line of lines.slice(ci + 1)) {
-    // PLZ + Stadt: "57025 PIOMBINO (LI)" oder "D-04610 Meuselwitz"
-    const plzM = line.match(/[A-Z]?-?(\d{4,6})\s+([A-ZÄÖÜ][A-ZÄÖÜa-zäöüß\s\-()/]+?)(?:\s+\([A-Z]{2}\))?$/);
-    if (plzM && !r.kaeuferplz) {
-      r.kaeuferplz   = plzM[1];
-      r.kaeuferstadt = plzM[2].trim();
-      continue;
+  // PLZ-Zeile: "LU 1160 LUXEMBOURG", "D-04610 Meuselwitz", "57025 PIOMBINO (LI)"
+  let plzIdx = -1, plzM = null;
+  for (let i = 0; i < after.length; i++) {
+    const m = after[i].match(/^([A-Z]{1,2})?[-\s]?(\d{4,6})\s+([A-ZÄÖÜ][^\n]*?)(?:\s+\([A-Z]{2}\))?$/);
+    if (m) { plzIdx = i; plzM = m; break; }
+  }
+  if (plzM) {
+    if (plzM[1]) {
+      const one = { D: 'DE', A: 'AT', F: 'FR', I: 'IT', L: 'LU', B: 'BE', E: 'ES', P: 'PT' };
+      r.kaeuferland = plzM[1].length === 1 ? (one[plzM[1]] || plzM[1]) : plzM[1];
     }
+    r.kaeuferplz   = plzM[2];
+    r.kaeuferstadt = plzM[3].trim();
+    // Straße = Zeile direkt über der PLZ-Zeile (Fensteradresse)
+    if (plzIdx > 0) r.kaeuferstrasse = after[plzIdx - 1];
+  }
 
-    // Land: Zeile nur aus Großbuchstaben "ITALIEN", "GERMANY" …
-    if (/^[A-ZÄÖÜ\s]{4,20}$/.test(line) && !r.kaeuferland) {
-      r.kaeuferland = _countryCode(line.trim());
-      continue;
-    }
+  // Land aus reiner Großbuchstaben-Zeile ("LUXEMBURG", "ITALIEN", "TSCHECHISCHE REPUBLIK").
+  // Die LETZTE passende Zeile nehmen — das Land steht am Ende des Adressblocks
+  // (sonst würde z. B. "BHILAI STEEL PLANT" als Land interpretiert).
+  if (!r.kaeuferland) {
+    const cls = after.filter(l => /^[A-ZÄÖÜ][A-ZÄÖÜ\s]{3,30}$/.test(l) && !/\d/.test(l) && l !== r.kaeuferstadt);
+    if (cls.length) r.kaeuferland = _countryCode(cls[cls.length - 1].trim());
+  }
 
-    // Straße: erste sinnvolle Zeile, keine Skip-Zeile, noch keine PLZ
-    if (!r.kaeuferstrasse && !r.kaeuferplz && !skipLine.test(line)) {
-      r.kaeuferstrasse = line;
-    }
+  // Fallback Straße: erste sinnvolle Zeile nach dem Namen
+  if (!r.kaeuferstrasse) {
+    const skipLine = /^(Administrative|Office|Department|Attn|Purchasing|Accounts|c\/o|P\.?O\.?\s*Box|PF\s|Abt\.)/i;
+    r.kaeuferstrasse = after.find(l =>
+      !skipLine.test(l) && l !== r.kaeuferstadt && !/^\d{4,6}\s/.test(l) &&
+      !/^[A-ZÄÖÜ][A-ZÄÖÜ\s]{3,30}$/.test(l)
+    ) || '';
   }
 
   return r;
@@ -1170,8 +1205,10 @@ function _countryCode(name) {
     'BELGIEN': 'BE', 'BELGIUM': 'BE',
     'SCHWEIZ': 'CH', 'SWITZERLAND': 'CH',
     'GROSSBRITANNIEN': 'GB', 'UNITED KINGDOM': 'GB',
-    'TSCHECHIEN': 'CZ', 'CZECH REPUBLIC': 'CZ',
+    'TSCHECHIEN': 'CZ', 'CZECH REPUBLIC': 'CZ', 'TSCHECHISCHE REPUBLIK': 'CZ',
     'POLEN': 'PL', 'POLAND': 'PL',
+    'LUXEMBURG': 'LU', 'LUXEMBOURG': 'LU',
+    'INDIEN': 'IN', 'INDIA': 'IN',
   };
   return map[name.toUpperCase()] || name.slice(0, 2).toUpperCase();
 }
