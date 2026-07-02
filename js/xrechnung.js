@@ -195,6 +195,7 @@ function buildXML(data, profile = 'xrechnung') {
         </ram:URIUniversalCommunication>` : (data.kaeufermail ? `<ram:URIUniversalCommunication>
           <ram:URIID schemeID="EM">${esc(data.kaeufermail)}</ram:URIID>
         </ram:URIUniversalCommunication>` : '')}
+        ${data.kaeufervat ? `<ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">${esc(data.kaeufervat)}</ram:ID></ram:SpecifiedTaxRegistration>` : ''}
       </ram:BuyerTradeParty>
     </ram:ApplicableHeaderTradeAgreement>
 

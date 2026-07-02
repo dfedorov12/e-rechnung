@@ -134,6 +134,9 @@ function _parseCII(root) {
       if (uri.getAttribute('schemeID') === '0204') r.leitwegid  = uri.textContent.trim();
       else                                          r.kaeufermail = uri.textContent.trim();
     }
+    // Käufer-USt-IdNr (BT-48)
+    const bReg = _q(buyer, 'SpecifiedTaxRegistration', 'ID');
+    if (bReg && bReg.getAttribute('schemeID') === 'VA') r.kaeufervat = bReg.textContent.trim();
   }
   if (!r.leitwegid) {
     const buyerRef = _t(agreement, 'BuyerReference');
@@ -209,6 +212,7 @@ function _parseUBL(root) {
     r.kaeuferstadt   = _t(cp, 'PostalAddress', 'CityName');
     r.kaeuferland    = _t(cp, 'PostalAddress', 'Country', 'IdentificationCode') || 'DE';
     r.kaeufermail    = _t(cp, 'EndpointID') || _t(cp, 'Contact', 'ElectronicMail');
+    r.kaeufervat     = _t(cp, 'PartyTaxScheme', 'CompanyID');   // BT-48
   }
   if (buyerRef && buyerRef !== r.rechnungsnummer) r.leitwegid = buyerRef;
 

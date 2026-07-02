@@ -216,6 +216,7 @@ function fillFormFromExtracted(data) {
     'kaeufer-land':        data.kaeuferland,
     'leitwegid':           data.leitwegid,
     'kaeufer-email':       data.kaeufermail,
+    'kaeufer-vat':         data.kaeufervat,
     'rechnungsnummer':     data.rechnungsnummer,
     'rechnungsdatum':      data.rechnungsdatum,
     'lieferdatum':         data.lieferdatum,
@@ -509,6 +510,7 @@ function collectFormData() {
     kaeuferland:       v('kaeufer-land') || 'DE',
     leitwegid:         v('leitwegid'),
     kaeufermail:       v('kaeufer-email'),
+    kaeufervat:        v('kaeufer-vat'),
     // Rechnung
     rechnungsnummer:   v('rechnungsnummer'),
     rechnungsdatum:    v('rechnungsdatum'),

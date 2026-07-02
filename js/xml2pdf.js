@@ -117,6 +117,7 @@ async function buildInvoicePdf(data) {
     [data.kaeuferstrasse],
     [[data.kaeuferplz, data.kaeuferstadt].filter(Boolean).join(' ')],
     [data.kaeuferland !== 'DE' ? data.kaeuferland : ''],
+    [data.kaeufervat ? `USt-IdNr.: ${data.kaeufervat}` : ''],
     [data.leitwegid  ? `Leitweg-ID: ${data.leitwegid}` : ''],
     [data.kaeufermail || ''],
   ].filter(([s]) => s);

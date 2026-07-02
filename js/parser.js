@@ -195,7 +195,12 @@ function extractMetadataGermanWGC(fullText) {
  * Fallback: bisherige Extraktion aus der linken Spalte.
  */
 function extractBuyerWGCGerman(buyerBlock, leftColumnText, leftText, fullText) {
+  // Käufer-USt-IdNr: "Ihre USt-Id-Nr: DE815902511" (optional, BT-48)
+  const vatM = fullText.match(/Ihre\s+USt-?Id-?Nr\.?\s*:?[ \t]*([A-Z]{2}[\dA-Z ]{2,18})/i);
+  const kaeufervat = vatM ? vatM[1].replace(/\s+/g, '') : '';
+
   const w = _parseBuyerWindow(buyerBlock);
+  if (kaeufervat) w.kaeufervat = kaeufervat;
   if (w.kaeufer && w.kaeuferplz) return w;
 
   const r = extractBuyer(leftColumnText, leftText, fullText);
@@ -352,6 +357,10 @@ function extractMetadataGermanSHB(fullText) {
  */
 function extractBuyerGermanSHB(buyerBlock, fullText) {
   const r = { kaeuferland: 'DE' };
+
+  // Käufer-USt-IdNr: "Ihre USt-Id-Nr: DE…" (optional, BT-48)
+  const vatM = fullText.match(/Ihre\s+USt-?Id-?Nr\.?\s*:?[ \t]*([A-Z]{2}[\dA-Z ]{2,18})/i);
+  if (vatM) r.kaeufervat = vatM[1].replace(/\s+/g, '');
 
   const lines = (buyerBlock || '')
     .split('\n')
@@ -936,7 +945,7 @@ function extractBuyerEnglish(buyerBlock, leftColumnText, fullText) {
 
   // Käufer-USt-IdNr: "Your VAT reg. no.: IT01804670493"
   const vatM = fullText.match(/Your\s+VAT\s+reg\.?\s*no\.?\s*[:\s]+([A-Z]{2}[\dA-Z]{2,12})/i);
-  if (vatM) r.kaeufervatnr = vatM[1];  // gespeichert für Anzeige / Notiz
+  if (vatM) r.kaeufervat = vatM[1];
 
   // Primär das Adressfenster nutzen — die linke Spalte enthält weiter unten
   // Konditionen ("Pricing DAP …", "Payment …"), die sonst als Adresse
