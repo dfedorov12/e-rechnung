@@ -24,7 +24,7 @@ const _COMPANY_REGISTRY = {
     verkaeufstadt:      'Coswig',
     verkaeufland:       'DE',
     verkaeuftel:        '+49 3523 950',
-    verkaeuferemail:    'wgc@walze-coswig.de',
+    verkaeuferemail:    'sales@walze-coswig.de',
     verkaeufervat:      'DE140598967',
     verkaeufersteuernr: '209/197/00034',
     iban:               'DE33820700000130805501',
@@ -172,6 +172,19 @@ function extractMetadataGermanWGC(fullText) {
   const dueM = fullText.match(/zum\s+(\d{2}\.\d{2}\.\d{4})/i);
   if (dueM) r.faelligkeitsdatum = _deDate(dueM[1]);
 
+  // Ansprechpartner: Nachname unter der "Bearbeiter:"-Kopfzeile
+  // "Bearbeiter: Telefon Fax Kunde …" → Datenzeile "Viehrig 95-211 95-205 …"
+  const bearbM = fullText.match(/Bearbeiter\s*:[^\n]*\n\s*([A-ZÄÖÜ][A-Za-zäöüß\-]+)/);
+  if (bearbM) r.verkaeufkontakt = bearbM[1];
+
+  // Zahlungsbedingungen → Notiz: "Zahlung  14 Tage netto" + "zum 26.05.2026 rein netto = …"
+  // Zeilenanker verhindert Treffer in "Anzahlung"/"Sonderzahlung" mitten im Text.
+  const zahlM = fullText.match(/^[ \t]*Zahlung\b[ \t]*([^\n]*)\n[ \t]*((?:zum|bis)\s[^\n]+)?/m);
+  if (zahlM) {
+    const parts = [zahlM[1], zahlM[2]].map(s => (s || '').trim()).filter(Boolean);
+    if (parts.length) r.notiz = 'Zahlung: ' + parts.join(', ');
+  }
+
   return r;
 }
 
@@ -249,8 +262,28 @@ function extractLineItemsGermanWGC(fullText) {
     }
     if (amounts.length === 0) continue;
 
-    const total       = amounts[amounts.length - 1];
-    const einzelpreis = menge > 0 ? total / menge : amounts[0];
+    const total     = amounts[amounts.length - 1];
+    let einzelpreis = menge > 0 ? total / menge : amounts[0];
+
+    // %-Spalte (zwischen Einzelpreis und Gesamtpreis): [einzel, pct, gesamt]
+    // Richtung mathematisch prüfen: Zuschlag (1+p/100) oder Rabatt (1−p/100).
+    // App-Konvention: rabatt > 0 mindert → Zuschlag wird als negativer Rabatt gemappt.
+    let rabatt = 0;
+    if (amounts.length >= 3 && menge > 0) {
+      const einzelRaw = amounts[0];
+      const pct       = amounts[amounts.length - 2];
+      if (pct > 0 && pct < 100) {
+        const withZuschlag = menge * einzelRaw * (1 + pct / 100);
+        const withRabatt   = menge * einzelRaw * (1 - pct / 100);
+        if (Math.abs(withZuschlag - total) <= 0.02) {
+          einzelpreis = einzelRaw;
+          rabatt      = -pct;                 // Zuschlag (z. B. NEUMAN +5 %)
+        } else if (Math.abs(withRabatt - total) <= 0.02) {
+          einzelpreis = einzelRaw;
+          rabatt      = pct;                  // echter Rabatt
+        }
+      }
+    }
 
     // Beschreibung: erste sinnvolle Folgezeile (nicht techn. Detail, nicht Nummer, nicht zu kurz)
     let desc = code;
@@ -270,6 +303,7 @@ function extractLineItemsGermanWGC(fullText) {
       menge,
       einheit:      'Stk',
       einzelpreis,
+      rabatt,
       mwst:         mwstDoc,
     });
   }
@@ -842,6 +876,19 @@ function extractMetadataEnglish(fullText) {
   const dueM = fullText.match(/until\s+(\d{2}\.\d{2}\.\d{4})/i);
   if (dueM) r.faelligkeitsdatum = _deDate(dueM[1]);
 
+  // Ansprechpartner: Nachname unter der "Operator:"-Kopfzeile
+  // "Operator: Tel. Fax Customer …" → Datenzeile "Buchs 95-246 95-215 …"
+  const opM = fullText.match(/Operator\s*:[^\n]*\n\s*([A-ZÄÖÜ][A-Za-zäöüß\-]+)/);
+  if (opM) r.verkaeufkontakt = opM[1];
+
+  // Zahlungsbedingungen → Notiz: "Payment  90 days net" + "until 27.07.2026 net = …"
+  // Zeilenanker verhindert Treffer in "Prepayment"/"Payment Term:" mitten im Text.
+  const payM = fullText.match(/^[ \t]*Payment\b[ \t]*([^\n]*)\n[ \t]*((?:until|at|bis)\s[^\n]+)?/m);
+  if (payM) {
+    const parts = [payM[1], payM[2]].map(s => (s || '').trim()).filter(Boolean);
+    if (parts.length) r.notiz = 'Zahlung: ' + parts.join(', ');
+  }
+
   return r;
 }
 
@@ -936,10 +983,11 @@ function extractLineItemsEnglish(fullText) {
   const items  = [];
   const lines  = fullText.split('\n');
 
-  // Muster: [Pos] ProduktCode ... N pcs. Einzelpreis Gesamtpreis
+  // Muster: [Pos] ProduktCode ... N pcs. Einzelpreis [%] Gesamtpreis
   // z. B. "1    31857                             1 pcs.   55.187,37     55.187,37"
   // oder  "     14166                             1 pcs.   6.549,64       6.549,64"
-  const itemRe = /(?:^\s*\d+\s+)?(\d{4,6})\s[\s\S]*?(\d+)\s+pcs\.\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/;
+  // Optionale %-Spalte (1–2 Vorkommastellen) zwischen Einzel- und Gesamtpreis
+  const itemRe = /(?:^\s*\d+\s+)?(\d{4,6})\s[\s\S]*?(\d+)\s+pcs\.\s+([\d.]+,\d{2})(?:\s+(\d{1,2},\d{2}))?\s+([\d.]+,\d{2})/;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -953,6 +1001,17 @@ function extractLineItemsEnglish(fullText) {
     const productCode = m[1];
     const menge       = parseFloat(m[2]) || 1;
     const einzelpreis = _parseDE(m[3]);
+
+    // %-Spalte: Richtung prüfen (Zuschlag → negativer Rabatt, Rabatt → positiv)
+    let rabatt = 0;
+    if (m[4]) {
+      const pct   = _parseDE(m[4]);
+      const total = _parseDE(m[5]);
+      if (pct > 0 && pct < 100) {
+        if (Math.abs(menge * einzelpreis * (1 + pct / 100) - total) <= 0.02) rabatt = -pct;
+        else if (Math.abs(menge * einzelpreis * (1 - pct / 100) - total) <= 0.02) rabatt = pct;
+      }
+    }
 
     // Beschreibung: nächste Nicht-Leer-Zeile, die keine technische Detailzeile ist
     let desc = productCode;
@@ -969,6 +1028,7 @@ function extractLineItemsEnglish(fullText) {
       menge,
       einheit:      'Stk',
       einzelpreis,
+      rabatt,
       mwst:         0,  // VAT-exempt: steuerfreie innergemeinschaftliche Lieferung
     });
   }
@@ -1034,7 +1094,9 @@ function _extractNetTotalEnglish(fullText) {
 function _validateAndFallback(items, netExpected, mwstDoc) {
   if (netExpected === null) return items;
 
-  const netExtracted = items.reduce((s, it) => s + it.einzelpreis * it.menge, 0);
+  const netExtracted = items.reduce(
+    (s, it) => s + it.einzelpreis * it.menge * (1 - (it.rabatt || 0) / 100), 0
+  );
   // Positionen vorhanden und Summe passt → unverändert übernehmen
   if (items.length > 0 && Math.abs(netExtracted - netExpected) <= 1.0) return items;
 

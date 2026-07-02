@@ -26,7 +26,9 @@ function buildXML(data, profile = 'xrechnung') {
   const vatGroups = {};
 
   lines.forEach(p => {
-    const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0);
+    // Rabatt (>0 mindert) / Zuschlag (<0 erhöht) in den Zeilenwert einrechnen
+    const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0)
+              * (1 - (parseFloat(p.rabatt) || 0) / 100);
     const rate = (p.mwst != null && p.mwst !== '') ? parseFloat(p.mwst) : 19;
     const key = String(rate);
     if (!vatGroups[key]) vatGroups[key] = { base: 0, amount: 0, rate };
@@ -41,7 +43,10 @@ function buildXML(data, profile = 'xrechnung') {
   const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const lineXML = lines.map((p, i) => {
-    const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0);
+    // Effektiver Einzelpreis nach Rabatt/Zuschlag → Menge × Preis = Zeilensumme (konsistent)
+    const rabattFaktor = 1 - (parseFloat(p.rabatt) || 0) / 100;
+    const effPreis = parseFloat(p.einzelpreis || 0) * rabattFaktor;
+    const net = parseFloat(p.menge || 0) * effPreis;
     const rate = (p.mwst != null && p.mwst !== '') ? parseFloat(p.mwst) : 19;
     const unitCode = mapUnit(p.einheit || 'Stk');
     return `
@@ -54,7 +59,7 @@ function buildXML(data, profile = 'xrechnung') {
       </ram:SpecifiedTradeProduct>
       <ram:SpecifiedLineTradeAgreement>
         <ram:NetPriceProductTradePrice>
-          <ram:ChargeAmount>${fmt(p.einzelpreis)}</ram:ChargeAmount>
+          <ram:ChargeAmount>${fmt(effPreis)}</ram:ChargeAmount>
         </ram:NetPriceProductTradePrice>
       </ram:SpecifiedLineTradeAgreement>
       <ram:SpecifiedLineTradeDelivery>
@@ -245,7 +250,8 @@ function vatCategoryCode(rate) {
 function calcTotals(positionen) {
   const vatGroups = {};
   positionen.forEach(p => {
-    const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0);
+    const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0)
+              * (1 - (parseFloat(p.rabatt) || 0) / 100);
     const rate = (p.mwst != null && p.mwst !== '') ? parseFloat(p.mwst) : 19;
     const key = String(rate);
     if (!vatGroups[key]) vatGroups[key] = { base: 0, amount: 0, rate };

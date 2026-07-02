@@ -394,6 +394,7 @@ function addPositionRow(data = {}) {
       </select>
     </td>
     <td style="width:110px;"><input type="number" class="pos-einzelpreis" placeholder="0,00" min="0" step="0.01" value="${data.einzelpreis || ''}"></td>
+    <td style="width:80px;"><input type="number" class="pos-rabatt" placeholder="0" step="0.01" value="${data.rabatt || ''}" title="Positiv = Rabatt, negativ = Zuschlag"></td>
     <td style="width:90px;">
       <select class="pos-mwst">
         <option value="19" ${(data.mwst == 19 || !data.mwst) ? 'selected' : ''}>19 %</option>
@@ -416,7 +417,7 @@ function addPositionRow(data = {}) {
     }
   });
 
-  ['pos-menge', 'pos-einzelpreis', 'pos-mwst'].forEach(cls => {
+  ['pos-menge', 'pos-einzelpreis', 'pos-rabatt', 'pos-mwst'].forEach(cls => {
     tr.querySelector('.' + cls).addEventListener('input', updateTotals);
     tr.querySelector('.' + cls).addEventListener('change', updateTotals);
   });
@@ -436,17 +437,19 @@ function collectPositionen() {
     menge: parseFloat(tr.querySelector('.pos-menge').value) || 0,
     einheit: tr.querySelector('.pos-einheit').value,
     einzelpreis: parseFloat(tr.querySelector('.pos-einzelpreis').value) || 0,
+    rabatt: parseFloat(tr.querySelector('.pos-rabatt').value) || 0,
     mwst: parseFloat(tr.querySelector('.pos-mwst').value),
   }));
 }
 
 function updateTotals() {
   document.querySelectorAll('#positions-body tr').forEach(tr => {
-    const menge = parseFloat(tr.querySelector('.pos-menge').value) || 0;
-    const preis = parseFloat(tr.querySelector('.pos-einzelpreis').value) || 0;
-    const net = menge * preis;
+    const menge  = parseFloat(tr.querySelector('.pos-menge').value) || 0;
+    const preis  = parseFloat(tr.querySelector('.pos-einzelpreis').value) || 0;
+    const rabatt = parseFloat(tr.querySelector('.pos-rabatt').value) || 0;
+    const net = menge * preis * (1 - rabatt / 100);
     const cell = tr.querySelector('[data-total]');
-    cell.textContent = net > 0 ? formatDE(net) + ' €' : '–';
+    cell.textContent = net !== 0 ? formatDE(net) + ' €' : '–';
   });
 
   const positionen = collectPositionen();
@@ -468,7 +471,7 @@ function updateTotals() {
 
 /* ── Form Setup ── */
 function setupFormCalculations() {
-  document.querySelectorAll('.pos-menge, .pos-einzelpreis, .pos-mwst').forEach(el => {
+  document.querySelectorAll('.pos-menge, .pos-einzelpreis, .pos-rabatt, .pos-mwst').forEach(el => {
     el.addEventListener('input', updateTotals);
   });
 }
