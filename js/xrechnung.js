@@ -21,6 +21,20 @@ function buildXML(data, profile = 'xrechnung') {
     return s.replace(/\D/g, '').slice(0, 8);
   };
 
+  // Steuerkategorie für 0%-Positionen (UNTDID 5305): Z, K, AE, G, E
+  // 19 %/7 % sind immer Kategorie S.
+  const zeroCat = ['Z', 'K', 'AE', 'G', 'E'].includes(data.steuerkategorie)
+    ? data.steuerkategorie : 'Z';
+  const catOf = rate => rate > 0 ? 'S' : zeroCat;
+
+  // Befreiungsgrund (BT-120 Text / BT-121 Code) je Kategorie
+  const EXEMPT_DEFAULTS = {
+    K:  { code: 'VATEX-EU-IC', text: 'Steuerfreie innergemeinschaftliche Lieferung (§ 4 Nr. 1b UStG)' },
+    AE: { code: 'VATEX-EU-AE', text: 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge, § 13b UStG)' },
+    G:  { code: 'VATEX-EU-G',  text: 'Steuerfreie Ausfuhrlieferung in ein Drittland (§ 4 Nr. 1a UStG)' },
+    E:  { code: '',            text: 'Steuerbefreite Leistung' },
+  };
+
   // Compute line totals and VAT summaries
   const lines = data.positionen || [];
   const vatGroups = {};
@@ -68,7 +82,7 @@ function buildXML(data, profile = 'xrechnung') {
       <ram:SpecifiedLineTradeSettlement>
         <ram:ApplicableTradeTax>
           <ram:TypeCode>VAT</ram:TypeCode>
-          <ram:CategoryCode>${vatCategoryCode(rate)}</ram:CategoryCode>
+          <ram:CategoryCode>${catOf(rate)}</ram:CategoryCode>
           <ram:RateApplicablePercent>${fmt(rate)}</ram:RateApplicablePercent>
         </ram:ApplicableTradeTax>
         <ram:SpecifiedTradeSettlementLineMonetarySummation>
@@ -78,14 +92,22 @@ function buildXML(data, profile = 'xrechnung') {
     </ram:IncludedSupplyChainTradeLineItem>`;
   }).join('');
 
-  const vatXML = Object.values(vatGroups).map(g => `
+  const vatXML = Object.values(vatGroups).map(g => {
+    const cat = catOf(g.rate);
+    // BT-120/BT-121 nur bei echten Befreiungskategorien (nicht S, nicht Z — BR-Z-10)
+    const ex = (cat !== 'S' && cat !== 'Z') ? EXEMPT_DEFAULTS[cat] : null;
+    const reasonText = ex ? (data.befreiungsgrund || ex.text) : '';
+    return `
       <ram:ApplicableTradeTax>
         <ram:CalculatedAmount>${fmt(g.amount)}</ram:CalculatedAmount>
         <ram:TypeCode>VAT</ram:TypeCode>
+        ${ex ? `<ram:ExemptionReason>${esc(reasonText)}</ram:ExemptionReason>` : ''}
         <ram:BasisAmount>${fmt(g.base)}</ram:BasisAmount>
-        <ram:CategoryCode>${vatCategoryCode(g.rate)}</ram:CategoryCode>
+        <ram:CategoryCode>${cat}</ram:CategoryCode>
+        ${ex && ex.code ? `<ram:ExemptionReasonCode>${ex.code}</ram:ExemptionReasonCode>` : ''}
         <ram:RateApplicablePercent>${fmt(g.rate)}</ram:RateApplicablePercent>
-      </ram:ApplicableTradeTax>`).join('');
+      </ram:ApplicableTradeTax>`;
+  }).join('');
 
   // EN 16931 allows multiple SpecifiedTaxRegistration entries (VA + FC)
   const sellerVat = [
@@ -200,13 +222,15 @@ function buildXML(data, profile = 'xrechnung') {
     </ram:ApplicableHeaderTradeAgreement>
 
     <ram:ApplicableHeaderTradeDelivery>
-      ${(data.lieferName || data.lieferStrasse || data.lieferPlz) ? `<ram:ShipToTradeParty>
+      ${(data.lieferName || data.lieferStrasse || data.lieferPlz ||
+         (zeroCat === 'K' && lines.some(p => !(parseFloat(p.mwst) > 0)))) ? `<ram:ShipToTradeParty>
         ${data.lieferName ? `<ram:Name>${esc(data.lieferName)}</ram:Name>` : ''}
         <ram:PostalTradeAddress>
           ${data.lieferPlz ? `<ram:PostcodeCode>${esc(data.lieferPlz)}</ram:PostcodeCode>` : ''}
           ${data.lieferStrasse ? `<ram:LineOne>${esc(data.lieferStrasse)}</ram:LineOne>` : ''}
           ${data.lieferStadt ? `<ram:CityName>${esc(data.lieferStadt)}</ram:CityName>` : ''}
-          <ram:CountryID>${esc(data.lieferLand || 'DE')}</ram:CountryID>
+          <!-- BT-80: bei innergemeinschaftl. Lieferung Pflicht (BR-IC-12) — Fallback Empfängerland -->
+          <ram:CountryID>${esc(data.lieferLand || data.kaeuferland || 'DE')}</ram:CountryID>
         </ram:PostalTradeAddress>
       </ram:ShipToTradeParty>` : ''}
       ${data.lieferdatum ? `<ram:ActualDeliverySupplyChainEvent>
@@ -250,11 +274,6 @@ function mapUnit(einheit) {
     'Pausch.': 'LS', 'Pauschal': 'LS',
   };
   return map[einheit] || 'C62';
-}
-
-function vatCategoryCode(rate) {
-  if (rate === 0) return 'Z';
-  return 'S';
 }
 
 function calcTotals(positionen) {

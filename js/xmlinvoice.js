@@ -166,6 +166,16 @@ function _parseCII(root) {
     r.netTotal   = parseFloat(_t(sums, 'LineTotalAmount'))  || 0;
     r.vatTotal   = parseFloat(_t(sums, 'TaxTotalAmount'))   || 0;
     r.grossTotal = parseFloat(_t(sums, 'GrandTotalAmount')) || 0;
+
+    // Steuerbefreiung (BT-118/BT-120): Kategorie + Grund aus dem VAT-Breakdown
+    for (const tt of _children(settle).filter(c => c.localName === 'ApplicableTradeTax')) {
+      const cat = _t(tt, 'CategoryCode');
+      if (cat && cat !== 'S') {
+        r.steuerkategorie = cat;
+        r.befreiungsgrund = _t(tt, 'ExemptionReason');
+        break;
+      }
+    }
   }
 
   // Positionen
@@ -250,6 +260,16 @@ function _parseUBL(root) {
     r.netTotal   = parseFloat(_t(lmt, 'TaxExclusiveAmount')) || parseFloat(_t(lmt, 'LineExtensionAmount')) || 0;
     r.grossTotal = parseFloat(_t(lmt, 'TaxInclusiveAmount')) || parseFloat(_t(lmt, 'PayableAmount')) || 0;
     r.vatTotal   = parseFloat(_t(root, 'TaxTotal', 'TaxAmount')) || (r.grossTotal - r.netTotal);
+  }
+
+  // Steuerbefreiung: Kategorie + Grund aus dem TaxSubtotal
+  for (const ts of _all(root, 'TaxSubtotal')) {
+    const cat = _t(ts, 'TaxCategory', 'ID');
+    if (cat && cat !== 'S') {
+      r.steuerkategorie = cat;
+      r.befreiungsgrund = _t(ts, 'TaxCategory', 'TaxExemptionReason');
+      break;
+    }
   }
 
   // Positionen

@@ -278,6 +278,22 @@
               <label>Zahlungsreferenz / Verwendungszweck</label>
               <input type="text" id="zahlungsreferenz" placeholder="Wird automatisch mit Rechnungsnummer befüllt">
             </div>
+            <div class="form-group">
+              <label>Steuerbehandlung bei 0 % MwSt.</label>
+              <select id="steuerkategorie">
+                <option value="Z">Z — Nullsatz (Inland)</option>
+                <option value="K">K — Innergemeinschaftliche Lieferung</option>
+                <option value="AE">AE — Reverse Charge (§ 13b UStG)</option>
+                <option value="G">G — Ausfuhr Drittland</option>
+                <option value="E">E — Steuerbefreit (sonstige)</option>
+              </select>
+              <span class="hint">UNTDID-5305-Code für Positionen mit 0 % MwSt. — wird codiert in die XML übernommen (BT-118/BT-121). Bei 19 %/7 % ohne Wirkung.</span>
+            </div>
+            <div class="form-group">
+              <label>Steuerbefreiungsgrund (Klartext)</label>
+              <input type="text" id="befreiungsgrund" placeholder="leer = Standardtext der Kategorie">
+              <span class="hint">Gesetzlicher Hinweis (BT-120), z. B. „Steuerfreie innergemeinschaftliche Lieferung". Wird automatisch gesetzt.</span>
+            </div>
             <div class="form-group full-width">
               <label>Notiz / Hinweise</label>
               <textarea id="notiz" placeholder="Zahlbar innerhalb von 30 Tagen ohne Abzug."></textarea>

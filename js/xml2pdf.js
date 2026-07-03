@@ -224,6 +224,20 @@ async function buildInvoicePdf(data) {
   y -= 2;
   sumRow('Gesamtbetrag', fmtEur(data.grossTotal), { size: 11, bold: true, color: primary, gap: 22 });
 
+  /* ── Steuerbefreiung (BT-118/BT-120) ── */
+  if (data.befreiungsgrund || (data.steuerkategorie && !['S', 'Z'].includes(data.steuerkategorie))) {
+    text('STEUERBEFREIUNG', M, y, { size: 7.5, bold: true, color: gray });
+    y -= 13;
+    const katName = {
+      K: 'Innergemeinschaftliche Lieferung', AE: 'Reverse Charge',
+      G: 'Ausfuhrlieferung Drittland', E: 'Steuerbefreit', O: 'Nicht steuerbar',
+    }[data.steuerkategorie] || '';
+    const line = [katName ? `Kategorie ${data.steuerkategorie} (${katName})` : '', data.befreiungsgrund]
+      .filter(Boolean).join(': ');
+    for (const l of wrap(line, W - 2 * M)) { text(l, M, y, { size: 9 }); y -= 12; }
+    y -= 6;
+  }
+
   /* ── Zahlung / Notiz ── */
   if (data.iban || data.bic) {
     text('ZAHLUNGSINFORMATIONEN', M, y, { size: 7.5, bold: true, color: gray });

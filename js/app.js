@@ -222,6 +222,8 @@ function fillFormFromExtracted(data) {
     'liefer-plz':          data.lieferPlz,
     'liefer-stadt':        data.lieferStadt,
     'liefer-land':         data.lieferLand,
+    'steuerkategorie':     data.steuerkategorie,
+    'befreiungsgrund':     data.befreiungsgrund,
     'rechnungsnummer':     data.rechnungsnummer,
     'rechnungsdatum':      data.rechnungsdatum,
     'lieferdatum':         data.lieferdatum,
@@ -530,6 +532,9 @@ function collectFormData() {
     zahlungsreferenz:  v('zahlungsreferenz'),
     notiz:             v('notiz'),
     gesellschaft:      v('gesellschaft') || 'WGC',
+    // Steuerbefreiung (bei 0%-Positionen): UNTDID 5305 + BT-120
+    steuerkategorie:   v('steuerkategorie') || 'Z',
+    befreiungsgrund:   v('befreiungsgrund'),
     // Positionen
     positionen:        collectPositionen(),
   };
@@ -573,6 +578,14 @@ function validateForm(data) {
   // Positionen
   if (data.positionen.length === 0) errors.push('Mindestens eine Position');
   if (data.positionen.some(p => !p.beschreibung)) errors.push('Beschreibung für alle Positionen');
+
+  // Innergemeinschaftliche Lieferung (K): EN-16931-Pflichten BR-IC-2/3/11
+  const hasZeroRate = data.positionen.some(p => parseFloat(p.mwst) === 0);
+  if (hasZeroRate && data.steuerkategorie === 'K') {
+    if (!data.verkaeufervat) errors.push('USt-IdNr. Rechnungssteller (Pflicht bei innergemeinschaftl. Lieferung)');
+    if (!data.kaeufervat)    errors.push('USt-IdNr. Empfänger (Pflicht bei innergemeinschaftl. Lieferung)');
+    if (!data.lieferdatum)   errors.push('Lieferdatum (Pflicht bei innergemeinschaftl. Lieferung)');
+  }
 
   return errors;
 }

@@ -123,6 +123,9 @@ function extractInvoiceDataFromItems(allItems) {
   // Lieferanschrift (Shipping Address) — steht bei WGC/SHB am Rechnungsende
   Object.assign(result, _extractShipTo(fullText));
 
+  // Steuerkategorie für 0%-Positionen erkennen (UNTDID 5305: K/AE/G)
+  Object.assign(result, _detectTaxCategory(fullText, result));
+
   // Bekannten Rechnungssteller erkennen → Stammdaten vollständig überschreiben
   const company = _detectCompany(fullText);
   if (company) Object.assign(result, company);
@@ -1092,6 +1095,33 @@ function _extractShipTo(fullText) {
 
   if ((r.lieferName || r.lieferStrasse) && !r.lieferLand) r.lieferLand = 'DE';
   return r;
+}
+
+/* ══════════════════════════════════════════════════════
+   Steuerkategorie bei 0%-Positionen (UNTDID 5305)
+   K  = innergemeinschaftliche Lieferung  (BT-121: VATEX-EU-IC)
+   AE = Reverse Charge                    (BT-121: VATEX-EU-AE)
+   G  = Ausfuhr Drittland                 (BT-121: VATEX-EU-G)
+══════════════════════════════════════════════════════ */
+function _detectTaxCategory(fullText, result) {
+  const hasZero = (result.positionen || []).some(p => !(parseFloat(p.mwst) > 0));
+  if (!hasZero) return {};
+
+  // 1) Expliziter Hinweis im Rechnungstext
+  if (/innergemeinschaftlich|intra-?community/i.test(fullText))
+    return { steuerkategorie: 'K' };
+  if (/reverse\s+charge|Steuerschuldnerschaft\s+des\s+Leistungsempf/i.test(fullText))
+    return { steuerkategorie: 'AE' };
+  if (/Ausfuhrlieferung|export\s+delivery/i.test(fullText))
+    return { steuerkategorie: 'G' };
+
+  // 2) Fallback über das Bestimmungsland (Lieferanschrift vor Empfänger)
+  const EU = new Set(['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','GR','EL','DE',
+                      'HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE']);
+  const dest = result.lieferLand || result.kaeuferland;
+  if (dest && !EU.has(dest))    return { steuerkategorie: 'G' };   // Drittland
+  if (dest && dest !== 'DE')    return { steuerkategorie: 'K' };   // EU-Ausland
+  return {};
 }
 
 /**
