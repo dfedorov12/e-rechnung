@@ -120,6 +120,9 @@ function extractInvoiceDataFromItems(allItems) {
     };
   }
 
+  // Lieferanschrift (Shipping Address) — steht bei WGC/SHB am Rechnungsende
+  Object.assign(result, _extractShipTo(fullText));
+
   // Bekannten Rechnungssteller erkennen → Stammdaten vollständig überschreiben
   const company = _detectCompany(fullText);
   if (company) Object.assign(result, company);
@@ -1014,6 +1017,80 @@ function _parseBuyerWindow(src) {
     ) || '';
   }
 
+  return r;
+}
+
+/* ══════════════════════════════════════════════════════
+   Lieferanschrift (Shipping Address, BG-13 DELIVER TO)
+   WGC deutsch:  "Versandanschrift: NAME" + Folgezeilen
+   WGC englisch: "Shipping address: NAME" + Folgezeilen
+   SHB:          "Lieferanschrift : NAME" + Folgezeilen
+══════════════════════════════════════════════════════ */
+function _extractShipTo(fullText) {
+  const r = {};
+  const lines = fullText.split('\n').map(l => l.trim());
+
+  const labelRe = /^(?:Lieferanschrift|Versandanschrift|Shipping\s+address|Delivery\s+address)\s*:?\s*(.*)$/i;
+  const li = lines.findIndex(l => labelRe.test(l));
+  if (li < 0) return r;
+
+  // Blockzeilen einsammeln: Label-Rest + Folgezeilen bis Terminator/PLZ-Zeile
+  const stopRe = /^(?:Blatt\s|Seite\s|Wir\s+erbitten|IBAN|BIC\b|Bank\b|Konto|SHB\s+Stahl|Rechnungs?-?\s*Nr|Hinweis|Zahlung|Payment|Pricing|Mode\s+of|General\s+Notes|Versandart|Lieferbedingung|\*{3,}|_{5,})/i;
+  const block = [];
+  const first = lines[li].match(labelRe)[1].trim();
+  if (first) block.push(first);
+
+  let plzM = null, plzIdx = -1;
+  for (let k = li + 1; k < Math.min(li + 8, lines.length); k++) {
+    const l = lines[k];
+    if (!l || stopRe.test(l)) break;
+    block.push(l);
+
+    // PLZ-Zeile: "57250 Netphen", "DE 59269 Beckum", "LU 4823 RODANGE"
+    const m = l.match(/^([A-Z]{1,2})?[-\s]?(\d{4,6})\s+([A-ZÄÖÜ][^\n]*?)(?:\s+\([A-Z]{2}\))?$/);
+    if (m) {
+      plzM = m; plzIdx = block.length - 1;
+      // Optionale Länderzeile direkt danach ("LUXEMBURG", "ITALIEN")
+      const next = lines[k + 1];
+      if (next && /^[A-ZÄÖÜ][A-ZÄÖÜ\s]{3,30}$/.test(next) && !/\d/.test(next)) {
+        r.lieferLand = _countryCode(next.trim());
+      }
+      break;
+    }
+  }
+  if (!block.length) return r;
+
+  if (plzM) {
+    if (plzM[1]) {
+      const one = { D: 'DE', A: 'AT', F: 'FR', I: 'IT', L: 'LU', B: 'BE', E: 'ES', P: 'PT' };
+      r.lieferLand = plzM[1].length === 1 ? (one[plzM[1]] || plzM[1]) : plzM[1];
+    }
+    r.lieferPlz   = plzM[2];
+    r.lieferStadt = plzM[3].trim();
+    // Straße = Zeile direkt über der PLZ-Zeile, alles davor = Name(-szeilen)
+    if (plzIdx >= 2) {
+      r.lieferStrasse = block[plzIdx - 1];
+      r.lieferName    = block.slice(0, plzIdx - 1).join(' ');
+    } else if (plzIdx === 1) {
+      r.lieferName = block[0];
+    }
+  } else {
+    // Kein PLZ-Muster (z. B. Indien): Name = erste Zeile, Rest als Straße,
+    // Land aus letzter Großbuchstaben-Zeile, PLZ aus "POST CODE 490001"
+    r.lieferName = block[0];
+    const rest = block.slice(1).filter(l => {
+      if (/^[A-ZÄÖÜ][A-ZÄÖÜ\s]{3,30}$/.test(l) && !/\d/.test(l)) {
+        r.lieferLand = _countryCode(l.trim());
+        return false;
+      }
+      return true;
+    });
+    const pcM = rest.join(' ').match(/POST\s*CODE[:\s]*(\d{4,8})/i);
+    if (pcM) r.lieferPlz = pcM[1];
+    r.lieferStrasse = rest.join(', ');
+  }
+
+  if ((r.lieferName || r.lieferStrasse) && !r.lieferLand) r.lieferLand = 'DE';
   return r;
 }
 

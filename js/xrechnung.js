@@ -200,6 +200,15 @@ function buildXML(data, profile = 'xrechnung') {
     </ram:ApplicableHeaderTradeAgreement>
 
     <ram:ApplicableHeaderTradeDelivery>
+      ${(data.lieferName || data.lieferStrasse || data.lieferPlz) ? `<ram:ShipToTradeParty>
+        ${data.lieferName ? `<ram:Name>${esc(data.lieferName)}</ram:Name>` : ''}
+        <ram:PostalTradeAddress>
+          ${data.lieferPlz ? `<ram:PostcodeCode>${esc(data.lieferPlz)}</ram:PostcodeCode>` : ''}
+          ${data.lieferStrasse ? `<ram:LineOne>${esc(data.lieferStrasse)}</ram:LineOne>` : ''}
+          ${data.lieferStadt ? `<ram:CityName>${esc(data.lieferStadt)}</ram:CityName>` : ''}
+          <ram:CountryID>${esc(data.lieferLand || 'DE')}</ram:CountryID>
+        </ram:PostalTradeAddress>
+      </ram:ShipToTradeParty>` : ''}
       ${data.lieferdatum ? `<ram:ActualDeliverySupplyChainEvent>
         <ram:OccurrenceDateTime>
           <udt:DateTimeString format="102">${fmtDate(data.lieferdatum)}</udt:DateTimeString>

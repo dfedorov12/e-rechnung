@@ -143,6 +143,20 @@ async function buildInvoicePdf(data) {
   });
   y -= 34;
 
+  /* ── Lieferanschrift (BG-13) ── */
+  if (data.lieferName || data.lieferStrasse || data.lieferPlz) {
+    text('LIEFERANSCHRIFT', M, y, { size: 7.5, bold: true, color: gray });
+    y -= 12;
+    const addr = [
+      data.lieferName,
+      data.lieferStrasse,
+      [data.lieferPlz, data.lieferStadt].filter(Boolean).join(' '),
+      data.lieferLand && data.lieferLand !== 'DE' ? data.lieferLand : '',
+    ].filter(Boolean).join(' · ');
+    for (const l of wrap(addr, W - 2 * M)) { text(l, M, y, { size: 9 }); y -= 12; }
+    y -= 10;
+  }
+
   /* ── Positionstabelle ── */
   // Spalten: # | Beschreibung | Menge | Einheit | Einzelpreis | MwSt % | Gesamt
   const cols = {

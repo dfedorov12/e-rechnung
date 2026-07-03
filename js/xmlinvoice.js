@@ -146,6 +146,16 @@ function _parseCII(root) {
 
   r.lieferdatum = _xmlDate(_t(delivery, 'ActualDeliverySupplyChainEvent', 'OccurrenceDateTime', 'DateTimeString'));
 
+  // Lieferanschrift (BG-13 DELIVER TO)
+  const shipTo = _q(delivery, 'ShipToTradeParty');
+  if (shipTo) {
+    r.lieferName    = _t(shipTo, 'Name');
+    r.lieferStrasse = _t(shipTo, 'PostalTradeAddress', 'LineOne');
+    r.lieferPlz     = _t(shipTo, 'PostalTradeAddress', 'PostcodeCode');
+    r.lieferStadt   = _t(shipTo, 'PostalTradeAddress', 'CityName');
+    r.lieferLand    = _t(shipTo, 'PostalTradeAddress', 'CountryID');
+  }
+
   // Zahlung / Summen
   if (settle) {
     r.zahlungsreferenz  = _t(settle, 'PaymentReference');
@@ -186,6 +196,16 @@ function _parseUBL(root) {
   r.faelligkeitsdatum = _xmlDate(_t(root, 'DueDate'));
   r.notiz             = _t(root, 'Note');
   r.lieferdatum       = _xmlDate(_t(root, 'Delivery', 'ActualDeliveryDate'));
+
+  // Lieferanschrift (BG-13): cac:Delivery > DeliveryLocation/Address + DeliveryParty
+  const dloc = _q(root, 'Delivery', 'DeliveryLocation', 'Address');
+  if (dloc) {
+    r.lieferStrasse = _t(dloc, 'StreetName');
+    r.lieferStadt   = _t(dloc, 'CityName');
+    r.lieferPlz     = _t(dloc, 'PostalZone');
+    r.lieferLand    = _t(dloc, 'Country', 'IdentificationCode');
+  }
+  r.lieferName = _t(root, 'Delivery', 'DeliveryParty', 'PartyName', 'Name');
 
   const buyerRef = _t(root, 'BuyerReference');
 

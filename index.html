@@ -217,6 +217,39 @@
         </div>
       </div>
 
+      <!-- Lieferanschrift (optional, BG-13) -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🚚</span>
+          <h3>Lieferanschrift / Versandanschrift</h3>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label>Firma / Name</label>
+              <input type="text" id="liefer-name" placeholder="Abweichender Lieferort — Firma">
+              <span class="hint">Optional — nur ausfüllen, wenn die Lieferanschrift von der Empfängeranschrift abweicht. Wird automatisch aus der Rechnung erkannt (Versandanschrift / Shipping address).</span>
+            </div>
+            <div class="form-group full-width">
+              <label>Straße & Hausnummer</label>
+              <input type="text" id="liefer-strasse" placeholder="Lieferstraße 1">
+            </div>
+            <div class="form-group">
+              <label>PLZ</label>
+              <input type="text" id="liefer-plz" placeholder="12345" maxlength="10">
+            </div>
+            <div class="form-group">
+              <label>Ort</label>
+              <input type="text" id="liefer-stadt" placeholder="Lieferort">
+            </div>
+            <div class="form-group">
+              <label>Land</label>
+              <input type="text" id="liefer-land" placeholder="DE" maxlength="2">
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Rechnungsdaten -->
       <div class="card">
         <div class="card-header">
