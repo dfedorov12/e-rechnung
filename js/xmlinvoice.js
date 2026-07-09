@@ -183,6 +183,7 @@ function _parseCII(root) {
     const qtyEl = _q(li, 'SpecifiedLineTradeDelivery', 'BilledQuantity');
     const menge = qtyEl ? parseFloat(qtyEl.textContent) || 0 : 0;
     r.positionen.push({
+      posnr:        _t(li, 'AssociatedDocumentLineDocument', 'LineID'),
       beschreibung: _t(li, 'SpecifiedTradeProduct', 'Name'),
       menge,
       einheit:      _unitFromCode(qtyEl ? qtyEl.getAttribute('unitCode') : ''),
@@ -276,6 +277,7 @@ function _parseUBL(root) {
   for (const li of _all(root, 'InvoiceLine')) {
     const qtyEl = _q(li, 'InvoicedQuantity');
     r.positionen.push({
+      posnr:        _t(li, 'ID'),
       beschreibung: _t(li, 'Item', 'Name') || _t(li, 'Item', 'Description'),
       menge:        qtyEl ? parseFloat(qtyEl.textContent) || 0 : 0,
       einheit:      _unitFromCode(qtyEl ? qtyEl.getAttribute('unitCode') : ''),

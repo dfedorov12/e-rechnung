@@ -252,10 +252,12 @@ function extractLineItemsGermanWGC(fullText) {
   // oder "External verification" dürfen NICHT hier stehen!
   const techRe = /^(?:Ihre\s+Bestellung|Auftrags-Nr|Kundenzeichn|Modellnummer|Abmessung|Werkstoff|Masse\s*[\/|]|Ober|Produktions|Verbringung|Abgang|Lieferreferenz|z\.\s*Zt\.|KE\d|Pattern\s+\d)/i;
 
-  // Positionszeile: [Nr.] ArtikelCode Menge Einheit [...]
+  // Positionszeile: [PosNr] ArtikelCode Menge Einheit [...]
+  // PosNr optional & mehrstufig: "1", "10", "1.1", "1.2.1", "1,2", "1,2,3"
+  //   (Komma wird später zu Punkt normalisiert)
   // \s* statt \s+: toleriert PDF.js-Glyphen ohne Zwischenraum (gap < 2 pt)
   // Einheiten: St(ück)/VE/Stk/ME/Pce/pcs
-  const itemRe = /^(?:\d+(?:\.\d+)?\s+)?(\d{2,6})\s+(\d+)\s*(?:St|VE|Stk|ME|Pce|pcs)/i;
+  const itemRe = /^(?:(\d+(?:[.,]\d+)*)\s+)?(\d{2,6})\s+(\d+)\s*(?:St|VE|Stk|ME|Pce|pcs)/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -264,8 +266,9 @@ function extractLineItemsGermanWGC(fullText) {
     const codeM = line.match(itemRe);
     if (!codeM) continue;
 
-    const code  = codeM[1];
-    const menge = parseFloat(codeM[2]) || 1;
+    const posnr = _normPosNr(codeM[1]);
+    const code  = codeM[2];
+    const menge = parseFloat(codeM[3]) || 1;
 
     // Beträge in der aktuellen Zeile — Minus-Zeichen miterfassen (Gutschriften)
     let amounts = (line.match(/-?[\d.]+,\d{2}/g) || []).map(_parseDE);
@@ -319,6 +322,7 @@ function extractLineItemsGermanWGC(fullText) {
     }
 
     items.push({
+      posnr,
       beschreibung: `${code} – ${desc}`,
       menge,
       einheit:      'Stk',
@@ -465,12 +469,13 @@ function extractLineItemsGermanSHB(fullText) {
         const name = /^MTZ/i.test(label)
           ? 'MTZ – Materialteuerungszuschlag'
           : 'ETZ – Energieteuerungszuschlag';
-        items.push({ beschreibung: name, menge: 1, einheit: 'Pausch.', einzelpreis: gesamt, mwst: mwstDoc });
+        items.push({ posnr: '', beschreibung: name, menge: 1, einheit: 'Pausch.', einzelpreis: gesamt, mwst: mwstDoc });
       } else {
         // Hauptposition (Preis / Modelleinrichtung / Preis inkl. …)
         const m = menge > 0 ? menge : 1;
         items.push({
-          beschreibung: `${posNr ? posNr + ' – ' : ''}${desc || label}`,
+          posnr:        _normPosNr(posNr),
+          beschreibung: desc || label,
           menge:        m,
           einheit:      _unitCode(einheit),
           einzelpreis:  gesamt / m,   // Gesamt/Menge → Summe bleibt exakt
@@ -1152,11 +1157,11 @@ function extractLineItemsEnglish(fullText) {
   const items  = [];
   const lines  = fullText.split('\n');
 
-  // Muster: [Pos] ProduktCode ... N pcs. Einzelpreis [%] Gesamtpreis
+  // Muster: [PosNr] ProduktCode ... N pcs. Einzelpreis [%] Gesamtpreis
   // z. B. "1    31857                             1 pcs.   55.187,37     55.187,37"
-  // oder  "     14166                             1 pcs.   6.549,64       6.549,64"
-  // Optionale %-Spalte (1–2 Vorkommastellen) zwischen Einzel- und Gesamtpreis
-  const itemRe = /(?:^\s*\d+\s+)?(\d{4,6})\s[\s\S]*?(\d+)\s+pcs\.\s+([\d.]+,\d{2})(?:\s+(\d{1,2},\d{2}))?\s+([\d.]+,\d{2})/;
+  // oder  "1.1  33225                             4 pcs.   11.800,50      47.202,00"
+  // PosNr optional & mehrstufig ("1", "1.1", "1,2"); %-Spalte optional
+  const itemRe = /(?:^\s*(\d+(?:[.,]\d+)*)\s+)?(\d{4,6})\s[\s\S]*?(\d+)\s+pcs\.\s+([\d.]+,\d{2})(?:\s+(\d{1,2},\d{2}))?\s+([\d.]+,\d{2})/;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -1167,15 +1172,16 @@ function extractLineItemsEnglish(fullText) {
     const m = line.match(itemRe);
     if (!m) continue;
 
-    const productCode = m[1];
-    const menge       = parseFloat(m[2]) || 1;
-    const einzelpreis = _parseDE(m[3]);
+    const posnr       = _normPosNr(m[1]);
+    const productCode = m[2];
+    const menge       = parseFloat(m[3]) || 1;
+    const einzelpreis = _parseDE(m[4]);
 
     // %-Spalte: Richtung prüfen (Zuschlag → negativer Rabatt, Rabatt → positiv)
     let rabatt = 0;
-    if (m[4]) {
-      const pct   = _parseDE(m[4]);
-      const total = _parseDE(m[5]);
+    if (m[5]) {
+      const pct   = _parseDE(m[5]);
+      const total = _parseDE(m[6]);
       if (pct > 0 && pct < 100) {
         if (Math.abs(menge * einzelpreis * (1 + pct / 100) - total) <= 0.02) rabatt = -pct;
         else if (Math.abs(menge * einzelpreis * (1 - pct / 100) - total) <= 0.02) rabatt = pct;
@@ -1193,6 +1199,7 @@ function extractLineItemsEnglish(fullText) {
     }
 
     items.push({
+      posnr,
       beschreibung: `${productCode} – ${desc}`,
       menge,
       einheit:      'Stk',
@@ -1302,6 +1309,20 @@ function _deDate(s) {
 
 function _parseDE(s) {
   return parseFloat(String(s).replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+/**
+ * Positionsnummer normalisieren:
+ *   "1,2" → "1.2", "1,2,3" → "1.2.3" (Komma-Trenner → Punkt)
+ *   "0001" → "1", "0010" → "10" (führende Nullen je Ebene entfernen)
+ * @returns {string} normalisierte Nummer oder '' wenn nicht vorhanden
+ */
+function _normPosNr(s) {
+  if (!s) return '';
+  return String(s).trim()
+    .split(/[.,]/)
+    .map(part => part.replace(/^0+(?=\d)/, ''))  // führende Nullen weg, min. 1 Ziffer
+    .join('.');
 }
 
 function _unitCode(u) {

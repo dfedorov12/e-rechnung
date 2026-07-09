@@ -56,6 +56,15 @@ function buildXML(data, profile = 'xrechnung') {
 
   const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+  // Eindeutige LineIDs (BT-126): Positionsnummer bevorzugen, Kollisionen auflösen
+  const _usedIds = new Set();
+  const lineIds = lines.map((p, i) => {
+    let id = String(p.posnr || (i + 1)).trim() || String(i + 1);
+    while (_usedIds.has(id)) id = `${id}.${i + 1}`;
+    _usedIds.add(id);
+    return id;
+  });
+
   const lineXML = lines.map((p, i) => {
     // Effektiver Einzelpreis nach Rabatt/Zuschlag → Menge × Preis = Zeilensumme (konsistent)
     const rabattFaktor = 1 - (parseFloat(p.rabatt) || 0) / 100;
@@ -66,7 +75,7 @@ function buildXML(data, profile = 'xrechnung') {
     return `
     <ram:IncludedSupplyChainTradeLineItem>
       <ram:AssociatedDocumentLineDocument>
-        <ram:LineID>${i + 1}</ram:LineID>
+        <ram:LineID>${esc(lineIds[i])}</ram:LineID>
       </ram:AssociatedDocumentLineDocument>
       <ram:SpecifiedTradeProduct>
         <ram:Name>${esc(p.beschreibung)}</ram:Name>

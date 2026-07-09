@@ -160,8 +160,8 @@ async function buildInvoicePdf(data) {
   /* ── Positionstabelle ── */
   // Spalten: # | Beschreibung | Menge | Einheit | Einzelpreis | MwSt % | Gesamt
   const cols = {
-    nr:     { x: M,       w: 22 },
-    besch:  { x: M + 24,  w: 216 },
+    nr:     { x: M,       w: 32 },
+    besch:  { x: M + 36,  w: 204 },
     menge:  { x: M + 244, w: 46, right: true },
     einheit:{ x: M + 294, w: 42 },
     preis:  { x: M + 338, w: 62, right: true },
@@ -171,7 +171,7 @@ async function buildInvoicePdf(data) {
 
   const tableHeader = () => {
     page.drawRectangle({ x: M - 4, y: y - 4, width: W - 2 * M + 8, height: 16, color: light });
-    text('#',           cols.nr.x, y, { size: 7.5, bold: true, color: gray });
+    text('Pos.',        cols.nr.x, y, { size: 7.5, bold: true, color: gray });
     text('Beschreibung', cols.besch.x, y, { size: 7.5, bold: true, color: gray });
     textRight('Menge',  cols.menge.x + cols.menge.w, y, { size: 7.5, bold: true, color: gray });
     text('Einheit',     cols.einheit.x, y, { size: 7.5, bold: true, color: gray });
@@ -194,7 +194,7 @@ async function buildInvoicePdf(data) {
     }
 
     const gesamt = p.gesamt || (p.menge * p.einzelpreis);
-    text(String(i + 1), cols.nr.x, y, { size: 9, color: gray });
+    text(String(p.posnr || (i + 1)), cols.nr.x, y, { size: 9, color: gray });
     beschLines.forEach((l, li) => text(l, cols.besch.x, y - li * 11, { size: 9 }));
     textRight(String(p.menge ?? ''), cols.menge.x + cols.menge.w, y, { size: 9 });
     text(p.einheit || '', cols.einheit.x, y, { size: 9 });

@@ -391,7 +391,7 @@ function addPositionRow(data = {}) {
   tr.dataset.row = rowCounter;
 
   tr.innerHTML = `
-    <td style="width:40px; text-align:center; color:var(--gray-400); font-size:12px;">${tbody.children.length + 1}</td>
+    <td style="width:68px;"><input type="text" class="pos-nr" placeholder="${tbody.children.length + 1}" value="${escHTML(data.posnr || '')}" title="Positionsnummer (z. B. 1, 1.1, 1.2.1)"></td>
     <td style="min-width:200px;"><input type="text" class="pos-beschreibung" placeholder="Leistungsbeschreibung" value="${escHTML(data.beschreibung || '')}"></td>
     <td style="width:80px;"><input type="number" class="pos-menge" placeholder="1" min="0" step="0.001" value="${data.menge || 1}"></td>
     <td style="width:90px;">
@@ -434,13 +434,17 @@ function addPositionRow(data = {}) {
 }
 
 function renumberRows() {
+  // Nur den Platzhalter (fortlaufende Nr.) aktualisieren — den erkannten
+  // Positionsnummern-Wert nicht überschreiben.
   document.querySelectorAll('#positions-body tr').forEach((tr, i) => {
-    tr.querySelector('td:first-child').textContent = i + 1;
+    const nr = tr.querySelector('.pos-nr');
+    if (nr) nr.placeholder = i + 1;
   });
 }
 
 function collectPositionen() {
-  return Array.from(document.querySelectorAll('#positions-body tr')).map(tr => ({
+  return Array.from(document.querySelectorAll('#positions-body tr')).map((tr, i) => ({
+    posnr: tr.querySelector('.pos-nr').value.trim() || String(i + 1),
     beschreibung: tr.querySelector('.pos-beschreibung').value.trim(),
     menge: parseFloat(tr.querySelector('.pos-menge').value) || 0,
     einheit: tr.querySelector('.pos-einheit').value,
