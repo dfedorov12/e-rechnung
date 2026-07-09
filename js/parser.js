@@ -161,8 +161,8 @@ function _isGermanSHBInvoice(text) {
 function extractMetadataGermanWGC(fullText) {
   const r = {};
 
-  // Rechnungsnummer: "Rechnung  Nr: 4260264"
-  const invM = fullText.match(/Rechnung\s+Nr[:\s]+(\d{4,12})/i);
+  // Rechnungsnummer: "Rechnung Nr: 4260264" — auch Gutschrift/Rechnungskorrektur
+  const invM = fullText.match(/(?:Rechnung(?:skorrektur)?|Gutschrift)\s+Nr[:\s]+(\d{4,12})/i);
   if (invM) r.rechnungsnummer = invM[1];
 
   // Datum-Zeile: "Lieferdatum Datum" + Datenzeile "08.05.26  12.05.26"
@@ -202,7 +202,9 @@ function extractMetadataGermanWGC(fullText) {
  */
 function extractBuyerWGCGerman(buyerBlock, leftColumnText, leftText, fullText) {
   // Käufer-USt-IdNr: "Ihre USt-Id-Nr: DE815902511" (optional, BT-48)
-  const vatM = fullText.match(/Ihre\s+USt-?Id-?Nr\.?\s*:?[ \t]*([A-Z]{2}[\dA-Z ]{2,18})/i);
+  // oder Schweizer Format "Empfänger MwStNr.: CHE-101.390.201"
+  const vatM = fullText.match(/Ihre\s+USt-?Id-?Nr\.?\s*:?[ \t]*([A-Z]{2}[\dA-Z ]{2,18})/i)
+            || fullText.match(/(?:Empf.nger\s+)?MwSt-?Nr\.?\s*:?[ \t]*(CHE-?[\d.\s]{9,15})/i);
   const kaeufervat = vatM ? vatM[1].replace(/\s+/g, '') : '';
 
   const w = _parseBuyerWindow(buyerBlock);
@@ -989,7 +991,13 @@ function _parseBuyerWindow(src) {
   // PLZ-Zeile: "LU 1160 LUXEMBOURG", "D-04610 Meuselwitz", "57025 PIOMBINO (LI)"
   let plzIdx = -1, plzM = null;
   for (let i = 0; i < after.length; i++) {
-    const m = after[i].match(/^([A-Z]{1,2})?[-\s]?(\d{4,6})\s+([A-ZÄÖÜ][^\n]*?)(?:\s+\([A-Z]{2}\))?$/);
+    let m = after[i].match(/^([A-Z]{1,2})?[-\s]?(\d{4,6})\s+([A-ZÄÖÜ][^\n]*?)(?:\s+\([A-Z]{2}\))?$/);
+    // Fallback: PLZ mit Leerzeichen aus PDF.js-Glyphen ("33 2 11 GIJÓN" → "33211")
+    if (!m) {
+      const m2 = after[i].match(/^([A-Z]{1,2})?[-\s]?(\d[\d ]{2,7}\d)\s+([A-ZÄÖÜ].*)$/);
+      const digits = m2 ? m2[2].replace(/ /g, '') : '';
+      if (m2 && digits.length >= 4 && digits.length <= 6) m = [m2[0], m2[1], digits, m2[3]];
+    }
     if (m) { plzIdx = i; plzM = m; break; }
   }
   if (plzM) {
@@ -1001,6 +1009,16 @@ function _parseBuyerWindow(src) {
     r.kaeuferstadt = plzM[3].trim();
     // Straße = Zeile direkt über der PLZ-Zeile (Fensteradresse)
     if (plzIdx > 0) r.kaeuferstrasse = after[plzIdx - 1];
+  } else {
+    // UK-Format: alphanumerische PLZ, oft "STADT/COUNTY, DN16 1BP" (keine numerische PLZ)
+    const ukIdx = after.findIndex(l => /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/.test(l));
+    if (ukIdx >= 0) {
+      const l  = after[ukIdx];
+      const pc = l.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/)[1];
+      r.kaeuferplz   = pc.replace(/\s+/g, ' ').trim();
+      r.kaeuferstadt = l.replace(pc, '').replace(/[,\s]+$/, '').split(',').pop().trim() || l.split(',')[0].trim();
+      if (ukIdx > 0) r.kaeuferstrasse = after[ukIdx - 1].replace(/,\s*$/, '');
+    }
   }
 
   // Land aus reiner Großbuchstaben-Zeile ("LUXEMBURG", "ITALIEN", "TSCHECHISCHE REPUBLIK").
@@ -1325,6 +1343,23 @@ function _countryCode(name) {
     'POLEN': 'PL', 'POLAND': 'PL',
     'LUXEMBURG': 'LU', 'LUXEMBOURG': 'LU',
     'INDIEN': 'IN', 'INDIA': 'IN',
+    'DÄNEMARK': 'DK', 'DAENEMARK': 'DK', 'DENMARK': 'DK',
+    'SCHWEDEN': 'SE', 'SWEDEN': 'SE',
+    'NORWEGEN': 'NO', 'NORWAY': 'NO',
+    'FINNLAND': 'FI', 'FINLAND': 'FI',
+    'PORTUGAL': 'PT',
+    'IRLAND': 'IE', 'IRELAND': 'IE',
+    'UNGARN': 'HU', 'HUNGARY': 'HU',
+    'SLOWAKEI': 'SK', 'SLOVAKIA': 'SK',
+    'SLOWENIEN': 'SI', 'SLOVENIA': 'SI',
+    'RUMÄNIEN': 'RO', 'ROMANIA': 'RO',
+    'BULGARIEN': 'BG', 'BULGARIA': 'BG',
+    'KROATIEN': 'HR', 'CROATIA': 'HR',
+    'GRIECHENLAND': 'GR', 'GREECE': 'GR',
+    'TÜRKEI': 'TR', 'TURKEY': 'TR', 'TURKIYE': 'TR',
+    'USA': 'US', 'UNITED STATES': 'US', 'UNITED STATES OF AMERICA': 'US',
+    'CHINA': 'CN', 'JAPAN': 'JP', 'SÜDKOREA': 'KR', 'SOUTH KOREA': 'KR',
+    'GROSSBRITANNIEN UND NORDIRLAND': 'GB',
   };
   return map[name.toUpperCase()] || name.slice(0, 2).toUpperCase();
 }
