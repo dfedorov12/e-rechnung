@@ -126,9 +126,17 @@ function extractInvoiceDataFromItems(allItems) {
   // Steuerkategorie für 0%-Positionen erkennen (UNTDID 5305: K/AE/G)
   Object.assign(result, _detectTaxCategory(fullText, result));
 
-  // Bekannten Rechnungssteller erkennen → Stammdaten vollständig überschreiben
+  // Bekannten Rechnungssteller erkennen → kanonische Stammdaten überschreiben.
+  // IBAN/BIC sind hiervon AUSGENOMMEN: sie stammen aus dem Rechnungsfuß, weil
+  // WGC je nach Factoring zwei verschiedene Bankkonten (IBANs) verwendet.
   const company = _detectCompany(fullText);
-  if (company) Object.assign(result, company);
+  if (company) {
+    const extractedIban = result.iban;
+    const extractedBic  = result.bic;
+    Object.assign(result, company);
+    if (extractedIban) result.iban = extractedIban;
+    if (extractedBic)  result.bic  = extractedBic;
+  }
 
   return result;
 }
