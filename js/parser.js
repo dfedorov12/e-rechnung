@@ -994,10 +994,15 @@ function _parseBuyerWindow(src) {
   // Internationale Rechtsformen — mit Wortgrenzen (kein Treffer in "INCOTERMS")
   const intlForms = /(?:^|\s)(?:S\.p\.A\.?|S\.A\.?|S\.?C\.?A\.?|SCA|S\.r\.l\.?|a\.s\.?|Ltd\.?|Inc\.?|Corp\.?|GmbH|AG|SE|KG|B\.V\.?|N\.V\.?|Oy|A\/S|AB|PLC|SAS)(?=[\s,.;)]|$)/i;
 
-  // Firmenzeile: erste Zeile mit Rechtsform — sonst erste Zeile des Fensters
+  // Firmenzeile: erste Zeile mit Rechtsform — sonst erste Zeile des Fensters.
+  // Mehrzeilige Namen: alle Zeilen vom Fensteranfang bis zur Rechtsform-Zeile
+  // gehören zum Namen (z. B. "Deutsche Edelstahlwerke" + "Witten/Krefeld GmbH & Co. KG").
+  // Vorangehende Zeilen dürfen aber keine Straße/PLZ sein (Sicherheitsnetz).
   let ci = lines.findIndex(l => intlForms.test(l));
   if (ci < 0) ci = 0;
-  r.kaeufer = lines[ci];
+  const addrLike = /^[A-Z]{0,2}[-\s]?\d{4,6}\s|(?:stra(?:ß|ss)e|str\.|weg|gasse|platz|allee)\b/i;
+  const nameParts = lines.slice(0, ci + 1).filter(l => !addrLike.test(l));
+  r.kaeufer = (nameParts.length ? nameParts : [lines[ci]]).join(' ');
 
   const after = lines.slice(ci + 1);
 
