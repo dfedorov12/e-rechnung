@@ -182,24 +182,54 @@ function extractMetadataGermanWGC(fullText) {
     r.rechnungsdatum = _deDate(_fixYear(dtM[2]));
   }
 
-  // Fälligkeitsdatum: "zum 26.05.2026"
-  const dueM = fullText.match(/zum\s+(\d{2}\.\d{2}\.\d{4})/i);
-  if (dueM) r.faelligkeitsdatum = _deDate(dueM[1]);
+  // Fälligkeitsdatum: verbindlicher LETZTER Zahltermin.
+  // Bei Skonto gibt es zwei "zum …"-Zeilen — der Netto-Termin ("rein netto")
+  // ist maßgeblich, nicht der frühere (kürzere) Skonto-Termin.
+  const dueNetto = fullText.match(/zum\s+(\d{2}\.\d{2}\.\d{4})\s+rein\s+netto/i);
+  const dueAll   = [...fullText.matchAll(/zum\s+(\d{2}\.\d{2}\.\d{4})/gi)];
+  if (dueNetto)          r.faelligkeitsdatum = _deDate(dueNetto[1]);
+  else if (dueAll.length) r.faelligkeitsdatum = _deDate(dueAll[dueAll.length - 1][1]);
 
   // Ansprechpartner: Nachname unter der "Bearbeiter:"-Kopfzeile
   // "Bearbeiter: Telefon Fax Kunde …" → Datenzeile "Viehrig 95-211 95-205 …"
   const bearbM = fullText.match(/Bearbeiter\s*:[^\n]*\n\s*([A-ZÄÖÜ][A-Za-zäöüß\-]+)/);
   if (bearbM) r.verkaeufkontakt = bearbM[1];
 
-  // Zahlungsbedingungen → Notiz: "Zahlung  14 Tage netto" + "zum 26.05.2026 rein netto = …"
-  // Zeilenanker verhindert Treffer in "Anzahlung"/"Sonderzahlung" mitten im Text.
-  const zahlM = fullText.match(/^[ \t]*Zahlung\b[ \t]*([^\n]*)\n[ \t]*((?:zum|bis)\s[^\n]+)?/m);
-  if (zahlM) {
-    const parts = [zahlM[1], zahlM[2]].map(s => (s || '').trim()).filter(Boolean);
-    if (parts.length) r.notiz = 'Zahlung: ' + parts.join(', ');
-  }
+  // Zahlungsbedingungen → Notiz: kompletter Block ("Zahlung"-Zeile + alle
+  // folgenden Konditionszeilen: Tage / Skonto / zum … netto). Zeilenanker
+  // gegen "Anzahlung"/"Sonderzahlung".
+  const notiz = _extractZahlungsblock(fullText, /^[ \t]*Zahlung\b[ \t:]*/, /(\d+\s*Tage|Skonto|^zum\s+\d|rein\s+netto|%|EUR|netto)/i);
+  if (notiz) r.notiz = notiz;
 
   return r;
+}
+
+/**
+ * Kompletten Zahlungsbedingungs-Block als mehrzeilige Notiz extrahieren.
+ * @param {string} fullText
+ * @param {RegExp} labelRe  Anker der Startzeile (z. B. /^Zahlung/ oder /^Payment/)
+ * @param {RegExp} condRe   Muster einer Konditions-Folgezeile
+ * @returns {string} "Zahlung: …\n…" oder '' wenn kein Block gefunden
+ */
+function _extractZahlungsblock(fullText, labelRe, condRe) {
+  const lines = fullText.split('\n');
+  const zi = lines.findIndex(l => labelRe.test(l));
+  if (zi < 0) return '';
+
+  const first = lines[zi].replace(labelRe, '').trim();
+  const block = [];
+  // Layout-Quirk (z. B. MULTIGEAR): "N Tage netto" steht direkt ÜBER dem
+  // "Zahlung"-Label — mitnehmen, wenn das Label selbst leer ist.
+  if (!first && zi > 0 && /^\d+\s*(Tage|days)\b/i.test(lines[zi - 1].trim())) {
+    block.push(lines[zi - 1].trim());
+  }
+  if (first) block.push(first);
+  for (let k = zi + 1; k < Math.min(zi + 6, lines.length); k++) {
+    const l = lines[k].trim();
+    if (!l || !condRe.test(l)) break;   // Ende des Blocks
+    block.push(l);
+  }
+  return block.length ? 'Zahlung: ' + block.join('\n') : '';
 }
 
 /**
@@ -909,22 +939,22 @@ function extractMetadataEnglish(fullText) {
     r.rechnungsdatum = _deDate(_fixYear(dtRowM[2]));
   }
 
-  // Fälligkeitsdatum: "until 15.01.2024 net = 8.095,21 EUR"
-  const dueM = fullText.match(/until\s+(\d{2}\.\d{2}\.\d{4})/i);
-  if (dueM) r.faelligkeitsdatum = _deDate(dueM[1]);
+  // Fälligkeitsdatum: verbindlicher LETZTER Zahltermin ("net =").
+  // Bei Skonto stünde der Skonto-Termin zuerst → Netto-Termin bevorzugen.
+  const dueNet = fullText.match(/until\s+(\d{2}\.\d{2}\.\d{4})\s+net\b/i);
+  const dueAll = [...fullText.matchAll(/until\s+(\d{2}\.\d{2}\.\d{4})/gi)];
+  if (dueNet)          r.faelligkeitsdatum = _deDate(dueNet[1]);
+  else if (dueAll.length) r.faelligkeitsdatum = _deDate(dueAll[dueAll.length - 1][1]);
 
   // Ansprechpartner: Nachname unter der "Operator:"-Kopfzeile
   // "Operator: Tel. Fax Customer …" → Datenzeile "Buchs 95-246 95-215 …"
   const opM = fullText.match(/Operator\s*:[^\n]*\n\s*([A-ZÄÖÜ][A-Za-zäöüß\-]+)/);
   if (opM) r.verkaeufkontakt = opM[1];
 
-  // Zahlungsbedingungen → Notiz: "Payment  90 days net" + "until 27.07.2026 net = …"
-  // Zeilenanker verhindert Treffer in "Prepayment"/"Payment Term:" mitten im Text.
-  const payM = fullText.match(/^[ \t]*Payment\b[ \t]*([^\n]*)\n[ \t]*((?:until|at|bis)\s[^\n]+)?/m);
-  if (payM) {
-    const parts = [payM[1], payM[2]].map(s => (s || '').trim()).filter(Boolean);
-    if (parts.length) r.notiz = 'Zahlung: ' + parts.join(', ');
-  }
+  // Zahlungsbedingungen → Notiz: kompletter Block ("Payment"-Zeile + Folgezeilen).
+  // Zeilenanker gegen "Prepayment"/"Payment Term:".
+  const notiz = _extractZahlungsblock(fullText, /^[ \t]*Payment\b[ \t:]*/, /(\d+\s*days|discount|cash|^until\s+\d|^at\s+latest|net\b|%|EUR|USD)/i);
+  if (notiz) r.notiz = notiz;
 
   return r;
 }
