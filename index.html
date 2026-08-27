@@ -416,7 +416,7 @@
     </p>
     <p class="app-footer-version">
       XRechnung&nbsp;3.0 &nbsp;|&nbsp; ZUGFeRD&nbsp;2.4 / Factur-X&nbsp;1.08
-      &nbsp;|&nbsp; EN&nbsp;16931 &nbsp;|&nbsp; Stand: Mai&nbsp;2026
+      &nbsp;|&nbsp; EN&nbsp;16931 &nbsp;|&nbsp; Stand:&nbsp;<span id="app-stand">–</span>
     </p>
   </div>
 </footer>
@@ -449,6 +449,15 @@
 <script src="js/sharepoint.js"></script>
 <script src="js/app.js"></script>
 <script>authInit();</script>
+<script>
+  // "Stand" dynamisch = aktueller Monat/Jahr (bleibt nie veraltet)
+  (function () {
+    var m = ['Januar','Februar','März','April','Mai','Juni','Juli','August',
+             'September','Oktober','November','Dezember'];
+    var d = new Date(), el = document.getElementById('app-stand');
+    if (el) el.textContent = m[d.getMonth()] + ' ' + d.getFullYear();
+  })();
+</script>
 
 </body>
 </html>
