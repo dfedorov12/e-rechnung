@@ -146,6 +146,20 @@ function buildXML(data, profile = 'xrechnung') {
         </ram:DefinedTradeContact>`
     : '';
 
+  // Regulatorische Pflichtangaben (VD-Valitool-71):
+  // BT-33 = rechtliche Zusatzangaben (Freitext: Sitz, Registergericht, GF)
+  // BT-30 = Handelsregisternummer (SpecifiedLegalOrganization/ID)
+  const legalParts = [
+    data.verkaeufstadt      ? `Sitz: ${data.verkaeufstadt}` : '',
+    (data.handelsregister || data.registernr)
+      ? `Registergericht: ${[data.handelsregister, data.registernr].filter(Boolean).join(' ')}` : '',
+    data.geschaeftsfuehrung ? `Geschäftsführung: ${data.geschaeftsfuehrung}` : '',
+  ].filter(Boolean);
+  const sellerDescription = legalParts.length
+    ? `<ram:Description>${esc(legalParts.join(', '))}</ram:Description>` : '';
+  const sellerLegalOrg = data.registernr
+    ? `<ram:SpecifiedLegalOrganization><ram:ID>${esc(data.registernr)}</ram:ID></ram:SpecifiedLegalOrganization>` : '';
+
   const buyerRef = esc(data.leitwegid || data.rechnungsnummer);
   const note = data.notiz ? `<ram:IncludedNote><ram:Content>${esc(data.notiz)}</ram:Content></ram:IncludedNote>` : '';
   const dueDateXML = data.faelligkeitsdatum
@@ -200,6 +214,8 @@ function buildXML(data, profile = 'xrechnung') {
 
       <ram:SellerTradeParty>
         <ram:Name>${esc(data.verkaeufer)}</ram:Name>
+        ${sellerDescription}
+        ${sellerLegalOrg}
         ${sellerContact}
         <ram:PostalTradeAddress>
           <ram:PostcodeCode>${esc(data.verkaeufplz)}</ram:PostcodeCode>

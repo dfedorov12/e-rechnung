@@ -104,6 +104,8 @@ function _parseCII(root) {
   const seller = _q(agreement, 'SellerTradeParty');
   if (seller) {
     r.verkaeufer       = _t(seller, 'Name');
+    r.rechtsangaben    = _t(seller, 'Description');   // BT-33
+    r.registernr       = _t(seller, 'SpecifiedLegalOrganization', 'ID');   // BT-30
     r.verkaeufkontakt  = _t(seller, 'DefinedTradeContact', 'PersonName');
     r.verkaeuftel      = _t(seller, 'DefinedTradeContact', 'TelephoneUniversalCommunication', 'CompleteNumber');
     r.verkaeuferemail  = _t(seller, 'DefinedTradeContact', 'EmailURIUniversalCommunication', 'URIID')
@@ -224,6 +226,8 @@ function _parseUBL(root) {
   const sp = _q(root, 'AccountingSupplierParty', 'Party');
   if (sp) {
     r.verkaeufer      = _t(sp, 'PartyLegalEntity', 'RegistrationName') || _t(sp, 'PartyName', 'Name');
+    r.registernr      = _t(sp, 'PartyLegalEntity', 'CompanyID');       // BT-30
+    r.rechtsangaben   = _t(sp, 'PartyLegalEntity', 'CompanyLegalForm'); // BT-33
     r.verkaeufstrasse = _t(sp, 'PostalAddress', 'StreetName');
     r.verkaeufplz     = _t(sp, 'PostalAddress', 'PostalZone');
     r.verkaeufstadt   = _t(sp, 'PostalAddress', 'CityName');

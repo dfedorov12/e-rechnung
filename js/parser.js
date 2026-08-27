@@ -29,6 +29,11 @@ const _COMPANY_REGISTRY = {
     verkaeufersteuernr: '209/197/00034',
     iban:               'DE33820700000130805501',
     bic:                'DEUTDE8EXXX',
+    // Regulatorische Pflichtangaben (BT-30 / BT-33) — auf WGC-Rechnungen NICHT
+    // aufgedruckt. Bitte echte Werte eintragen (Registergericht, HRB-Nr., GF):
+    handelsregister:    'Amtsgericht Dresden',
+    registernr:         '',   // TODO: HRB-Nummer der Walzengießerei Coswig GmbH
+    geschaeftsfuehrung: '',   // TODO: Geschäftsführung eintragen
     // detect: E-Mail-Domain oder Firmenname im PDF
     _detect: /walze-coswig|walzengi.{0,6}erei\s+coswig|account\s+holder[:\s]+walzen/i,
   },
@@ -46,6 +51,10 @@ const _COMPANY_REGISTRY = {
     // Zahlungskonto laut Rechnungsfuß ("Wir erbitten die Zahlungen … IBAN: DE 77 … 01")
     iban:               'DE77820700000338669501',
     bic:                'DEUTDE8EXXX',
+    // Regulatorische Pflichtangaben (BT-30 / BT-33) — laut Rechnungsfuß
+    handelsregister:    'Amtsgericht Leipzig',
+    registernr:         'HRB 13893',
+    geschaeftsfuehrung: 'Viktor Babushchak',
     // detect: E-Mail-Domain, Firmenname oder „Bösdorf" im PDF
     _detect: /shb-guss|bösdorf|b.sdorf|stahl-?\s*und\s*hartguss|shb\s+stahl/i,
   },

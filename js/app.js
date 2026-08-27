@@ -209,6 +209,9 @@ function fillFormFromExtracted(data) {
     'verkaeufer-email':    data.verkaeuferemail,
     'iban':                data.iban,
     'bic':                 data.bic,
+    'verkaeufer-handelsregister': data.handelsregister,
+    'verkaeufer-registernr':      data.registernr,
+    'verkaeufer-gf':              data.geschaeftsfuehrung,
     'kaeufer':             data.kaeufer,
     'kaeufer-strasse':     data.kaeuferstrasse,
     'kaeufer-plz':         data.kaeuferplz,
@@ -513,6 +516,10 @@ function collectFormData() {
     verkaeuferemail:   v('verkaeufer-email'),
     iban:              v('iban'),
     bic:               v('bic'),
+    // Registerangaben (BT-30 / BT-33)
+    handelsregister:   v('verkaeufer-handelsregister'),
+    registernr:        v('verkaeufer-registernr'),
+    geschaeftsfuehrung: v('verkaeufer-gf'),
     // Käufer
     kaeufer:           v('kaeufer'),
     kaeuferstrasse:    v('kaeufer-strasse'),

@@ -107,6 +107,8 @@ async function buildInvoicePdf(data) {
     [data.verkaeufland !== 'DE' ? data.verkaeufland : ''],
     [data.verkaeufervat      ? `USt-IdNr.: ${data.verkaeufervat}` : ''],
     [data.verkaeufersteuernr ? `Steuernr.: ${data.verkaeufersteuernr}` : ''],
+    [data.registernr         ? `Register: ${data.registernr}` : ''],
+    [data.rechtsangaben || ''],
     [data.verkaeufkontakt    ? `Ansprechpartner: ${data.verkaeufkontakt}` : ''],
     [data.verkaeuftel        ? `Tel.: ${data.verkaeuftel}` : ''],
     [data.verkaeuferemail || ''],
