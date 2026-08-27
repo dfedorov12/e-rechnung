@@ -29,11 +29,11 @@ const _COMPANY_REGISTRY = {
     verkaeufersteuernr: '209/197/00034',
     iban:               'DE33820700000130805501',
     bic:                'DEUTDE8EXXX',
-    // Regulatorische Pflichtangaben (BT-30 / BT-33) — auf WGC-Rechnungen NICHT
-    // aufgedruckt. Bitte echte Werte eintragen (Registergericht, HRB-Nr., GF):
+    // Regulatorische Pflichtangaben (BT-30 / BT-33) — laut Briefkopf (Footer ist
+    // eine Grafik, daher nicht per Text auslesbar → hier fest hinterlegt):
     handelsregister:    'Amtsgericht Dresden',
-    registernr:         '',   // TODO: HRB-Nummer der Walzengießerei Coswig GmbH
-    geschaeftsfuehrung: '',   // TODO: Geschäftsführung eintragen
+    registernr:         'HRB 312',
+    geschaeftsfuehrung: 'Viktor Babushchak',
     // detect: E-Mail-Domain oder Firmenname im PDF
     _detect: /walze-coswig|walzengi.{0,6}erei\s+coswig|account\s+holder[:\s]+walzen/i,
   },
