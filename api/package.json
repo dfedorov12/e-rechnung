@@ -1,0 +1,20 @@
+{
+  "name": "e-rechnung-xml2pdf-api",
+  "version": "1.0.0",
+  "description": "Azure Function (HTTP): E-Rechnungs-XML -> PDF. Fuehrt exakt denselben Konverter aus wie die Web-App (../js/xmlinvoice.js + ../js/xml2pdf.js).",
+  "main": "src/functions/*.js",
+  "scripts": {
+    "sync": "node scripts/sync.js",
+    "prestart": "node scripts/sync.js",
+    "start": "func start",
+    "test": "node scripts/sync.js && node test/run.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "@xmldom/xmldom": "^0.8.10",
+    "pdf-lib": "^1.17.1"
+  }
+}
