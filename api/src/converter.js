@@ -22,6 +22,9 @@ const PDFLib = require('pdf-lib');
 const xmldom = require('@xmldom/xmldom');
 
 const VENDOR_DIR = path.join(__dirname, '..', 'vendor');
+const fontkit = require('@pdf-lib/fontkit');
+let EMBED_FONTS = null;
+try { EMBED_FONTS = require(path.join(VENDOR_DIR, 'font-embed.js')); } catch (e) { /* Fallback: Standard-Helvetica */ }
 
 /** DOMParser-Ersatz fuer Node: xmldom mit strengem Fehler-Handler. */
 class NodeDOMParser {
@@ -50,8 +53,9 @@ function compile(file, wanted) {
     .map(n => `${n}: (typeof ${n} === 'function') ? ${n} : undefined`)
     .join(', ');
   // eslint-disable-next-line no-new-func
-  const factory = new Function('PDFLib', 'DOMParser', 'console', `${source}\n;return { ${returns} };`);
-  return factory(PDFLib, NodeDOMParser, console);
+  const factory = new Function('PDFLib', 'fontkit', 'EMBED_FONTS', 'DOMParser', 'TextEncoder', 'atob', 'console',
+    `${source}\n;return { ${returns} };`);
+  return factory(PDFLib, fontkit, EMBED_FONTS, NodeDOMParser, globalThis.TextEncoder, globalThis.atob, console);
 }
 
 let _mods = null;
@@ -59,10 +63,15 @@ function modules() {
   if (_mods) return _mods;
   const a = compile('xmlinvoice.js', ['parseInvoiceXML']);
   const b = compile('xml2pdf.js', ['buildInvoicePdf']);
+  const c = compile('zugferd.js', ['makeReadablePdfA3']);
   if (typeof a.parseInvoiceXML !== 'function' || typeof b.buildInvoicePdf !== 'function') {
     throw new Error('Konverter-Module (vendor/) konnten nicht geladen werden.');
   }
-  _mods = { parseInvoiceXML: a.parseInvoiceXML, buildInvoicePdf: b.buildInvoicePdf };
+  _mods = {
+    parseInvoiceXML: a.parseInvoiceXML,
+    buildInvoicePdf: b.buildInvoicePdf,
+    makeReadablePdfA3: c.makeReadablePdfA3,
+  };
   return _mods;
 }
 
@@ -72,9 +81,14 @@ function modules() {
  * @returns {Promise<{ data: object, pdf: Uint8Array }>}
  */
 async function convertXmlToPdf(xmlString) {
-  const { parseInvoiceXML, buildInvoicePdf } = modules();
+  const { parseInvoiceXML, buildInvoicePdf, makeReadablePdfA3 } = modules();
   const data = parseInvoiceXML(xmlString);
-  const pdf = await buildInvoicePdf(data);
+  let pdf = await buildInvoicePdf(data);
+  // PDF/A-3b: Schrift ist via fontkit eingebettet; hier OutputIntent/XMP/Trailer-ID ergaenzen.
+  if (typeof makeReadablePdfA3 === 'function') {
+    try { pdf = await makeReadablePdfA3(pdf); }
+    catch (e) { console.warn('PDF/A-Finalisierung uebersprungen:', e.message); }
+  }
   return { data, pdf };
 }
 

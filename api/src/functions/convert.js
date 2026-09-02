@@ -5,15 +5,16 @@
  *   GET  /api/convert   -> JSON-Info (Health-Check / Erreichbarkeitstest)
  *   POST /api/convert   -> Body = XML (CII/UBL), Antwort = application/pdf
  *
- * authLevel "anonymous": ohne M365-Anmeldung erreichbar (fuer Power Automate).
- * Fuer einen einfachen Schutz auf "function" umstellen (siehe README).
+ * authLevel "function": per Function-Key erreichbar (ohne M365), fuer Power Automate.
+ * Der Key gehoert NICHT in den Code — in Power Automate als ?code=<KEY> anhaengen.
+ * Antwort: application/pdf (PDF/A-3b, Schrift eingebettet).
  */
 const { app } = require('@azure/functions');
 const { convertXmlToPdf, healthInfo } = require('../converter');
 
 app.http('convert', {
   methods: ['GET', 'POST'],
-  authLevel: 'anonymous',
+  authLevel: 'function',
   route: 'convert',
   handler: async (request, context) => {
     if (request.method === 'GET') {

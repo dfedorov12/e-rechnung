@@ -2,6 +2,7 @@ node_modules/
 vendor/
 local.settings.json
 test/out.pdf
+rechnung.pdf
 bin/
 obj/
 .python_packages/

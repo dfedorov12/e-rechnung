@@ -36,7 +36,7 @@ function loadHost(file, wanted) {
 
 const xr = loadHost('js/xrechnung.js', ['buildXML', 'calcTotals']);
 const xp = loadHost('js/xml2pdf.js', ['buildInvoicePdf']);
-const zf = loadHost('js/zugferd.js', ['embedXMLIntoPDF']);
+const zf = loadHost('js/zugferd.js', ['embedXMLIntoPDF', 'makeReadablePdfA3']);
 
 /* ── Stammdaten der Aussteller ── */
 const WGC = {
@@ -225,6 +225,10 @@ const SAMPLES = [
     const renderedPdf = await xp.buildInvoicePdf(pdfData);
     const zugferdPdf = await zf.embedXMLIntoPDF(renderedPdf, zugXml, 'zugferd');
     fs.writeFileSync(path.join(OUT, `${s.name}_zugferd.pdf`), Buffer.from(zugferdPdf));
+
+    // Reines PDF/A-3b wie es die API liefert (XML -> PDF, ohne eingebettetes XML)
+    const readablePdf = await zf.makeReadablePdfA3(renderedPdf);
+    fs.writeFileSync(path.join(OUT, `${s.name}_readable_pdfa.pdf`), Buffer.from(readablePdf));
 
     results.push({ name: s.name, gross: totals.grossTotal, kat: s.data.steuerkategorie,
       xmlBytes: Buffer.byteLength(xml), pdfBytes: zugferdPdf.length });

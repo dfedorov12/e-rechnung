@@ -342,6 +342,49 @@ function _pdfaColorSpaceFix(pdfDoc) {
   }
 }
 
+/* ── PDF/A-3b für ein reines, lesbares PDF (ohne eingebettetes XML) ────
+   Für die API (XML→PDF) und die Browser-Umwandlung: die Schrift ist bereits
+   via fontkit eingebettet; hier kommen OutputIntent, PDF/A-3b-XMP (ohne
+   Factur-X-Schema) und Trailer-ID dazu, damit das PDF PDF/A-3b-konform ist. */
+async function makeReadablePdfA3(pdfBytes) {
+  const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  _addOutputIntent(pdfDoc);
+  _setPlainPdfAXMP(pdfDoc);
+  _pdfaColorSpaceFix(pdfDoc);
+  pdfDoc.setProducer('pdf-lib + PDF/A-3 (DIHAG E-Rechnung)');
+  pdfDoc.setModificationDate(new Date());
+  _setTrailerId(pdfDoc);
+  return await pdfDoc.save();
+}
+
+function _setPlainPdfAXMP(pdfDoc) {
+  const BOM = String.fromCharCode(0xFEFF);
+  const now = new Date().toISOString();
+  const xmp =
+`<?xpacket begin="${BOM}" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"
+        xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+      <pdfaid:part>3</pdfaid:part>
+      <pdfaid:conformance>B</pdfaid:conformance>
+      <dc:format>application/pdf</dc:format>
+      <xmp:CreatorTool>E-Rechnung Konverter (DIHAG)</xmp:CreatorTool>
+      <xmp:ModifyDate>${now}</xmp:ModifyDate>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`;
+  const xmpBytes = new TextEncoder().encode(xmp);
+  const stream = pdfDoc.context.stream(xmpBytes, {
+    Type:    PDFLib.PDFName.of('Metadata'),
+    Subtype: PDFLib.PDFName.of('XML'),
+  });
+  pdfDoc.catalog.set(PDFLib.PDFName.of('Metadata'), pdfDoc.context.register(stream));
+}
+
 /* ── Download helpers ────────────────────────────────────────────────── */
 
 function downloadBlob(bytes, filename, mimeType) {

@@ -118,11 +118,11 @@ jobs:
         run: |
           mkdir -p reports
           # Detail-Report (Machine Readable) fuer die Fehleranalyse
-          tools/verapdf/verapdf --flavour 3b --format mrr validation/out/*_zugferd.pdf > reports/verapdf-mrr.xml 2>/dev/null || true
+          tools/verapdf/verapdf --flavour 3b --format mrr validation/out/*.pdf > reports/verapdf-mrr.xml 2>/dev/null || true
           echo "=== Fehlgeschlagene PDF/A-3b-Regeln (haeufigste) ==="
           grep -oE 'clause="[^"]+" testNumber="[0-9]+"' reports/verapdf-mrr.xml | sort | uniq -c | sort -rn | head -15 || true
           echo "=== Zusammenfassung ==="
-          tools/verapdf/verapdf --flavour 3b --format text validation/out/*_zugferd.pdf | tee reports/verapdf.txt
+          tools/verapdf/verapdf --flavour 3b --format text validation/out/*.pdf | tee reports/verapdf.txt
           exit ${PIPESTATUS[0]}
 
       # 5) Mustangproject — zusaetzliche, informative Pruefung (ZUGFeRD-Profil + PDF/A)

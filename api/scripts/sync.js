@@ -9,14 +9,14 @@ const path = require('path');
 
 const SRC = path.join(__dirname, '..', '..', 'js');   // e-rechnung/js
 const DST = path.join(__dirname, '..', 'vendor');     // e-rechnung/api/vendor
-const FILES = ['xmlinvoice.js', 'xml2pdf.js'];
+const FILES = ['xmlinvoice.js', 'xml2pdf.js', 'zugferd.js', 'vendor/font-embed.js'];
 
 fs.mkdirSync(DST, { recursive: true });
 
 let updated = 0;
 for (const f of FILES) {
   const from = path.join(SRC, f);
-  const to = path.join(DST, f);
+  const to = path.join(DST, path.basename(f));
   if (fs.existsSync(from)) {
     fs.copyFileSync(from, to);
     console.log(`sync: ${f}  aktualisiert`);

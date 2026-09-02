@@ -138,6 +138,7 @@
 <script src="js/vendor/fontkit.umd.min.js"></script>
 <script src="js/vendor/font-embed.js"></script>
 <script src="js/xml2pdf.js"></script>
+<script src="js/zugferd.js"></script>
 
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';
@@ -190,6 +191,10 @@ async function handleFile(file) {
 
     showLoading(true, 'PDF wird erzeugt…');
     _pdfBytes = await buildInvoicePdf(data);
+    // PDF/A-3b finalisieren (OutputIntent + XMP + Trailer-ID), Schrift ist eingebettet
+    if (typeof makeReadablePdfA3 === 'function') {
+      try { _pdfBytes = await makeReadablePdfA3(_pdfBytes); } catch (e) { console.warn('PDF/A übersprungen:', e); }
+    }
 
     // Datei-Info anzeigen
     document.getElementById('upload-zone').classList.add('has-file');
