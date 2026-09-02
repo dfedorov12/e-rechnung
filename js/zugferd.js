@@ -120,7 +120,28 @@ async function embedXMLIntoPDF(pdfBytes, xmlString, profile) {
   pdfDoc.setProducer('pdf-lib + ZUGFeRD/Factur-X Generator');
   pdfDoc.setModificationDate(new Date());
 
+  if (isZugferd) _setTrailerId(pdfDoc);   // PDF/A-3: Datei-ID im Trailer (ISO 19005 §6.1.3)
+
   return await pdfDoc.save();
+}
+
+/* ── PDF/A: Datei-ID im Trailer (§6.1.3) ─────────────────────────────── */
+function _hex16() {
+  const b = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function _setTrailerId(pdfDoc) {
+  try {
+    const id = _hex16();
+    const h = PDFLib.PDFHexString.of(id);
+    // ID = [permanent, changing] — bei Neuerstellung identisch
+    pdfDoc.context.trailerInfo.ID = pdfDoc.context.obj([h, PDFLib.PDFHexString.of(id)]);
+  } catch (e) {
+    console.warn('Trailer-ID nicht gesetzt:', e.message);
+  }
 }
 
 /* ── ICC OutputIntent ────────────────────────────────────────────────── */

@@ -23,8 +23,26 @@ const _PDF = {
 async function buildInvoicePdf(data) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
   const doc  = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  // PDF/A-3b verlangt vollständig eingebettete Schriften. Die pdf-lib-Standard-
+  // schrift Helvetica ist NICHT einbettbar. Wenn fontkit + die eingebettete
+  // Schrift (js/vendor/font-embed.js) verfügbar sind, echte TrueType-Schrift
+  // einbetten; sonst Fallback auf Helvetica (dann kein PDF/A).
+  const _fk = (typeof fontkit !== 'undefined') ? fontkit
+            : (typeof window !== 'undefined' && window.fontkit) ? window.fontkit : null;
+  const _ef = (typeof EMBED_FONTS !== 'undefined') ? EMBED_FONTS
+            : (typeof window !== 'undefined' && window.EMBED_FONTS) ? window.EMBED_FONTS : null;
+  let font, bold;
+  if (_fk && _ef) {
+    doc.registerFontkit(_fk);
+    const _u8 = b64 => { const bin = atob(b64); const u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+    font = await doc.embedFont(_u8(_ef.regular), { subset: true });
+    bold = await doc.embedFont(_u8(_ef.bold),    { subset: true });
+  } else {
+    font = await doc.embedFont(StandardFonts.Helvetica);
+    bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  }
 
   const M = _PDF.margin;
   const W = _PDF.pageW;

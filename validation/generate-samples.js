@@ -19,17 +19,19 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(__dirname, 'out');
 const PDFLib = require(path.join(ROOT, 'api/node_modules/pdf-lib'));
+const fontkit = require(path.join(ROOT, 'api/node_modules/@pdf-lib/fontkit'));
+const EMBED_FONTS = require(path.join(ROOT, 'js/vendor/font-embed.js'));
 
 fs.mkdirSync(OUT, { recursive: true });
 
-/* ── Konverter-Module im Host-Realm laden ── */
+/* ── Konverter-Module im Host-Realm laden (fontkit + Schrift injiziert) ── */
 function loadHost(file, wanted) {
   const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
   const ret = wanted.map(n => `${n}:(typeof ${n}!=='undefined')?${n}:undefined`).join(', ');
   // eslint-disable-next-line no-new-func
-  const factory = new Function('PDFLib', 'console', 'atob', 'TextEncoder',
+  const factory = new Function('PDFLib', 'fontkit', 'EMBED_FONTS', 'console', 'atob', 'TextEncoder',
     `${src}\n;return { ${ret} };`);
-  return factory(PDFLib, console, globalThis.atob, globalThis.TextEncoder);
+  return factory(PDFLib, fontkit, EMBED_FONTS, console, globalThis.atob, globalThis.TextEncoder);
 }
 
 const xr = loadHost('js/xrechnung.js', ['buildXML', 'calcTotals']);
