@@ -247,17 +247,28 @@ function buildXML(data, profile = 'xrechnung') {
     </ram:ApplicableHeaderTradeAgreement>
 
     <ram:ApplicableHeaderTradeDelivery>
-      ${(data.lieferName || data.lieferStrasse || data.lieferPlz ||
-         (zeroCat === 'K' && lines.some(p => !(parseFloat(p.mwst) > 0)))) ? `<ram:ShipToTradeParty>
+      ${(() => {
+        // BG-15 DELIVER TO ADDRESS. Wird ausgegeben, wenn Lieferdaten vorliegen
+        // ODER bei innergemeinschaftlicher Lieferung (K) — dort ist das Lieferland
+        // BT-80 Pflicht (BR-IC-12). Da BT-80 in BG-15 liegt, verlangt XRechnung dann
+        // zusätzlich Stadt (BT-77, BR-DE-10) und PLZ (BT-78, BR-DE-11). Fehlen
+        // Lieferdaten, wird die Empfängeradresse als vollständige Lieferadresse genutzt.
+        const needK    = (zeroCat === 'K') && lines.some(p => !(parseFloat(p.mwst) > 0));
+        const hasDeliv = data.lieferName || data.lieferStrasse || data.lieferPlz || data.lieferStadt;
+        if (!hasDeliv && !needK) return '';
+        const shipPlz  = data.lieferPlz   || data.kaeuferplz   || '';
+        const shipCity = data.lieferStadt || data.kaeuferstadt || '';
+        const shipLand = data.lieferLand  || data.kaeuferland  || 'DE';
+        return `<ram:ShipToTradeParty>
         ${data.lieferName ? `<ram:Name>${esc(data.lieferName)}</ram:Name>` : ''}
         <ram:PostalTradeAddress>
-          ${data.lieferPlz ? `<ram:PostcodeCode>${esc(data.lieferPlz)}</ram:PostcodeCode>` : ''}
+          ${shipPlz ? `<ram:PostcodeCode>${esc(shipPlz)}</ram:PostcodeCode>` : ''}
           ${data.lieferStrasse ? `<ram:LineOne>${esc(data.lieferStrasse)}</ram:LineOne>` : ''}
-          ${data.lieferStadt ? `<ram:CityName>${esc(data.lieferStadt)}</ram:CityName>` : ''}
-          <!-- BT-80: bei innergemeinschaftl. Lieferung Pflicht (BR-IC-12) — Fallback Empfängerland -->
-          <ram:CountryID>${esc(data.lieferLand || data.kaeuferland || 'DE')}</ram:CountryID>
+          ${shipCity ? `<ram:CityName>${esc(shipCity)}</ram:CityName>` : ''}
+          <ram:CountryID>${esc(shipLand)}</ram:CountryID>
         </ram:PostalTradeAddress>
-      </ram:ShipToTradeParty>` : ''}
+      </ram:ShipToTradeParty>`;
+      })()}
       ${data.lieferdatum ? `<ram:ActualDeliverySupplyChainEvent>
         <ram:OccurrenceDateTime>
           <udt:DateTimeString format="102">${fmtDate(data.lieferdatum)}</udt:DateTimeString>
