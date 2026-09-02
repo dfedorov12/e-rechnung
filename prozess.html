@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prozess | E-Rechnung | DIHAG</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .proc-lead { color: var(--gray-600); font-size: 14px; line-height: 1.55; }
+    .proc-steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+    .proc-step { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid var(--gray-100); }
+    .proc-step:first-child { border-top: 0; }
+    .proc-num { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--primary-light);
+                color: var(--primary-dark); font-weight: 700; font-size: 13px;
+                display: flex; align-items: center; justify-content: center; }
+    .proc-step h4 { margin: 4px 0 3px; font-size: 14.5px; color: var(--gray-800); }
+    .proc-step p { margin: 0; font-size: 13px; color: var(--gray-600); line-height: 1.5; }
+    .proc-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 720px) { .proc-two { grid-template-columns: 1fr; } }
+    .chk { list-style: none; margin: 0; padding: 0; }
+    .chk li { position: relative; padding: 5px 0 5px 26px; font-size: 13px; color: var(--gray-700); line-height: 1.5; }
+    .chk li::before { content: "✓"; position: absolute; left: 0; top: 5px; color: var(--secondary); font-weight: 700; }
+    .chk li strong { color: var(--gray-800); }
+    .proc-callout { border-left: 3px solid var(--warning); background: #fff8ec;
+                    padding: 12px 14px; border-radius: 6px; font-size: 13px; color: var(--gray-700); line-height: 1.55; }
+    .proc-callout strong { color: var(--gray-900); }
+    .status-list { list-style: none; margin: 0; padding: 0; }
+    .status-list li { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; font-size: 13px; color: var(--gray-700); line-height: 1.5; }
+    .status-dot { flex: 0 0 auto; margin-top: 5px; width: 9px; height: 9px; border-radius: 50%; }
+    .dot-live { background: var(--secondary); }
+    .dot-plan { background: var(--warning); }
+    .proc-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px;
+                background: var(--gray-100); color: var(--gray-600); margin-left: 6px; }
+  </style>
+</head>
+<body class="auth-guard">
+
+<header class="site-header">
+  <div class="site-logo">DIHAG <span>E-Rechnung</span></div>
+  <nav class="site-nav">
+    <a href="index.html">Konverter</a>
+    <a href="prozess.html" class="active">Prozess</a>
+    <a href="xml-zu-pdf.html">XML → PDF</a>
+    <a href="verlauf.html">Verlauf</a>
+    <a href="einstellungen.html" id="nav-einstellungen" style="display:none;">Einstellungen</a>
+  </nav>
+  <div class="auth-user">
+    <div class="auth-avatar" id="auth-initials">…</div>
+    <div class="auth-user-text">
+      <span class="auth-user-name" id="auth-name"></span>
+      <span class="auth-user-email" id="auth-email"></span>
+    </div>
+    <button class="btn-auth-logout" onclick="authLogout()">Abmelden</button>
+  </div>
+</header>
+
+<div class="page-content">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-icon">🧭</div>
+    <div>
+      <h1>So läuft die E-Rechnung</h1>
+      <p>Aus WGC-/SHB-Rechnungen (PDF) werden EN-16931-konforme E-Rechnungen
+         (XRechnung 3.0 / ZUGFeRD 2.4). Diese Seite beschreibt den Ablauf, die
+         eingebauten Prüfungen und den aktuellen Stand.</p>
+      <div class="hero-badges">
+        <span class="badge">XRechnung 3.0</span>
+        <span class="badge">ZUGFeRD 2.4</span>
+        <span class="badge">EN 16931</span>
+        <span class="badge">WGC · SHB</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Einordnung -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🎯</span>
+      <h3>Wozu das Tool dient</h3>
+    </div>
+    <div class="card-body">
+      <p class="proc-lead">
+        Das Tool ist eine <strong>Brücke für den händischen Rest</strong>: für Rechnungen,
+        die manuell geschrieben werden oder aus Systemen ohne native E-Rechnung stammen.
+        Der <strong>Standardprozess ab 2027</strong> bleibt die direkte Erzeugung im jeweiligen
+        ERP, bei der PDF und XML aus einer Quelle entstehen und kein manueller Eingriff nötig ist.
+      </p>
+      <div class="proc-callout" style="margin-top:12px;">
+        <strong>Rechtlicher Rahmen:</strong> Bei ZUGFeRD (PDF + XML) ist der <strong>strukturierte
+        XML-Teil maßgeblich</strong> (BMF-Schreiben 15.10.2024) — weicht das sichtbare PDF davon ab,
+        gilt das XML. Fristen: seit 01.01.2025 Pflicht zum <em>Empfang</em>, ab 01.01.2027 zur
+        <em>Ausstellung</em> (Umsatz &gt; 800.000 €), ab 01.01.2028 für alle.
+      </div>
+    </div>
+  </div>
+
+  <!-- Ablauf -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🔄</span>
+      <h3>Der Ablauf — Ausgangsrechnung erstellen</h3>
+    </div>
+    <div class="card-body">
+      <ol class="proc-steps">
+        <li class="proc-step">
+          <span class="proc-num">1</span>
+          <div>
+            <h4>PDF hochladen</h4>
+            <p>Die Rechnung als PDF in den Konverter ziehen. Die Vorschau erscheint rechts.</p>
+          </div>
+        </li>
+        <li class="proc-step">
+          <span class="proc-num">2</span>
+          <div>
+            <h4>Automatische Erkennung</h4>
+            <p>Die Rechnungsdaten werden aus der Textebene ausgelesen. Bei gescannten PDFs
+               ohne Textebene springt automatisch die Texterkennung (OCR) ein.</p>
+          </div>
+        </li>
+        <li class="proc-step">
+          <span class="proc-num">3</span>
+          <div>
+            <h4>Daten prüfen &amp; ergänzen</h4>
+            <p>Erkannte Felder kontrollieren und Pflichtangaben vervollständigen. Die
+               Verkäufer-Stammdaten (Name, IBAN, USt-IdNr., Register) sind dabei
+               <strong>gesperrt</strong> — Entsperren nur bewusst und protokolliert.</p>
+          </div>
+        </li>
+        <li class="proc-step">
+          <span class="proc-num">4</span>
+          <div>
+            <h4>Automatische Prüfungen</h4>
+            <p>Vor dem Export: IBAN-Prüfziffer, USt-IdNr.-Format, Summenkonsistenz, Abgleich
+               der Schlüsselwerte gegen das Original-PDF und Selbstverifikation des erzeugten XML.</p>
+          </div>
+        </li>
+        <li class="proc-step">
+          <span class="proc-num">5</span>
+          <div>
+            <h4>Exportieren</h4>
+            <p><strong>XRechnung</strong> (reines XML), <strong>ZUGFeRD</strong> (PDF mit
+               eingebettetem XML) oder direkt <strong>als Mail</strong>. Optional lässt sich das
+               PDF aus den Rechnungsdaten erzeugen — dann sind PDF und XML garantiert identisch.</p>
+          </div>
+        </li>
+        <li class="proc-step">
+          <span class="proc-num">6</span>
+          <div>
+            <h4>Ablage &amp; Prüfpfad</h4>
+            <p>Der Export wird in SharePoint abgelegt und im Verlauf gespeichert — inklusive
+               Prüfpfad (Quell-PDF-Hash, manuelle Änderungen, Prüfer).</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="proc-two">
+    <!-- Sicherheiten -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">🛡️</span>
+        <h3>Eingebaute Sicherheiten</h3>
+      </div>
+      <div class="card-body">
+        <ul class="chk">
+          <li><strong>Gesperrte Stammdaten</strong> — Verkäufer-Kernfelder schreibgeschützt.</li>
+          <li><strong>IBAN-Prüfziffer</strong> (mod-97) &amp; USt-IdNr.-Format (EU/CH).</li>
+          <li><strong>Summensperre</strong> — Netto + MwSt = Brutto, Gesamt &gt; 0.</li>
+          <li><strong>PDF ↔ XML-Abgleich</strong> — Schlüsselwerte im Original-PDF gesucht.</li>
+          <li><strong>Selbstverifikation</strong> — XML zurückgelesen und gegen die Anzeige geprüft.</li>
+          <li><strong>PDF aus Daten</strong> — Option für garantierte PDF/XML-Gleichheit.</li>
+          <li><strong>Prüfpfad</strong> — Hash, Änderungs-Diff und Prüfer je Export.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Eingehende + Zugriff -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">📥</span>
+        <h3>Eingang, Zugriff &amp; Verlauf</h3>
+      </div>
+      <div class="card-body">
+        <ul class="chk">
+          <li><strong>XML → PDF</strong> — empfangene E-Rechnungen (XRechnung/ZUGFeRD-XML,
+              CII oder UBL) in ein lesbares PDF umwandeln.</li>
+          <li><strong>Zugriffssteuerung</strong> — Nutzer sehen nur ihre Gesellschaft
+              (WGC und/oder SHB); Konfiguration über den Reiter „Einstellungen" (Admin).</li>
+          <li><strong>Verlauf</strong> — alle Exporte durchsuch- und filterbar, getrennt
+              nach WGC / SHB.</li>
+          <li><strong>Kein CDN</strong> — alle Bibliotheken lokal gehostet; keine externen
+              Aufrufe, verarbeitet wird nur im Browser.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aktueller Stand -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">📌</span>
+      <h3>Aktueller Stand</h3>
+    </div>
+    <div class="card-body">
+      <ul class="status-list">
+        <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Konverter
+            (PDF → XRechnung/ZUGFeRD), XML → PDF, Verlauf, Zugriffssteuerung sowie alle
+            Prüf- und Integritätsmechanismen.</span></li>
+        <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Ablage in
+            SharePoint inkl. Prüfpfad; Mailerstellung direkt aus dem Tool.</span></li>
+        <li><span class="status-dot dot-plan"></span><span><strong>In Vorbereitung:</strong>
+            Power-Automate-Anbindung über einen serverseitigen XML → PDF-Endpunkt (Azure Function,
+            POST/GET, ohne M365-Login) <span class="proc-tag">Deployment durch DIHAG ausstehend</span></span></li>
+      </ul>
+    </div>
+  </div>
+
+</div><!-- /page-content -->
+
+<!-- Footer / Disclaimer -->
+<footer class="app-footer">
+  <div class="app-footer-inner">
+    <p class="app-footer-disclaimer">
+      <strong>Hinweis:</strong> Diese Software erstellt elektronische Rechnungen gemäß
+      XRechnung&nbsp;3.0 und ZUGFeRD&nbsp;2.4&nbsp;/ Factur-X&nbsp;1.08 (EN&nbsp;16931).
+      Es wird keine Gewähr für die steuerliche oder rechtliche Richtigkeit der erzeugten
+      Dokumente übernommen. Der Rechnungsaussteller ist verantwortlich für die Vollständigkeit
+      und Korrektheit aller Angaben. Eigenentwicklung der DIHAG &mdash; nicht zertifiziert nach
+      KoSIT oder FNFE.
+    </p>
+    <p class="app-footer-version">
+      XRechnung&nbsp;3.0 &nbsp;|&nbsp; ZUGFeRD&nbsp;2.4 / Factur-X&nbsp;1.08
+      &nbsp;|&nbsp; EN&nbsp;16931 &nbsp;|&nbsp; Stand:&nbsp;<span id="app-stand">–</span>
+    </p>
+  </div>
+</footer>
+
+<!-- Libraries (lokal, kein CDN) -->
+<script src="js/vendor/msal-browser.min.js"></script>
+
+<!-- App Scripts -->
+<script src="js/auth.js"></script>
+<script src="js/access.js"></script>
+
+<script>onAuthReady(() => initAdminNav());</script>
+<script>authInit();</script>
+<script>
+  (function () {
+    var m = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+    var d = new Date(), el = document.getElementById('app-stand');
+    if (el) el.textContent = m[d.getMonth()] + ' ' + d.getFullYear();
+  })();
+</script>
+
+</body>
+</html>
