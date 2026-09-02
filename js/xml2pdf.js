@@ -163,11 +163,19 @@ async function buildInvoicePdf(data) {
     [data.kaeufermail || ''],
   ].filter(([s]) => s);
 
+  // Spaltenbreiten begrenzen und umbrechen, damit lange Zeilen (z. B. Rechtsform)
+  // nicht in die andere Spalte / über andere Zeilen schreiben.
+  const sellerColW = colB - M - 14;
+  const buyerColW  = W - M - colB;
   const blockStart = y;
   let ys = y;
-  for (const [s, b] of sellerLines) { text(s, M, ys, { size: 9, bold: !!b }); ys -= 13; }
+  for (const [s, b] of sellerLines) {
+    for (const ln of wrap(String(s), sellerColW)) { text(ln, M, ys, { size: 9, bold: !!b }); ys -= 12; }
+  }
   let yb = blockStart;
-  for (const [s, b] of buyerLines)  { text(s, colB, yb, { size: 9, bold: !!b }); yb -= 13; }
+  for (const [s, b] of buyerLines) {
+    for (const ln of wrap(String(s), buyerColW)) { text(ln, colB, yb, { size: 9, bold: !!b }); yb -= 12; }
+  }
   y = Math.min(ys, yb) - 16;
 
   /* ── Metadaten-Zeile ── */
@@ -302,7 +310,7 @@ async function buildInvoicePdf(data) {
     text('ZAHLUNGSINFORMATIONEN', M, y, { size: 7.5, bold: true, color: gray });
     y -= 13;
     if (data.faelligkeitsdatum) { text(`Fällig am: ${fmtDate(data.faelligkeitsdatum)}`, M, y, { size: 9 }); y -= 13; }
-    if (data.kontoinhaber)      { text(`Kontoinhaber: ${data.kontoinhaber}`, M, y, { size: 9 }); y -= 13; }
+    if (data.kontoinhaber)      { for (const l of wrap(`Kontoinhaber: ${data.kontoinhaber}`, W - 2 * M)) { text(l, M, y, { size: 9 }); y -= 12; } }
     if (data.iban) { text(`IBAN: ${data.iban.replace(/(.{4})/g, '$1 ').trim()}`, M, y, { size: 9 }); y -= 13; }
     if (data.bic)  { text(`BIC: ${data.bic}`, M, y, { size: 9 }); y -= 13; }
     if (data.zahlungsbedingungen) {
@@ -322,6 +330,47 @@ async function buildInvoicePdf(data) {
       text(l, M, y, { size: 9 });
       y -= 12;
     }
+  }
+
+  /* ── Seite 2: Weitere Angaben aus der XML ── */
+  const _weitere = data.weitere || [];
+  const _hasPosExtra = (data.positionen || []).some(p => p.note || (p.posExtra && p.posExtra.length));
+  if (_weitere.length || _hasPosExtra) {
+    newPage();
+    text('WEITERE ANGABEN AUS DER XML', M, y - 4, { size: 13, bold: true, color: primary });
+    y -= 12; hline(y, M, W - M, primary); y -= 16;
+    text('Ergänzende Rechnungsinhalte, die auf Seite 1 nicht dargestellt sind.', M, y, { size: 8, color: gray });
+    y -= 18;
+
+    const labW = 165;
+    const kv = (label, value) => {
+      const lines = wrap(String(value), W - M - (M + labW));
+      const need = Math.max(13, lines.length * 12);
+      if (y - need < M + 26) newPage();
+      text(label, M, y, { size: 8.5, bold: true, color: gray });
+      lines.forEach((l, i) => text(l, M + labW, y - i * 12, { size: 9 }));
+      y -= need;
+    };
+    const grp = (title) => {
+      if (y < M + 46) newPage();
+      y -= 5;
+      text(String(title).toUpperCase(), M, y, { size: 8, bold: true, color: primary });
+      y -= 14;
+    };
+
+    let cur = null;
+    for (const it of _weitere) {
+      if (it.group !== cur) { grp(it.group); cur = it.group; }
+      kv(it.label, it.value);
+    }
+    (data.positionen || []).forEach((p, i) => {
+      const items = [];
+      if (p.note) items.push(['Hinweis (BT-127)', p.note]);
+      (p.posExtra || []).forEach(e => items.push([e.label, e.value]));
+      if (!items.length) return;
+      grp(`Position ${p.posnr || (i + 1)}: ${(p.beschreibung || '').slice(0, 60)}`);
+      for (const [l, v] of items) kv(l, v);
+    });
   }
 
   /* ── Fußzeile auf jeder Seite ── */

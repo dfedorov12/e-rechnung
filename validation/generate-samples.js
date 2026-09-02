@@ -252,6 +252,14 @@ const SAMPLES = [
       ...s.data, netTotal: totals.netTotal, vatTotal: totals.vatTotal, grossTotal: totals.grossTotal,
       positionen: s.data.positionen.map(p => ({ ...p, gesamt: p.menge * p.einzelpreis * (1 - (p.rabatt || 0) / 100) })),
     };
+    // Ein Fall erhaelt Zusatzangaben -> erzeugt Seite 2 (prueft 2-seitiges PDF/A)
+    if (s.name === 'wgc_standard_19') {
+      pdfData.weitere = [
+        { group: 'Referenzen', label: 'Lieferschein-Nr. (BT-16)', value: 'LS-2026-001' },
+        { group: 'Steueraufschluesselung', label: 'S · 19 %', value: 'Basis 5.300,00 € · Steuer 1.007,00 €' },
+      ];
+      pdfData.positionen[0] = { ...pdfData.positionen[0], note: 'Testhinweis zur Position (BT-127).', posExtra: [{ label: 'Warennr./HS (BT-158)', value: '82090020' }] };
+    }
     const renderedPdf = await xp.buildInvoicePdf(pdfData);
     const zugferdPdf = await zf.embedXMLIntoPDF(renderedPdf, zugXml, 'zugferd');
     fs.writeFileSync(path.join(OUT, `${s.name}_zugferd.pdf`), Buffer.from(zugferdPdf));

@@ -209,6 +209,7 @@ function _parseCII(root) {
     });
   }
 
+  _extraCII(trans, agreement, delivery, settle, r);
   return r;
 }
 
@@ -318,5 +319,126 @@ function _parseUBL(root) {
     });
   }
 
+  _extraUBL(root, r);
   return r;
+}
+
+/* ══════════════════════════════════════════════════════
+   Weitere Angaben (Seite 2): Felder, die Seite 1 nicht zeigt
+══════════════════════════════════════════════════════ */
+
+/** CII: füllt r.weitere + je Position r.positionen[i].note / .posExtra */
+function _extraCII(trans, agreement, delivery, settle, r) {
+  const w = [];
+  const push = (group, label, value) => { const v = (value || '').trim(); if (v) w.push({ group, label, value: v }); };
+
+  // Referenzen
+  push('Referenzen', 'Auftragsnr. Verkäufer', _t(agreement, 'SellerOrderReferencedDocument', 'IssuerAssignedID'));
+  push('Referenzen', 'Lieferschein-Nr. (BT-16)', _t(delivery, 'DeliveryNoteReferencedDocument', 'IssuerAssignedID'));
+  push('Referenzen', 'Versandavis (BT-16)', _t(delivery, 'DespatchAdviceReferencedDocument', 'IssuerAssignedID'));
+
+  // Verkäufer
+  const seller = _q(agreement, 'SellerTradeParty');
+  for (const reg of _all(seller, 'SpecifiedTaxRegistration')) {
+    const id = _q(reg, 'ID');
+    if (id && id.getAttribute('schemeID') === 'FC') push('Verkäufer', 'Steuernummer (BT-32)', id.textContent);
+  }
+  push('Verkäufer', 'Abteilung', _t(seller, 'DefinedTradeContact', 'DepartmentName'));
+  push('Verkäufer', 'Kennung (BT-29)', _t(seller, 'ID'));
+  push('Verkäufer', 'Handelsname', _t(seller, 'SpecifiedLegalOrganization', 'TradingBusinessName'));
+
+  // Käufer
+  const buyer = _q(agreement, 'BuyerTradeParty');
+  push('Käufer', 'Kennung (BT-46)', _t(buyer, 'ID'));
+  push('Käufer', 'Adresszusatz', _t(buyer, 'PostalTradeAddress', 'LineTwo'));
+
+  // Zahlung: weitere Konten
+  const pmeans = _children(settle).filter(c => c.localName === 'SpecifiedTradeSettlementPaymentMeans');
+  pmeans.forEach((pm, i) => {
+    if (i > 0) push('Zahlung', 'Weiteres Konto IBAN', _t(pm, 'PayeePartyCreditorFinancialAccount', 'IBANID'));
+  });
+
+  // Steuer: Stichtag + Aufschlüsselung je Satz
+  for (const tt of _children(settle).filter(c => c.localName === 'ApplicableTradeTax')) {
+    push('Steuer', 'Steuerstichtag (BT-7)', _xmlDate(_t(tt, 'TaxPointDate', 'DateString')));
+    const rate = _t(tt, 'RateApplicablePercent'), basis = _t(tt, 'BasisAmount'), amt = _t(tt, 'CalculatedAmount'), cat = _t(tt, 'CategoryCode');
+    if (basis || amt) push('Steueraufschlüsselung', `${cat} · ${rate} %`, `Basis ${basis} € · Steuer ${amt} €`);
+  }
+
+  // Zu-/Abschläge (Dokumentebene)
+  for (const ac of _children(settle).filter(c => c.localName === 'SpecifiedTradeAllowanceCharge')) {
+    const isCharge = _t(ac, 'ChargeIndicator', 'Indicator') === 'true';
+    push('Zu-/Abschläge', isCharge ? 'Zuschlag' : 'Abschlag', `${_t(ac, 'Reason')} ${_t(ac, 'ActualAmount')} €`);
+  }
+
+  r.weitere = w;
+
+  // Je Position
+  const lis = _all(trans, 'IncludedSupplyChainTradeLineItem');
+  r.positionen.forEach((p, i) => {
+    const li = lis[i];
+    if (!li) return;
+    p.note = _t(li, 'AssociatedDocumentLineDocument', 'IncludedNote', 'Content');
+    const ex = [];
+    const prod = _q(li, 'SpecifiedTradeProduct');
+    const addEx = (label, value) => { const v = (value || '').trim(); if (v) ex.push({ label, value: v }); };
+    addEx('Artikelnr. Verkäufer (BT-155)', _t(prod, 'SellerAssignedID'));
+    addEx('Artikelnr. Käufer (BT-156)', _t(prod, 'BuyerAssignedID'));
+    addEx('Warennr./HS (BT-158)', _t(prod, 'DesignatedProductClassification', 'ClassCode'));
+    addEx('Ursprungsland (BT-159)', _t(prod, 'OriginTradeCountry', 'ID'));
+    for (const ch of _all(prod, 'ApplicableProductCharacteristic')) addEx(_t(ch, 'Description') || 'Merkmal', _t(ch, 'Value'));
+    p.posExtra = ex;
+  });
+}
+
+/** UBL: füllt r.weitere + je Position r.positionen[i].note / .posExtra */
+function _extraUBL(root, r) {
+  const w = [];
+  const push = (group, label, value) => { const v = (value || '').trim(); if (v) w.push({ group, label, value: v }); };
+
+  push('Referenzen', 'Versandavis/Lieferschein (BT-16)', _t(root, 'DespatchDocumentReference', 'ID'));
+  push('Referenzen', 'Empfangsbestätigung', _t(root, 'ReceiptDocumentReference', 'ID'));
+
+  const sp = _q(root, 'AccountingSupplierParty', 'Party');
+  for (const pts of _all(sp, 'PartyTaxScheme')) {
+    if (_t(pts, 'TaxScheme', 'ID') === 'FC') push('Verkäufer', 'Steuernummer (BT-32)', _t(pts, 'CompanyID'));
+  }
+  push('Verkäufer', 'Kennung (BT-29)', _t(sp, 'PartyIdentification', 'ID'));
+  push('Verkäufer', 'Registernr. (BT-30)', _t(sp, 'PartyLegalEntity', 'CompanyID'));
+
+  const cp = _q(root, 'AccountingCustomerParty', 'Party');
+  push('Käufer', 'Kennung (BT-46)', _t(cp, 'PartyIdentification', 'ID'));
+
+  const pms = _children(root).filter(c => c.localName === 'PaymentMeans');
+  pms.forEach((pm, i) => { if (i > 0) push('Zahlung', 'Weiteres Konto IBAN', _t(pm, 'PayeeFinancialAccount', 'ID')); });
+  const pmc = _q(root, 'PaymentMeans', 'PaymentMeansCode');
+  if (pmc && pmc.getAttribute('name')) push('Zahlung', 'Zahlungsart', pmc.getAttribute('name'));
+
+  for (const ac of _children(root).filter(c => c.localName === 'AllowanceCharge')) {
+    const isCharge = _t(ac, 'ChargeIndicator') === 'true';
+    push('Zu-/Abschläge', isCharge ? 'Zuschlag' : 'Abschlag', `${_t(ac, 'AllowanceChargeReason')} ${_t(ac, 'Amount')} €`);
+  }
+
+  for (const ts of _all(root, 'TaxSubtotal')) {
+    const rate = _t(ts, 'TaxCategory', 'Percent'), basis = _t(ts, 'TaxableAmount'), amt = _t(ts, 'TaxAmount'), cat = _t(ts, 'TaxCategory', 'ID');
+    if (basis || amt) push('Steueraufschlüsselung', `${cat} · ${rate} %`, `Basis ${basis} € · Steuer ${amt} €`);
+  }
+
+  r.weitere = w;
+
+  const lines = _all(root, 'InvoiceLine');
+  r.positionen.forEach((p, i) => {
+    const li = lines[i];
+    if (!li) return;
+    p.note = _t(li, 'Note');
+    const item = _q(li, 'Item');
+    const ex = [];
+    const addEx = (label, value) => { const v = (value || '').trim(); if (v) ex.push({ label, value: v }); };
+    addEx('Artikelnr. Verkäufer (BT-155)', _t(item, 'SellersItemIdentification', 'ID'));
+    addEx('Artikelnr. Käufer (BT-156)', _t(item, 'BuyersItemIdentification', 'ID'));
+    addEx('Warennr./HS (BT-158)', _t(item, 'CommodityClassification', 'ItemClassificationCode'));
+    addEx('Ursprungsland (BT-159)', _t(item, 'OriginCountry', 'IdentificationCode'));
+    for (const ap of _all(item, 'AdditionalItemProperty')) addEx(_t(ap, 'Name') || 'Merkmal', _t(ap, 'Value'));
+    p.posExtra = ex;
+  });
 }
