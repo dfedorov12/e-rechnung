@@ -1,0 +1,127 @@
+name: E-Rechnung Konformitaet (KoSIT + veraPDF)
+
+# Erzeugt mit dem echten Konverter Musterrechnungen (validation/generate-samples.js)
+# und prueft sie gegen:
+#   - KoSIT-Validator + XRechnung-Konfiguration  -> XRechnung/EN-16931 Geschaeftsregeln (XML)
+#   - veraPDF (Flavour 3b)                        -> PDF/A-3b der ZUGFeRD-PDFs
+# Reports werden als Artefakt hochgeladen; der Job schlaegt bei Fehlern fehl.
+#
+# HINWEIS: Die Download-URLs/Versionen unten muessen ggf. beim ersten Lauf
+# einmal aktualisiert werden (neuere Releases). Danach laeuft es automatisch.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'js/xrechnung.js'
+      - 'js/xml2pdf.js'
+      - 'js/zugferd.js'
+      - 'validation/**'
+      - '.github/workflows/validate.yml'
+
+env:
+  KOSIT_VALIDATOR_VER: '1.5.0'
+  KOSIT_CONFIG_URL: 'https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/release-2024-06-20/validator-configuration-xrechnung_3.0.2_2024-06-20.zip'
+  VERAPDF_VER: '1.26.2'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) Musterdateien mit dem echten Konverter erzeugen
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Abhaengigkeiten (api) + Muster erzeugen
+        run: |
+          cd api && npm ci && cd ..
+          node validation/generate-samples.js
+          ls -la validation/out
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 2) KoSIT-Validator + XRechnung-Konfiguration laden
+      - name: KoSIT-Validator laden
+        run: |
+          mkdir -p tools/kosit && cd tools/kosit
+          curl -sSL -o validator.zip \
+            "https://github.com/itplr-kosit/validator/releases/download/v${KOSIT_VALIDATOR_VER}/validator-${KOSIT_VALIDATOR_VER}-distribution.zip"
+          unzip -q validator.zip
+          curl -sSL -o xrechnung-config.zip "${KOSIT_CONFIG_URL}"
+          mkdir -p config && unzip -q xrechnung-config.zip -d config
+          echo "Gefundene Scenarios:" && find config -name 'scenarios.xml'
+          echo "Gefundene JARs:" && find . -name 'validationtool-*-standalone.jar'
+
+      # 3) XRechnung-XML pruefen
+      - name: XRechnung-XML validieren (KoSIT)
+        id: kosit
+        continue-on-error: true
+        run: |
+          JAR=$(find tools/kosit -name 'validationtool-*-standalone.jar' | head -1)
+          SCEN=$(find tools/kosit/config -name 'scenarios.xml' | head -1)
+          REPO=$(dirname "$SCEN")
+          mkdir -p reports/kosit
+          java -jar "$JAR" -s "$SCEN" -r "$REPO" -o reports/kosit validation/out/*_xrechnung.xml
+          echo "--- Ergebnis ---"
+          if grep -l 'rejected' reports/kosit/*-report.xml 2>/dev/null; then
+            echo "KoSIT: mindestens eine Rechnung ABGELEHNT"; exit 1
+          else
+            echo "KoSIT: alle akzeptiert"
+          fi
+
+      # 4) ZUGFeRD-PDF gegen PDF/A-3b pruefen
+      - name: veraPDF laden
+        run: |
+          mkdir -p tools && cd tools
+          curl -sSL -o verapdf.zip \
+            "https://software.verapdf.org/rel/${VERAPDF_VER%.*}/verapdf-greenfield-${VERAPDF_VER}-installer.zip" || \
+          curl -sSL -o verapdf.zip "https://software.verapdf.org/dev/verapdf-greenfield-installer.zip"
+          unzip -q verapdf.zip
+          printf 'INSTALL_PATH=%s/verapdf\nMODE=install\n' "$PWD" > auto-install.xml.txt
+          # Auto-Install per XML
+          cat > auto-install.xml <<XML
+          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+          <AutomatedInstallation langpack="eng">
+            <com.izforge.izpack.panels.htmlhello.HTMLHelloPanel id="welcome"/>
+            <com.izforge.izpack.panels.target.TargetPanel id="install_dir"><installpath>${PWD}/verapdf</installpath></com.izforge.izpack.panels.target.TargetPanel>
+            <com.izforge.izpack.panels.packs.PacksPanel id="sdk_pack_select"/>
+            <com.izforge.izpack.panels.install.InstallPanel id="install"/>
+            <com.izforge.izpack.panels.finish.FinishPanel id="finish"/>
+          </AutomatedInstallation>
+          XML
+          INSTALLER=$(find . -maxdepth 2 -name 'verapdf-*installer*.jar' | head -1)
+          java -jar "$INSTALLER" auto-install.xml
+
+      - name: ZUGFeRD-PDF validieren (veraPDF 3b)
+        id: verapdf
+        continue-on-error: true
+        run: |
+          mkdir -p reports
+          tools/verapdf/verapdf --flavour 3b --format text validation/out/*_zugferd.pdf | tee reports/verapdf.txt
+          # veraPDF: Exit 0 = alle konform, 1 = mind. eine nicht konform
+          exit ${PIPESTATUS[0]}
+
+      - name: Reports hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: konformitaet-reports
+          path: |
+            validation/out
+            reports
+
+      - name: Gesamtergebnis
+        if: always()
+        run: |
+          echo "KoSIT (XRechnung):  ${{ steps.kosit.outcome }}"
+          echo "veraPDF (PDF/A-3b): ${{ steps.verapdf.outcome }}"
+          if [ "${{ steps.kosit.outcome }}" != "success" ] || [ "${{ steps.verapdf.outcome }}" != "success" ]; then
+            echo "::error::Mindestens eine Konformitaetspruefung ist fehlgeschlagen — Reports im Artefakt."
+            exit 1
+          fi
+          echo "Alle Konformitaetspruefungen bestanden."
