@@ -93,6 +93,18 @@ async function spSaveExport({ invoiceData, xml, pdfBytes, format }) {
     Object.entries(allFields).filter(([k]) => _sp.availableFields.has(k))
   );
 
+  // Diagnose Prüfpfad-Spalten (#7): interner Spaltenname muss exakt passen.
+  const _auditCols = ['Pruefstatus', 'ManuelleAenderungen', 'QuellPdfHash', 'GeprueftVon', 'StammdatenEntsperrt'];
+  const _missingCols = _auditCols.filter(c => !_sp.availableFields.has(c));
+  if (_missingCols.length) {
+    console.warn(
+      '[SharePoint] Prüfpfad-Spalten NICHT gefunden (interner Name muss exakt passen): ' + _missingCols.join(', ') +
+      '\nVorhandene Spalten: ' + Array.from(_sp.availableFields).sort().join(', ')
+    );
+  } else {
+    console.info('[SharePoint] Alle ' + _auditCols.length + ' Prüfpfad-Spalten erkannt – Audit wird geschrieben.');
+  }
+
   return await _post(
     `${SP.graphBase}/sites/${_sp.siteId}/lists/${_sp.listId}/items`,
     token, { fields }
