@@ -141,8 +141,9 @@
           <div>
             <h4>Exportieren</h4>
             <p><strong>XRechnung</strong> (reines XML), <strong>ZUGFeRD</strong> (PDF mit
-               eingebettetem XML) oder direkt <strong>als Mail</strong>. Optional lässt sich das
-               PDF aus den Rechnungsdaten erzeugen — dann sind PDF und XML garantiert identisch.</p>
+               eingebettetem XML) oder direkt <strong>als Mail</strong>. Standardmäßig wird das PDF
+               aus den Rechnungsdaten erzeugt — PDF und XML sind dann garantiert identisch und
+               PDF/A-3b-konform. (Abschaltbar, um ein hochgeladenes Original-PDF einzubetten.)</p>
           </div>
         </li>
         <li class="proc-step">
@@ -211,6 +212,9 @@
             Prüf- und Integritätsmechanismen.</span></li>
         <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Ablage in
             SharePoint inkl. Prüfpfad; Mailerstellung direkt aus dem Tool.</span></li>
+        <li><span class="status-dot dot-live"></span><span><strong>Konformität: KoSIT + veraPDF grün
+            (CI-geprüft)</strong> — XRechnung/EN 16931 (KoSIT) und PDF/A-3b (veraPDF) werden bei jeder
+            Änderung automatisch validiert; alle Musterfälle bestehen.</span></li>
         <li><span class="status-dot dot-plan"></span><span><strong>In Vorbereitung:</strong>
             Power-Automate-Anbindung über einen serverseitigen XML → PDF-Endpunkt (Azure Function,
             POST/GET, ohne M365-Login) <span class="proc-tag">Deployment durch DIHAG ausstehend</span></span></li>
@@ -228,8 +232,10 @@
       XRechnung&nbsp;3.0 und ZUGFeRD&nbsp;2.4&nbsp;/ Factur-X&nbsp;1.08 (EN&nbsp;16931).
       Es wird keine Gewähr für die steuerliche oder rechtliche Richtigkeit der erzeugten
       Dokumente übernommen. Der Rechnungsaussteller ist verantwortlich für die Vollständigkeit
-      und Korrektheit aller Angaben. Eigenentwicklung der DIHAG &mdash; nicht zertifiziert nach
-      KoSIT oder FNFE.
+      und Korrektheit aller Angaben. Eigenentwicklung der DIHAG. Die erzeugten Rechnungen werden
+      automatisiert gegen den KoSIT-Validator (XRechnung&nbsp;/&nbsp;EN&nbsp;16931) und veraPDF
+      (PDF/A-3b) geprüft (CI &mdash; alle Musterfälle grün); eine formale Zertifizierung nach
+      KoSIT oder FNFE besteht nicht.
     </p>
     <p class="app-footer-version">
       XRechnung&nbsp;3.0 &nbsp;|&nbsp; ZUGFeRD&nbsp;2.4 / Factur-X&nbsp;1.08

@@ -386,7 +386,7 @@
       <div class="export-section">
         <div class="export-info">
           <h3>Exportieren</h3>
-          <p>XRechnung: reines XML · ZUGFeRD: Ihr PDF mit eingebettetem XML (EN 16931)</p>
+          <p>XRechnung: reines XML · ZUGFeRD: PDF mit eingebettetem XML (EN 16931)</p>
           <div class="export-gesellschaft">
             <label for="gesellschaft">Gesellschaft</label>
             <select id="gesellschaft">
@@ -394,10 +394,10 @@
             </select>
           </div>
           <label id="opt-render-pdf-wrap">
-            <input type="checkbox" id="opt-render-pdf">
-            <span><strong>PDF aus Rechnungsdaten erzeugen</strong> — PDF und XML aus einer Quelle,
-              garantiert identisch (statt das Original-PDF einzubetten). Empfohlen für händisch
-              erstellte Rechnungen.</span>
+            <input type="checkbox" id="opt-render-pdf" checked>
+            <span><strong>PDF aus Rechnungsdaten erzeugen</strong> (Standard) — PDF und XML aus einer
+              Quelle, garantiert identisch und PDF/A-3b-konform. Deaktivieren, um ein hochgeladenes
+              Original-PDF einzubetten (dann quell-PDF-abhängig).</span>
           </label>
         </div>
         <div class="export-buttons">
@@ -430,8 +430,10 @@
       XRechnung&nbsp;3.0 und ZUGFeRD&nbsp;2.4&nbsp;/ Factur-X&nbsp;1.08 (EN&nbsp;16931).
       Es wird keine Gewähr für die steuerliche oder rechtliche Richtigkeit der erzeugten
       Dokumente übernommen. Der Rechnungsaussteller ist verantwortlich für die Vollständigkeit
-      und Korrektheit aller Angaben. Eigenentwicklung der DIHAG &mdash; nicht zertifiziert nach
-      KoSIT oder FNFE.
+      und Korrektheit aller Angaben. Eigenentwicklung der DIHAG. Die erzeugten Rechnungen werden
+      automatisiert gegen den KoSIT-Validator (XRechnung&nbsp;/&nbsp;EN&nbsp;16931) und veraPDF
+      (PDF/A-3b) geprüft (CI &mdash; alle Musterfälle grün); eine formale Zertifizierung nach
+      KoSIT oder FNFE besteht nicht.
     </p>
     <p class="app-footer-version">
       XRechnung&nbsp;3.0 &nbsp;|&nbsp; ZUGFeRD&nbsp;2.4 / Factur-X&nbsp;1.08
