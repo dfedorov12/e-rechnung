@@ -15,6 +15,19 @@ const _PDF = {
   colLight:   [0.90, 0.91, 0.93],
 };
 
+/* BT-3 (UNTDID 1001) → Überschrift + Klartext-Bezeichnung */
+const _RA_TITLE = {
+  '381': 'GUTSCHRIFT', '389': 'GUTSCHRIFT', '384': 'RECHNUNGSKORREKTUR',
+  '383': 'BELASTUNGSANZEIGE', '386': 'VORAUSZAHLUNGSRECHNUNG', '326': 'TEILRECHNUNG',
+  '875': 'ABSCHLAGSRECHNUNG', '876': 'TEILSCHLUSSRECHNUNG', '877': 'SCHLUSSRECHNUNG',
+};
+const _RA_LABEL = {
+  '380': 'Rechnung', '381': 'Kaufmännische Gutschrift', '383': 'Belastungsanzeige',
+  '384': 'Rechnungskorrektur', '386': 'Vorauszahlungsrechnung', '389': 'Gutschrift (Selbstfakturierung)',
+  '326': 'Teilrechnung', '875': 'Abschlagsrechnung (Bau)', '876': 'Teilschlussrechnung (Bau)',
+  '877': 'Schlussrechnung (Bau)',
+};
+
 /**
  * Haupteinstieg: Datenobjekt → PDF-Bytes.
  * @param   {object} data  Ergebnis von parseInvoiceXML()
@@ -105,9 +118,14 @@ async function buildInvoicePdf(data) {
   /* ── Seite 1: Kopf ── */
   newPage();
 
-  text('RECHNUNG', M, y - 10, { size: 22, bold: true, color: primary });
-  textRight(`Nr. ${data.rechnungsnummer || '–'}`, W - M, y - 8, { size: 12, bold: true });
-  textRight(`konvertiert aus ${data.syntax || 'XML'}-E-Rechnung`, W - M, y - 22, { size: 8, color: gray });
+  const raCode  = String(data.rechnungsart || '380');
+  const raTitle = _RA_TITLE[raCode] || 'RECHNUNG';
+  const raLabel = _RA_LABEL[raCode] || 'Rechnung';
+  let titleSize = 22;   // lange Titel (z. B. VORAUSZAHLUNGSRECHNUNG) verkleinern, damit sie nicht an die Nr. stoßen
+  while (titleSize > 13 && bold.widthOfTextAtSize(enc(raTitle), titleSize) > (W / 2 - M)) titleSize -= 1;
+  text(raTitle, M, y - 10, { size: titleSize, bold: true, color: primary });
+  textRight(`Rechnungsnummer ${data.rechnungsnummer || '–'}`, W - M, y - 8, { size: 12, bold: true });
+  textRight(`Rechnungsart (BT-3): ${raCode} – ${raLabel}`, W - M, y - 22, { size: 8, color: gray });
   y -= 44;
   hline(y, M, W - M, primary);
   y -= 24;
@@ -138,7 +156,10 @@ async function buildInvoicePdf(data) {
     [[data.kaeuferplz, data.kaeuferstadt].filter(Boolean).join(' ')],
     [data.kaeuferland !== 'DE' ? data.kaeuferland : ''],
     [data.kaeufervat ? `USt-IdNr.: ${data.kaeufervat}` : ''],
-    [data.leitwegid  ? `Leitweg-ID: ${data.leitwegid}` : ''],
+    [data.leitwegid       ? `Käuferreferenz: ${data.leitwegid}` : ''],
+    [data.bestellnummer   ? `Bestellnummer: ${data.bestellnummer}` : ''],
+    [data.projektreferenz ? `Projektreferenz: ${data.projektreferenz}` : ''],
+    [data.vertragsnummer  ? `Vertragsnummer: ${data.vertragsnummer}` : ''],
     [data.kaeufermail || ''],
   ].filter(([s]) => s);
 
@@ -150,11 +171,14 @@ async function buildInvoicePdf(data) {
   y = Math.min(ys, yb) - 16;
 
   /* ── Metadaten-Zeile ── */
+  const abrZeitraum = (data.abrZeitraumStart || data.abrZeitraumEnde)
+    ? `${fmtDate(data.abrZeitraumStart)} – ${fmtDate(data.abrZeitraumEnde)}`
+    : '–';
   const meta = [
-    ['Rechnungsdatum',  fmtDate(data.rechnungsdatum)],
-    ['Lieferdatum',     fmtDate(data.lieferdatum)],
-    ['Fällig am',       fmtDate(data.faelligkeitsdatum)],
-    ['Zahlungsreferenz', data.zahlungsreferenz || '–'],
+    ['Rechnungsdatum',      fmtDate(data.rechnungsdatum)],
+    ['Lieferdatum',         fmtDate(data.lieferdatum)],
+    ['Abrechnungszeitraum', abrZeitraum],
+    ['Zahlungsreferenz',    data.zahlungsreferenz || '–'],
   ];
   const metaW = (W - 2 * M) / meta.length;
   meta.forEach(([label, val], i) => {
@@ -242,7 +266,21 @@ async function buildInvoicePdf(data) {
   sumRow('MwSt.',       fmtEur(data.vatTotal));
   hline(y + 8, sumX, W - M, primary);
   y -= 2;
-  sumRow('Gesamtbetrag', fmtEur(data.grossTotal), { size: 11, bold: true, color: primary, gap: 22 });
+  // Gezahlter Betrag (BT-113), Rundungsbetrag (BT-114), Fälliger Betrag (BT-115)
+  const hasExtra = (data.gezahlt || 0) !== 0 || (data.rundung || 0) !== 0
+    || (data.faelligerBetrag && Math.abs(data.faelligerBetrag - (data.grossTotal || 0)) > 0.005);
+  sumRow('Gesamtbetrag', fmtEur(data.grossTotal),
+    { size: 11, bold: true, color: primary, gap: hasExtra ? 16 : 22 });
+  if (hasExtra) {
+    if ((data.gezahlt || 0) !== 0) sumRow('Gezahlter Betrag', '-' + fmtEur(data.gezahlt));
+    if ((data.rundung || 0) !== 0) sumRow('Rundungsbetrag', fmtEur(data.rundung));
+    const faellig = (data.faelligerBetrag != null && data.faelligerBetrag !== 0)
+      ? data.faelligerBetrag
+      : ((data.grossTotal || 0) - (data.gezahlt || 0) + (data.rundung || 0));
+    hline(y + 8, sumX, W - M, light);
+    y -= 2;
+    sumRow('Fälliger Betrag', fmtEur(faellig), { size: 11, bold: true, color: primary, gap: 22 });
+  }
 
   /* ── Steuerbefreiung (BT-118/BT-120) ── */
   if (data.befreiungsgrund || (data.steuerkategorie && !['S', 'Z'].includes(data.steuerkategorie))) {
@@ -259,11 +297,20 @@ async function buildInvoicePdf(data) {
   }
 
   /* ── Zahlung / Notiz ── */
-  if (data.iban || data.bic) {
+  if (data.iban || data.bic || data.kontoinhaber || data.faelligkeitsdatum || data.zahlungsbedingungen) {
+    if (y < M + 80) newPage();
     text('ZAHLUNGSINFORMATIONEN', M, y, { size: 7.5, bold: true, color: gray });
     y -= 13;
+    if (data.faelligkeitsdatum) { text(`Fällig am: ${fmtDate(data.faelligkeitsdatum)}`, M, y, { size: 9 }); y -= 13; }
+    if (data.kontoinhaber)      { text(`Kontoinhaber: ${data.kontoinhaber}`, M, y, { size: 9 }); y -= 13; }
     if (data.iban) { text(`IBAN: ${data.iban.replace(/(.{4})/g, '$1 ').trim()}`, M, y, { size: 9 }); y -= 13; }
     if (data.bic)  { text(`BIC: ${data.bic}`, M, y, { size: 9 }); y -= 13; }
+    if (data.zahlungsbedingungen) {
+      for (const l of wrap(`Zahlungsbedingungen: ${data.zahlungsbedingungen}`, W - 2 * M)) {
+        if (y < M + 30) newPage();
+        text(l, M, y, { size: 9 }); y -= 12;
+      }
+    }
     y -= 6;
   }
 

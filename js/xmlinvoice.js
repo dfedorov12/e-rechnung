@@ -22,6 +22,7 @@ function parseInvoiceXML(xmlString) {
 
   if (rootName === 'CrossIndustryInvoice') return _parseCII(root);
   if (rootName === 'Invoice')              return _parseUBL(root);
+  if (rootName === 'CreditNote')           return _parseUBL(root);
   throw new Error(`Kein bekanntes E-Rechnungsformat (Wurzelelement: ${rootName}). ` +
                   'Erwartet: CrossIndustryInvoice (CII) oder Invoice (UBL).');
 }
@@ -92,6 +93,7 @@ function _parseCII(root) {
 
   const exDoc = _q(root, 'ExchangedDocument');
   r.rechnungsnummer = _t(exDoc, 'ID');
+  r.rechnungsart    = _t(exDoc, 'TypeCode');   // BT-3 (380 Rechnung, 381 Gutschrift, 384 Korrektur, …)
   r.rechnungsdatum  = _xmlDate(_t(exDoc, 'IssueDateTime', 'DateTimeString'));
   r.notiz           = _t(exDoc, 'IncludedNote', 'Content');
 
@@ -142,9 +144,14 @@ function _parseCII(root) {
   }
   if (!r.leitwegid) {
     const buyerRef = _t(agreement, 'BuyerReference');
-    // BuyerReference = Leitweg-ID, sofern sie nicht nur die Rechnungsnummer spiegelt
+    // BuyerReference = Käuferreferenz/Leitweg-ID, sofern sie nicht nur die Rechnungsnummer spiegelt
     if (buyerRef && buyerRef !== r.rechnungsnummer) r.leitwegid = buyerRef;
   }
+
+  // Referenzen: BT-13 Bestellnummer, BT-12 Vertragsnummer, BT-11 Projektreferenz
+  r.bestellnummer   = _t(agreement, 'BuyerOrderReferencedDocument', 'IssuerAssignedID');
+  r.vertragsnummer  = _t(agreement, 'ContractReferencedDocument', 'IssuerAssignedID');
+  r.projektreferenz = _t(agreement, 'SpecifiedProcuringProject', 'ID');
 
   r.lieferdatum = _xmlDate(_t(delivery, 'ActualDeliverySupplyChainEvent', 'OccurrenceDateTime', 'DateTimeString'));
 
@@ -164,10 +171,17 @@ function _parseCII(root) {
     r.iban              = _t(settle, 'SpecifiedTradeSettlementPaymentMeans', 'PayeePartyCreditorFinancialAccount', 'IBANID');
     r.bic               = _t(settle, 'SpecifiedTradeSettlementPaymentMeans', 'PayeeSpecifiedCreditorFinancialInstitution', 'BICID');
     r.faelligkeitsdatum = _xmlDate(_t(settle, 'SpecifiedTradePaymentTerms', 'DueDateDateTime', 'DateTimeString'));
+    r.kontoinhaber        = _t(settle, 'SpecifiedTradeSettlementPaymentMeans', 'PayeePartyCreditorFinancialAccount', 'AccountName');   // BT-85
+    r.zahlungsbedingungen = _t(settle, 'SpecifiedTradePaymentTerms', 'Description');   // BT-20
+    r.abrZeitraumStart    = _xmlDate(_t(settle, 'BillingSpecifiedPeriod', 'StartDateTime', 'DateTimeString'));   // BT-73
+    r.abrZeitraumEnde     = _xmlDate(_t(settle, 'BillingSpecifiedPeriod', 'EndDateTime', 'DateTimeString'));     // BT-74
     const sums = _q(settle, 'SpecifiedTradeSettlementHeaderMonetarySummation');
     r.netTotal   = parseFloat(_t(sums, 'LineTotalAmount'))  || 0;
     r.vatTotal   = parseFloat(_t(sums, 'TaxTotalAmount'))   || 0;
     r.grossTotal = parseFloat(_t(sums, 'GrandTotalAmount')) || 0;
+    r.gezahlt         = parseFloat(_t(sums, 'TotalPrepaidAmount')) || 0;   // BT-113
+    r.rundung         = parseFloat(_t(sums, 'RoundingAmount'))     || 0;   // BT-114
+    r.faelligerBetrag = parseFloat(_t(sums, 'DuePayableAmount'))   || 0;   // BT-115
 
     // Steuerbefreiung (BT-118/BT-120): Kategorie + Grund aus dem VAT-Breakdown
     for (const tt of _children(settle).filter(c => c.localName === 'ApplicableTradeTax')) {
@@ -205,6 +219,7 @@ function _parseUBL(root) {
   const r = { syntax: 'UBL', positionen: [] };
 
   r.rechnungsnummer   = _t(root, 'ID');
+  r.rechnungsart      = _t(root, 'InvoiceTypeCode') || _t(root, 'CreditNoteTypeCode');   // BT-3
   r.rechnungsdatum    = _xmlDate(_t(root, 'IssueDate'));
   r.faelligkeitsdatum = _xmlDate(_t(root, 'DueDate'));
   r.notiz             = _t(root, 'Note');
@@ -221,6 +236,14 @@ function _parseUBL(root) {
   r.lieferName = _t(root, 'Delivery', 'DeliveryParty', 'PartyName', 'Name');
 
   const buyerRef = _t(root, 'BuyerReference');
+
+  // Referenzen (BT-13/12/11), Abrechnungszeitraum (BT-73/74), Zahlungsbedingungen (BT-20)
+  r.bestellnummer       = _t(root, 'OrderReference', 'ID');
+  r.vertragsnummer      = _t(root, 'ContractDocumentReference', 'ID');
+  r.projektreferenz     = _t(root, 'ProjectReference', 'ID');
+  r.abrZeitraumStart    = _xmlDate(_t(root, 'InvoicePeriod', 'StartDate'));
+  r.abrZeitraumEnde     = _xmlDate(_t(root, 'InvoicePeriod', 'EndDate'));
+  r.zahlungsbedingungen = _t(root, 'PaymentTerms', 'Note');
 
   // Verkäufer
   const sp = _q(root, 'AccountingSupplierParty', 'Party');
@@ -257,6 +280,7 @@ function _parseUBL(root) {
     r.zahlungsreferenz = _t(pm, 'PaymentID');
     r.iban             = _t(pm, 'PayeeFinancialAccount', 'ID');
     r.bic              = _t(pm, 'PayeeFinancialAccount', 'FinancialInstitutionBranch', 'ID');
+    r.kontoinhaber     = _t(pm, 'PayeeFinancialAccount', 'Name');   // BT-85
   }
 
   // Summen
@@ -265,6 +289,9 @@ function _parseUBL(root) {
     r.netTotal   = parseFloat(_t(lmt, 'TaxExclusiveAmount')) || parseFloat(_t(lmt, 'LineExtensionAmount')) || 0;
     r.grossTotal = parseFloat(_t(lmt, 'TaxInclusiveAmount')) || parseFloat(_t(lmt, 'PayableAmount')) || 0;
     r.vatTotal   = parseFloat(_t(root, 'TaxTotal', 'TaxAmount')) || (r.grossTotal - r.netTotal);
+    r.gezahlt         = parseFloat(_t(lmt, 'PrepaidAmount'))         || 0;   // BT-113
+    r.rundung         = parseFloat(_t(lmt, 'PayableRoundingAmount')) || 0;   // BT-114
+    r.faelligerBetrag = parseFloat(_t(lmt, 'PayableAmount'))         || 0;   // BT-115
   }
 
   // Steuerbefreiung: Kategorie + Grund aus dem TaxSubtotal
