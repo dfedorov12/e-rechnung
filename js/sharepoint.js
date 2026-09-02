@@ -23,6 +23,16 @@ const _sp = { siteId: null, listId: null, driveId: null, ready: false, available
    Öffentliche API
 ═══════════════════════════════════════════════════ */
 
+/** Audit-Kurzstatus für die SharePoint-Spalte „Pruefstatus". */
+function _auditStatus(audit) {
+  if (!audit) return '';
+  const parts = [];
+  if (audit.manuelleAenderungen && audit.manuelleAenderungen.length) parts.push('Manuell geaendert');
+  if (audit.stammdatenEntsperrt) parts.push('Stammdaten entsperrt');
+  if (audit.quellViaOcr) parts.push('OCR-Quelle');
+  return (parts.length ? parts.join(', ') : 'Automatisch').slice(0, 255);
+}
+
 /**
  * Exportierten Datensatz in SharePoint speichern.
  * Lädt XML + PDF hoch, schreibt List-Item mit Metadaten.
@@ -70,6 +80,12 @@ async function spSaveExport({ invoiceData, xml, pdfBytes, format }) {
     XMLDateiUrl:         xmlUrl,
     ZUGFeRDPdfUrl:       pdfUrl,
     OriginalPdfName:     (invoiceData.originalPdfName || '').slice(0, 255),
+    // Prüfpfad / Audit (#7) — werden nur geschrieben, wenn die Liste die Spalten hat
+    Pruefstatus:         _auditStatus(invoiceData.audit),
+    ManuelleAenderungen: invoiceData.audit ? JSON.stringify(invoiceData.audit.manuelleAenderungen || []).slice(0, 255) : '',
+    QuellPdfHash:        invoiceData.audit ? (invoiceData.audit.quellPdfHash || '').slice(0, 255) : '',
+    GeprueftVon:         invoiceData.audit ? (invoiceData.audit.geprueftVon || '').slice(0, 255) : '',
+    StammdatenEntsperrt: invoiceData.audit ? (invoiceData.audit.stammdatenEntsperrt ? 'Ja' : 'Nein') : '',
   };
 
   // Nur Felder senden, die in der Liste vorhanden sind (verhindert 400-Fehler bei fehlenden Spalten)

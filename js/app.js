@@ -8,6 +8,17 @@ let rowCounter = 0;
 let zoomFactor = 1.0;
 const ZOOM_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
 
+/* ── Prüf-/Audit-Zustand (Risikominimierung) ── */
+let _extractedSnapshot = null;   // ursprünglich extrahierte Daten (für Manuell-Änderungs-Diff)
+let _sourcePdfText     = '';     // Textebene des Quell-PDF (für PDF↔XML-Abgleich)
+let _sourceViaOcr      = false;  // Quelle war OCR (kein echter Textlayer)
+let _sellerLocked      = false;  // Verkäufer-Stammdaten gesperrt?
+let _sellerUnlocked    = false;  // wurde in dieser Sitzung entsperrt? (Audit)
+const _SELLER_MASTER_IDS = [
+  'verkaeufer', 'iban', 'bic', 'verkaeufer-vat', 'verkaeufer-steuernr',
+  'verkaeufer-handelsregister', 'verkaeufer-registernr', 'verkaeufer-gf',
+];
+
 /* ── PDF.js setup ── */
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';
 
@@ -24,6 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
   document.getElementById('btn-mail').addEventListener('click', () => createInvoiceMail());
+  const lockBtn = document.getElementById('btn-seller-lock');
+  if (lockBtn) lockBtn.addEventListener('click', toggleSellerLock);
 
   // Runtime-Config laden, dann Selector + Admin-Nav initialisieren
   onAuthReady(async () => {
@@ -176,6 +189,12 @@ async function autoFillFromPDF() {
 
     // 3) Aus den Items (PDF oder OCR) Rechnungsdaten extrahieren
     const data  = extractInvoiceDataFromItems(items);
+
+    // Prüf-/Audit-Grundlage sichern: Ausgangsstand + Quelltext für spätere Kontrollen
+    _extractedSnapshot = JSON.parse(JSON.stringify(data));
+    _sourcePdfText     = items.map(it => (it && it.text) ? it.text : '').join(' ');
+    _sourceViaOcr      = viaOcr;
+
     const count = fillFormFromExtracted(data);
     showLoading(false);
     if (count > 0) {
@@ -256,7 +275,52 @@ function fillFormFromExtracted(data) {
   }
 
   updateTotals();
+  lockSellerMaster();   // #1: Verkäufer-Stammdaten gegen versehentliche/böswillige Änderung sperren
   return count;
+}
+
+/* ── #1: Verkäufer-Stammdaten sperren/entsperren ──
+ * Aus Stammdaten befüllte Verkäufer-Kernfelder (Name, IBAN, USt-IdNr.,
+ * Register …) werden schreibgeschützt. Das verhindert genau das Szenario
+ * „falsche IBAN einsetzen". Bewusstes Entsperren wird protokolliert (#7). */
+function lockSellerMaster() {
+  let anyLocked = false;
+  _SELLER_MASTER_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value.trim() !== '') {
+      el.readOnly = true;
+      el.classList.add('locked');
+      el.title = 'Stammdaten – gegen versehentliche Änderung gesperrt. Über „Stammdaten gesperrt" entsperren.';
+      anyLocked = true;
+    }
+  });
+  _sellerLocked = anyLocked;
+  const btn = document.getElementById('btn-seller-lock');
+  if (btn) {
+    btn.style.display = anyLocked ? '' : 'none';
+    btn.textContent = '🔒 Stammdaten gesperrt';
+    btn.classList.remove('unlocked');
+  }
+}
+
+function toggleSellerLock() {
+  const btn = document.getElementById('btn-seller-lock');
+  if (_sellerLocked) {
+    const ok = window.confirm(
+      'Verkäufer-Stammdaten (u. a. IBAN, USt-IdNr.) entsperren?\n\n' +
+      'Manuelle Änderungen an diesen Feldern werden im Prüfpfad protokolliert.'
+    );
+    if (!ok) return;
+    _SELLER_MASTER_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.readOnly = false; el.classList.remove('locked'); el.title = ''; }
+    });
+    _sellerLocked = false;
+    _sellerUnlocked = true;
+    if (btn) { btn.textContent = '🔓 entsperrt (wird protokolliert)'; btn.classList.add('unlocked'); }
+  } else {
+    lockSellerMaster();
+  }
 }
 
 function showAutofillBanner(count) {
@@ -612,25 +676,44 @@ async function exportInvoice(format) {
     return;
   }
 
+  // #2/#3/#4: Plausibilitäts- und PDF↔XML-Prüfung vor dem Erstellen
+  const totals = calcTotals(data.positionen);
+  if (!_preflightChecks(data, totals)) return;
+
   showLoading(true, format === 'zugferd' ? 'ZUGFeRD PDF wird erstellt...' : 'XRechnung XML wird erstellt...');
 
   try {
+    const { netTotal, vatTotal, grossTotal } = totals;
     const xml = buildXML(data, format);
-    const { netTotal, vatTotal, grossTotal } = calcTotals(data.positionen);
+
+    // #5: Selbstverifikation — erzeugtes XML zurücklesen und gegen Anzeige prüfen
+    const rt = _verifyEmbeddedXml(xml, data, totals);
+    if (rt.length) {
+      showLoading(false);
+      showToast('Selbstprüfung fehlgeschlagen — XML weicht von den angezeigten Werten ab: ' + rt.join(', '), 'error');
+      return;
+    }
+
     const safeNr = sanitizeFilename(data.rechnungsnummer);
     let pdfBytes = null;
 
     if (format === 'zugferd') {
-      if (!uploadedPdfBytes) {
+      try {
+        pdfBytes = await _buildZugferdPdf(data, totals, xml);   // #6: Original einbetten ODER aus Daten rendern
+      } catch (e) {
         showLoading(false);
-        showToast('Für ZUGFeRD bitte zuerst eine PDF-Datei hochladen.', 'error');
+        showToast(e.message === 'NO_PDF'
+          ? 'Für ZUGFeRD bitte zuerst eine PDF-Datei hochladen — oder „PDF aus Rechnungsdaten erzeugen" aktivieren.'
+          : 'ZUGFeRD-Erstellung fehlgeschlagen: ' + e.message, 'error');
         return;
       }
-      pdfBytes = await embedXMLIntoPDF(uploadedPdfBytes, xml, 'zugferd');
       downloadBlob(pdfBytes, `${safeNr}_zugferd.pdf`, 'application/pdf');
     } else {
       downloadText(xml, `${safeNr}_xrechnung.xml`);
     }
+
+    // #7: Prüfpfad (Hash, manuelle Änderungen, Prüfer)
+    const audit = await _buildAudit(data);
 
     // Lokaler Cache (localStorage)
     saveToHistory({
@@ -643,13 +726,14 @@ async function exportInvoice(format) {
       xml,
       zugferdPdf: pdfBytes ? bytesToBase64(pdfBytes) : null,
       originalPdfName: uploadedFileName,
+      audit,
     });
 
     // SharePoint-Upload
     showLoading(true, 'Wird in SharePoint gespeichert...');
     try {
       await spSaveExport({
-        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName },
+        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit },
         xml,
         pdfBytes,
         format,
@@ -696,18 +780,33 @@ async function createInvoiceMail() {
     console.warn('Mail.ReadWrite nicht verfügbar — .eml-Fallback:', e);
   }
 
-  // Format: ZUGFeRD wenn ein PDF vorliegt (lesbar + eingebettetes XML), sonst XRechnung-XML
-  const useZugferd = !!uploadedPdfBytes;
+  // Format: ZUGFeRD wenn ein PDF vorliegt ODER aus Daten gerendert wird (#6), sonst XRechnung-XML
+  const renderFromData = !!(document.getElementById('opt-render-pdf') || {}).checked;
+  const useZugferd = !!uploadedPdfBytes || renderFromData;
+
+  // #2/#3/#4: gleiche Prüfungen wie beim Export
+  const totals = calcTotals(data.positionen);
+  if (!_preflightChecks(data, totals)) return;
+
   showLoading(true, useZugferd ? 'ZUGFeRD wird erstellt …' : 'XRechnung wird erstellt …');
 
   try {
     const xml = buildXML(data, useZugferd ? 'zugferd' : 'xrechnung');
-    const { grossTotal } = calcTotals(data.positionen);
+
+    // #5: Selbstverifikation
+    const rt = _verifyEmbeddedXml(xml, data, totals);
+    if (rt.length) {
+      showLoading(false);
+      showToast('Selbstprüfung fehlgeschlagen — XML weicht von den angezeigten Werten ab: ' + rt.join(', '), 'error');
+      return;
+    }
+
+    const { grossTotal } = totals;
     const safeNr = sanitizeFilename(data.rechnungsnummer);
 
     const attachments = [];
     if (useZugferd) {
-      const pdfBytes = await embedXMLIntoPDF(uploadedPdfBytes, xml, 'zugferd');
+      const pdfBytes = await _buildZugferdPdf(data, totals, xml);   // #6
       attachments.push({ filename: `${safeNr}_zugferd.pdf`, mime: 'application/pdf', base64: bytesToBase64(pdfBytes) });
     } else {
       attachments.push({ filename: `${safeNr}_xrechnung.xml`, mime: 'application/xml', base64: _utf8ToBase64('﻿' + xml) });
@@ -856,6 +955,145 @@ function highlightErrors(data) {
       el.addEventListener('input', () => el.classList.remove('error'), { once: true });
     }
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Risikominimierung: Prüfungen, Selbstverifikation, Render-Modus, Audit
+══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * #2/#3/#4: Vor-Export-Prüfungen.
+ * Harte Fehler (ungültige IBAN, unplausible Summe) blocken den Export.
+ * Weiche Warnungen (USt-IdNr.-Format, Wert nicht im Quell-PDF) fragen per
+ * Bestätigungsdialog nach. Gibt true zurück, wenn fortgefahren werden darf.
+ */
+function _preflightChecks(data, totals) {
+  const hard = [];
+  if (data.iban && typeof ibanChecksumValid === 'function' && !ibanChecksumValid(data.iban)) {
+    hard.push('IBAN ungültig (Prüfziffer stimmt nicht): ' + data.iban);
+  }
+  if (!Number.isFinite(totals.grossTotal) || totals.grossTotal <= 0) {
+    hard.push('Gesamtbetrag nicht plausibel (0 € oder nicht berechenbar)');
+  }
+  // Interne Summenkonsistenz (Netto + MwSt = Brutto)
+  if (Math.abs((totals.netTotal + totals.vatTotal) - totals.grossTotal) > 0.02) {
+    hard.push('Summen inkonsistent (Netto + MwSt ≠ Brutto)');
+  }
+  if (hard.length) {
+    showToast('Prüfung fehlgeschlagen: ' + hard.join(' · '), 'error');
+    return false;
+  }
+
+  const soft = [];
+  if (typeof vatIdLooksValid === 'function') {
+    if (data.verkaeufervat && !vatIdLooksValid(data.verkaeufervat))
+      soft.push('USt-IdNr. Rechnungssteller: Format ungewöhnlich (' + data.verkaeufervat + ')');
+    if (data.kaeufervat && !vatIdLooksValid(data.kaeufervat))
+      soft.push('USt-IdNr. Empfänger: Format ungewöhnlich (' + data.kaeufervat + ')');
+  }
+  if (typeof crossCheckSource === 'function') {
+    const missing = crossCheckSource(data, totals, _sourcePdfText, _extractedSnapshot);
+    if (missing && missing.length) {
+      soft.push('Nicht im hochgeladenen PDF gefunden: ' + missing.join('; ')
+        + (_sourceViaOcr ? ' (Quelle war OCR – Textlage evtl. ungenau)' : ''));
+    }
+  }
+  if (soft.length) {
+    const proceed = window.confirm(
+      '⚠ Warnungen der Rechnungsprüfung:\n\n• ' + soft.join('\n• ') +
+      '\n\nDas kann auf abweichende PDF/XML-Daten hindeuten.\nTrotzdem fortfahren und exportieren?'
+    );
+    if (!proceed) return false;
+  }
+  return true;
+}
+
+/**
+ * #5: Selbstverifikation. Liest das erzeugte XML zurück und vergleicht die
+ * Schlüsselwerte mit den angezeigten Formulardaten ("was drin ist = was du
+ * gesehen hast"). Gibt Liste der Abweichungen zurück (leer = ok).
+ */
+function _verifyEmbeddedXml(xml, data, totals) {
+  if (typeof parseInvoiceXML !== 'function') return [];   // xmlinvoice.js nicht geladen → überspringen
+  let back;
+  try { back = parseInvoiceXML(xml); }
+  catch (e) { return ['XML nicht lesbar (' + e.message + ')']; }
+  const norm = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const diffs = [];
+  if (data.rechnungsnummer && norm(back.rechnungsnummer) !== norm(data.rechnungsnummer)) diffs.push('Rechnungsnummer');
+  if (data.iban && norm(back.iban) !== norm(data.iban)) diffs.push('IBAN');
+  if (data.kaeufervat && norm(back.kaeufervat) !== norm(data.kaeufervat)) diffs.push('USt-IdNr. Empfänger');
+  if (totals && Math.abs((back.grossTotal || 0) - (totals.grossTotal || 0)) > 0.01) diffs.push('Gesamtbetrag');
+  return diffs;
+}
+
+/**
+ * #6: ZUGFeRD-PDF bauen. Standard = Original-PDF + XML einbetten.
+ * Bei aktiver Option „PDF aus Rechnungsdaten erzeugen" wird das PDF aus
+ * denselben Daten wie das XML gerendert → PDF ≡ XML per Konstruktion.
+ */
+async function _buildZugferdPdf(data, totals, xml) {
+  const renderFromData = !!(document.getElementById('opt-render-pdf') || {}).checked;
+  let basePdf;
+  if (renderFromData) {
+    if (typeof buildInvoicePdf !== 'function') throw new Error('PDF-Renderer nicht geladen (xml2pdf.js).');
+    const pdfData = {
+      ...data,
+      netTotal: totals.netTotal, vatTotal: totals.vatTotal, grossTotal: totals.grossTotal,
+      positionen: (data.positionen || []).map(p => ({
+        ...p,
+        gesamt: (parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0) * (1 - (parseFloat(p.rabatt) || 0) / 100),
+      })),
+    };
+    basePdf = await buildInvoicePdf(pdfData);
+  } else {
+    if (!uploadedPdfBytes) throw new Error('NO_PDF');
+    basePdf = uploadedPdfBytes;
+  }
+  return await embedXMLIntoPDF(basePdf, xml, 'zugferd');
+}
+
+/** #7: SHA-256 des Quell-PDF (Hex) für den Prüfpfad. */
+async function _sha256Hex(bytes) {
+  if (!bytes || !(crypto && crypto.subtle)) return '';
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** #7: Diff kritischer Felder zwischen extrahiertem Stand und finalem Formular. */
+function _manualChanges(data) {
+  const snap = _extractedSnapshot;
+  if (!snap) return [];
+  const fields = [
+    ['iban', 'IBAN'], ['bic', 'BIC'], ['verkaeufer', 'Rechnungssteller'],
+    ['verkaeufervat', 'USt-IdNr. Steller'], ['verkaeufersteuernr', 'Steuernummer'],
+    ['registernr', 'Registernr.'], ['kaeufer', 'Empfänger'],
+    ['kaeufervat', 'USt-IdNr. Empfänger'], ['rechnungsnummer', 'Rechnungsnummer'],
+  ];
+  const out = [];
+  for (const [k, label] of fields) {
+    const a = String(snap[k] || '').trim();
+    const b = String(data[k] || '').trim();
+    if (a !== b && (a || b)) out.push({ feld: label, von: a, zu: b });
+  }
+  return out;
+}
+
+/** #7: Prüfpfad-Objekt zusammenstellen (Hash, manuelle Änderungen, Prüfer). */
+async function _buildAudit(data) {
+  let hash = '';
+  try { if (uploadedPdfBytes) hash = await _sha256Hex(uploadedPdfBytes); } catch (e) { /* egal */ }
+  const user = (typeof getAuthUser === 'function' && getAuthUser()) ? getAuthUser() : null;
+  const changes = _manualChanges(data);
+  return {
+    quellPdfName:        uploadedFileName || '',
+    quellPdfHash:        hash,
+    quellViaOcr:         !!_sourceViaOcr,
+    stammdatenEntsperrt: !!_sellerUnlocked,
+    manuelleAenderungen: changes,
+    geprueftVon:         user ? (user.username || user.name || '') : '',
+    geprueftAm:          new Date().toISOString(),
+  };
 }
 
 /* ── UI Helpers ── */
