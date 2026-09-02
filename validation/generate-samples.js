@@ -123,6 +123,87 @@ const SAMPLES = [
       ],
     },
   },
+  {
+    name: 'wgc_reverse_charge_AE',
+    data: {
+      ...WGC,
+      kaeufer: 'Inland Reverse GmbH', kaeuferstrasse: 'Baustrasse 3',
+      kaeuferplz: '01067', kaeuferstadt: 'Dresden', kaeuferland: 'DE',
+      kaeufermail: 'ap@inland-reverse.de', kaeufervat: 'DE812345670',
+      rechnungsnummer: '4260904', rechnungsdatum: '2026-09-01', lieferdatum: '2026-08-31',
+      faelligkeitsdatum: '2026-10-01', zahlungsreferenz: '4260904',
+      notiz: 'Steuerschuldnerschaft des Leistungsempfaengers (Reverse Charge, § 13b UStG).',
+      steuerkategorie: 'AE', befreiungsgrund: 'Reverse Charge',
+      positionen: [
+        { posnr: '1', beschreibung: 'Bauleistung Stahlbau', menge: 1, einheit: 'Pausch.', einzelpreis: 7500, rabatt: 0, mwst: 0 },
+      ],
+    },
+  },
+  {
+    name: 'wgc_mwst_gemischt_19_7',
+    data: {
+      ...WGC,
+      kaeufer: 'Gemischt Handel GmbH', kaeuferstrasse: 'Marktstrasse 9',
+      kaeuferplz: '04109', kaeuferstadt: 'Leipzig', kaeuferland: 'DE',
+      kaeufermail: 'rechnung@gemischt.de', kaeufervat: 'DE246813570',
+      rechnungsnummer: '4260905', rechnungsdatum: '2026-09-01', lieferdatum: '2026-08-30',
+      faelligkeitsdatum: '2026-10-01', zahlungsreferenz: '4260905',
+      notiz: 'Zahlung: 30 Tage netto.', steuerkategorie: 'S', befreiungsgrund: '',
+      positionen: [
+        { posnr: '1', beschreibung: 'Gussteil (19 %)', menge: 10, einheit: 'Stk', einzelpreis: 120, rabatt: 0, mwst: 19 },
+        { posnr: '2', beschreibung: 'Fachliteratur/Doku (7 %)', menge: 1, einheit: 'Stk', einzelpreis: 80, rabatt: 0, mwst: 7 },
+      ],
+    },
+  },
+  {
+    name: 'wgc_rabatt_skonto',
+    data: {
+      ...WGC,
+      kaeufer: 'Rabatt Kunde GmbH', kaeuferstrasse: 'Rabattweg 2',
+      kaeuferplz: '01097', kaeuferstadt: 'Dresden', kaeuferland: 'DE',
+      kaeufermail: 'ek@rabatt-kunde.de', kaeufervat: 'DE135792460',
+      rechnungsnummer: '4260906', rechnungsdatum: '2026-09-01', lieferdatum: '2026-08-29',
+      faelligkeitsdatum: '2026-10-15', zahlungsreferenz: '4260906',
+      notiz: 'Zahlung: 3 % Skonto innerhalb 10 Tagen (bis 11.09.2026), rein netto bis 15.10.2026.',
+      steuerkategorie: 'S', befreiungsgrund: '',
+      positionen: [
+        { posnr: '1', beschreibung: 'Walze mit Positionsrabatt', menge: 5, einheit: 'Stk', einzelpreis: 1000, rabatt: 10, mwst: 19 },
+        { posnr: '2', beschreibung: 'Bearbeitung', menge: 8, einheit: 'h', einzelpreis: 85, rabatt: 0, mwst: 19 },
+      ],
+    },
+  },
+  {
+    name: 'wgc_grosse_liste_30pos',
+    data: {
+      ...WGC,
+      kaeufer: 'Grossauftrag AG', kaeuferstrasse: 'Logistikpark 1',
+      kaeuferplz: '39104', kaeuferstadt: 'Magdeburg', kaeuferland: 'DE',
+      kaeufermail: 'kreditoren@grossauftrag.de', kaeufervat: 'DE998877665',
+      rechnungsnummer: '4260907', rechnungsdatum: '2026-09-01', lieferdatum: '2026-08-25',
+      faelligkeitsdatum: '2026-10-01', zahlungsreferenz: '4260907',
+      notiz: 'Sammelrechnung.', steuerkategorie: 'S', befreiungsgrund: '',
+      positionen: Array.from({ length: 30 }, (_, i) => ({
+        posnr: String(i + 1), beschreibung: 'Gussteil Typ ' + (i + 1) + ' nach Zeichnung',
+        menge: (i % 5) + 1, einheit: 'Stk', einzelpreis: 90 + i * 3, rabatt: 0, mwst: 19,
+      })),
+    },
+  },
+  {
+    name: 'shb_innergemeinschaftlich_FR_K',
+    data: {
+      ...SHB,
+      kaeufer: 'Fonderie Exemple SARL', kaeuferstrasse: 'Rue de la Fonderie 12',
+      kaeuferplz: '59000', kaeuferstadt: 'Lille', kaeuferland: 'FR',
+      kaeufermail: 'compta@fonderie-exemple.fr', kaeufervat: 'FR12345678901',
+      rechnungsnummer: '5100778', rechnungsdatum: '2026-09-01', lieferdatum: '2026-08-28',
+      faelligkeitsdatum: '2026-10-01', zahlungsreferenz: '5100778',
+      notiz: 'Livraison intracommunautaire exonérée (art. 138 directive TVA).',
+      steuerkategorie: 'K', befreiungsgrund: 'Innergemeinschaftliche Lieferung',
+      positionen: [
+        { posnr: '1', beschreibung: 'Hartgussteil', menge: 6, einheit: 'Stk', einzelpreis: 210, rabatt: 0, mwst: 0 },
+      ],
+    },
+  },
 ];
 
 /* ── Erzeugen ── */

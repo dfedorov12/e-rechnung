@@ -22,7 +22,9 @@ on:
 env:
   KOSIT_VALIDATOR_VER: '1.5.0'
   KOSIT_CONFIG_URL: 'https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/release-2024-06-20/validator-configuration-xrechnung_3.0.2_2024-06-20.zip'
+  KOSIT_CONFIG_LABEL: 'release 2024-06-20 (XRechnung 3.0.2)'
   VERAPDF_VER: '1.26.2'
+  MUSTANG_VER: '2.16.0'
 
 jobs:
   validate:
@@ -122,6 +124,36 @@ jobs:
           echo "=== Zusammenfassung ==="
           tools/verapdf/verapdf --flavour 3b --format text validation/out/*_zugferd.pdf | tee reports/verapdf.txt
           exit ${PIPESTATUS[0]}
+
+      # 5) Mustangproject — zusaetzliche, informative Pruefung (ZUGFeRD-Profil + PDF/A)
+      - name: Mustangproject (zusaetzlich, informativ)
+        id: mustang
+        continue-on-error: true
+        run: |
+          mkdir -p reports
+          : > reports/mustang.txt
+          curl -sSL -o Mustang-CLI.jar \
+            "https://github.com/ZUGFeRD/mustangproject/releases/download/core-${MUSTANG_VER}/Mustang-CLI-${MUSTANG_VER}.jar" || true
+          if [ -s Mustang-CLI.jar ]; then
+            for pdf in validation/out/*_zugferd.pdf; do
+              name=$(basename "$pdf" _zugferd.pdf)
+              rep=$(java -jar Mustang-CLI.jar --action validate --source "$pdf" 2>/dev/null || true)
+              if echo "$rep" | grep -q 'summary status="valid"'; then st=valid
+              elif echo "$rep" | grep -q 'summary status='; then st=invalid
+              else st=n/a; fi
+              echo "$name: $st" | tee -a reports/mustang.txt
+            done
+          else
+            echo "Mustang-CLI nicht verfuegbar (Download fehlgeschlagen)" | tee -a reports/mustang.txt
+          fi
+
+      # 6) Konformitaetsbericht erzeugen (Step Summary + Artefakt)
+      - name: Konformitaetsbericht erzeugen
+        if: always()
+        run: |
+          mkdir -p reports
+          node validation/report.js > reports/KONFORMITAET.md || true
+          cat reports/KONFORMITAET.md >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Reports hochladen
         if: always()
