@@ -204,6 +204,36 @@ const SAMPLES = [
       ],
     },
   },
+  {
+    name: 'wgc_rechnungskorrektur_384',
+    data: {
+      ...WGC, rechnungsart: '384',
+      kaeufer: 'Muster Maschinenbau GmbH', kaeuferstrasse: 'Industriestrasse 10',
+      kaeuferplz: '44869', kaeuferstadt: 'Bochum', kaeuferland: 'DE',
+      kaeufermail: 'kreditoren@muster.de', kaeufervat: 'DE123456789',
+      rechnungsnummer: '4260908', rechnungsdatum: '2026-09-02', lieferdatum: '2026-08-28',
+      faelligkeitsdatum: '2026-10-02', zahlungsreferenz: '4260908',
+      notiz: 'Rechnungskorrektur zur Rechnung 4260901 (Mengenkorrektur).', steuerkategorie: 'S', befreiungsgrund: '',
+      positionen: [
+        { posnr: '1', beschreibung: 'Walze GGG-70 (Korrektur Menge)', menge: 3, einheit: 'Stk', einzelpreis: 1250, rabatt: 0, mwst: 19 },
+      ],
+    },
+  },
+  {
+    name: 'wgc_gutschrift_381',
+    data: {
+      ...WGC, rechnungsart: '381',
+      kaeufer: 'Muster Maschinenbau GmbH', kaeuferstrasse: 'Industriestrasse 10',
+      kaeuferplz: '44869', kaeuferstadt: 'Bochum', kaeuferland: 'DE',
+      kaeufermail: 'kreditoren@muster.de', kaeufervat: 'DE123456789',
+      rechnungsnummer: 'GS-4260909', rechnungsdatum: '2026-09-02', lieferdatum: '2026-08-28',
+      faelligkeitsdatum: '2026-10-02', zahlungsreferenz: 'GS-4260909',
+      notiz: 'Kaufmaennische Gutschrift (Reklamation).', steuerkategorie: 'S', befreiungsgrund: '',
+      positionen: [
+        { posnr: '1', beschreibung: 'Gutschrift Reklamation Walze', menge: 1, einheit: 'Stk', einzelpreis: 400, rabatt: 0, mwst: 19 },
+      ],
+    },
+  },
 ];
 
 /* ── Erzeugen ── */

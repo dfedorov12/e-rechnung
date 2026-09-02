@@ -290,6 +290,18 @@
         <div class="card-body">
           <div class="form-grid">
             <div class="form-group">
+              <label>Rechnungsart (BT-3)</label>
+              <select id="rechnungsart">
+                <option value="380">380 — Rechnung</option>
+                <option value="384">384 — Rechnungskorrektur</option>
+                <option value="381">381 — Gutschrift (kaufmännisch)</option>
+                <option value="389">389 — Gutschrift (Selbstfakturierung)</option>
+                <option value="326">326 — Teilrechnung</option>
+                <option value="386">386 — Vorauszahlungsrechnung</option>
+              </select>
+              <span class="hint">Belegart (UNTDID 1001, BT-3) — Rechnung, Gutschrift oder Korrektur.</span>
+            </div>
+            <div class="form-group">
               <label>Rechnungsnummer <span class="required">*</span></label>
               <input type="text" id="rechnungsnummer" placeholder="RE-2024-001">
             </div>

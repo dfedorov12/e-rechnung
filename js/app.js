@@ -246,6 +246,7 @@ function fillFormFromExtracted(data) {
     'liefer-land':         data.lieferLand,
     'steuerkategorie':     data.steuerkategorie,
     'befreiungsgrund':     data.befreiungsgrund,
+    'rechnungsart':        data.rechnungsart,
     'rechnungsnummer':     data.rechnungsnummer,
     'rechnungsdatum':      data.rechnungsdatum,
     'lieferdatum':         data.lieferdatum,
@@ -600,6 +601,7 @@ function collectFormData() {
     lieferStadt:       v('liefer-stadt'),
     lieferLand:        v('liefer-land'),
     // Rechnung
+    rechnungsart:      v('rechnungsart') || '380',   // BT-3 Belegart
     rechnungsnummer:   v('rechnungsnummer'),
     rechnungsdatum:    v('rechnungsdatum'),
     lieferdatum:       v('lieferdatum'),

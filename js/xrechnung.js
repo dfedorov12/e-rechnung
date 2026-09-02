@@ -199,7 +199,7 @@ function buildXML(data, profile = 'xrechnung') {
 
   <rsm:ExchangedDocument>
     <ram:ID>${esc(data.rechnungsnummer)}</ram:ID>
-    <ram:TypeCode>380</ram:TypeCode>
+    <ram:TypeCode>${esc(String(data.rechnungsart || '380'))}</ram:TypeCode>
     <ram:IssueDateTime>
       <udt:DateTimeString format="102">${fmtDate(data.rechnungsdatum)}</udt:DateTimeString>
     </ram:IssueDateTime>
