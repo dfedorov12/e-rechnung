@@ -32,6 +32,15 @@
     .dot-plan { background: var(--warning); }
     .proc-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px;
                 background: var(--gray-100); color: var(--gray-600); margin-left: 6px; }
+    .proc-details { margin-top: 16px; border: 1px solid var(--gray-200); border-radius: 8px; background: #fff; overflow: hidden; }
+    .proc-details > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14px; color: var(--gray-800);
+                              list-style: none; display: flex; align-items: center; gap: 8px; }
+    .proc-details > summary::-webkit-details-marker { display: none; }
+    .proc-details > summary::before { content: "\25B8"; color: var(--primary); transition: transform .15s; }
+    .proc-details[open] > summary::before { transform: rotate(90deg); }
+    .proc-details .pd-body { padding: 0 16px 14px; font-size: 13px; color: var(--gray-600); line-height: 1.55; }
+    .proc-details ol { margin: 8px 0 0; padding-left: 20px; }
+    .proc-details li { margin: 3px 0; }
   </style>
 </head>
 <body class="auth-guard">
@@ -221,6 +230,24 @@
       </ul>
     </div>
   </div>
+
+  <!-- Ausklappbar: automatischer Eingangsrechnungs-Workflow -->
+  <details class="proc-details">
+    <summary>Automatischer Eingangsrechnungs-Workflow (SharePoint + Power Automate)</summary>
+    <div class="pd-body">
+      Eingehende E-Rechnungen werden ohne manuellen Schritt in eine lesbare, archivfähige
+      PDF-Fassung überführt:
+      <ol>
+        <li>Die Eingangsrechnung (XRechnung-/ZUGFeRD-XML) landet in SharePoint.</li>
+        <li>Power Automate erkennt die neue Datei und ruft den XML&nbsp;→&nbsp;PDF-Endpunkt
+            (Azure Function) per Function-Key auf.</li>
+        <li>Der Endpunkt liefert ein <strong>PDF/A-3b</strong> zurück.</li>
+        <li>Das PDF wird automatisch zur Rechnung in SharePoint abgelegt.</li>
+      </ol>
+      So entsteht zu jeder eingehenden E-Rechnung automatisch eine lesbare PDF-Fassung —
+      ohne M365-Login und ohne manuelle Konvertierung.
+    </div>
+  </details>
 
 </div><!-- /page-content -->
 
