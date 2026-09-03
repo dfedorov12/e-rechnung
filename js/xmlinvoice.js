@@ -334,7 +334,7 @@ function _extraCII(trans, agreement, delivery, settle, r) {
 
   // Referenzen
   push('Referenzen', 'Auftragsnr. Verkäufer', _t(agreement, 'SellerOrderReferencedDocument', 'IssuerAssignedID'));
-  push('Referenzen', 'Lieferschein-Nr. (BT-16)', _t(delivery, 'DeliveryNoteReferencedDocument', 'IssuerAssignedID'));
+  r.lieferscheinnummer = (_t(delivery, 'DeliveryNoteReferencedDocument', 'IssuerAssignedID') || '').trim();
   push('Referenzen', 'Versandavis (BT-16)', _t(delivery, 'DespatchAdviceReferencedDocument', 'IssuerAssignedID'));
 
   // Verkäufer
@@ -396,7 +396,7 @@ function _extraUBL(root, r) {
   const w = [];
   const push = (group, label, value) => { const v = (value || '').trim(); if (v) w.push({ group, label, value: v }); };
 
-  push('Referenzen', 'Versandavis/Lieferschein (BT-16)', _t(root, 'DespatchDocumentReference', 'ID'));
+  r.lieferscheinnummer = (_t(root, 'DespatchDocumentReference', 'ID') || '').trim();
   push('Referenzen', 'Empfangsbestätigung', _t(root, 'ReceiptDocumentReference', 'ID'));
 
   const sp = _q(root, 'AccountingSupplierParty', 'Party');

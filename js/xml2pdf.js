@@ -186,7 +186,7 @@ async function buildInvoicePdf(data) {
     ['Rechnungsdatum',      fmtDate(data.rechnungsdatum)],
     ['Lieferdatum',         fmtDate(data.lieferdatum)],
     ['Abrechnungszeitraum', abrZeitraum],
-    ['Zahlungsreferenz',    data.zahlungsreferenz || '–'],
+    ['Lieferscheinnummer',  data.lieferscheinnummer || '–'],
   ];
   const metaW = (W - 2 * M) / meta.length;
   meta.forEach(([label, val], i) => {
@@ -305,16 +305,22 @@ async function buildInvoicePdf(data) {
   }
 
   /* ── Zahlung / Notiz ── */
-  if (data.iban || data.bic || data.kontoinhaber || data.faelligkeitsdatum || data.zahlungsbedingungen) {
+  if (data.iban || data.bic || data.kontoinhaber || data.faelligkeitsdatum || data.zahlungsbedingungen || data.zahlungsreferenz) {
     if (y < M + 80) newPage();
     text('ZAHLUNGSINFORMATIONEN', M, y, { size: 7.5, bold: true, color: gray });
     y -= 13;
-    if (data.faelligkeitsdatum) { text(`Fällig am: ${fmtDate(data.faelligkeitsdatum)}`, M, y, { size: 9 }); y -= 13; }
     if (data.kontoinhaber)      { for (const l of wrap(`Kontoinhaber: ${data.kontoinhaber}`, W - 2 * M)) { text(l, M, y, { size: 9 }); y -= 12; } }
     if (data.iban) { text(`IBAN: ${data.iban.replace(/(.{4})/g, '$1 ').trim()}`, M, y, { size: 9 }); y -= 13; }
     if (data.bic)  { text(`BIC: ${data.bic}`, M, y, { size: 9 }); y -= 13; }
     if (data.zahlungsbedingungen) {
       for (const l of wrap(`Zahlungsbedingungen: ${data.zahlungsbedingungen}`, W - 2 * M)) {
+        if (y < M + 30) newPage();
+        text(l, M, y, { size: 9 }); y -= 12;
+      }
+    }
+    if (data.faelligkeitsdatum) { text(`Fällig am: ${fmtDate(data.faelligkeitsdatum)}`, M, y, { size: 9 }); y -= 13; }
+    if (data.zahlungsreferenz) {
+      for (const l of wrap(`Zahlungsreferenz: ${data.zahlungsreferenz}`, W - 2 * M)) {
         if (y < M + 30) newPage();
         text(l, M, y, { size: 9 }); y -= 12;
       }
