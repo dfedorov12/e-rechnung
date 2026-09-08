@@ -120,12 +120,15 @@ Antwort-JSON von `/api/validate`:
 
 ## Hinweise / Grenzen
 
-- **ZUGFeRD-PDF (`AR_*` mit .pdf):** der Wrapper prüft **XML**. Für ZUGFeRD müsste
-  Power Automate die eingebettete XML extrahieren (oder ein zusätzlicher Schritt
-  im Container/der Function) — als nächster Ausbau vorgesehen. XRechnung-XML
-  (der häufigste Fall, auch die Konverter-Ausgaben) ist voll abgedeckt.
-- **PDF/A (veraPDF):** analog als zweiter Prüfschritt ergänzbar; hier zunächst
-  KoSIT (EN 16931 / XRechnung).
+- **ZUGFeRD/Factur-X-PDF:** wird unterstützt — `/api/validate` erkennt ein PDF am
+  `%PDF-`-Header, zieht die eingebettete XML (PDF-Anhang `factur-x.xml` /
+  `xrechnung.xml`) automatisch heraus und gibt sie an KoSIT. Der Endpoint nimmt
+  also **XML *oder* ZUGFeRD-PDF** an; das Antwortfeld `quelle` zeigt `XML` bzw.
+  `ZUGFeRD-PDF`. (Umgesetzt in `api/src/pdfxml.js`.)
+- **PDF/A (veraPDF) ≠ KoSIT:** veraPDF prüft nur die **PDF/A-3b-Hülle**, nicht den
+  Rechnungsinhalt. Die inhaltliche Konformität (Spalte „Konformitaet") liefert
+  KoSIT auf dem XML. veraPDF ist als optionaler zweiter Prüfschritt ergänzbar
+  (PDF/A-Nachweis), ersetzt KoSIT aber nicht.
 - Versionen: KoSIT-Validator `1.5.0`, XRechnung-Konfiguration `release 2024-06-20`
   (3.0.2) — identisch zur CI (`.github/workflows/validate.yml`). Beim Aktualisieren
   beide Stellen gleich ziehen.

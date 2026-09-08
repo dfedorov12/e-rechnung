@@ -14,6 +14,7 @@
  */
 const { app } = require('@azure/functions');
 const { validateXml, KOSIT_DAEMON_URL } = require('../kosit');
+const { extractInvoiceXml } = require('../pdfxml');
 
 app.http('validate', {
   methods: ['GET', 'POST'],
@@ -26,19 +27,34 @@ app.http('validate', {
         jsonBody: {
           service: 'E-Rechnung KoSIT-Validierung',
           daemon: KOSIT_DAEMON_URL,
-          usage: 'POST XML (XRechnung/CII/UBL) -> { konform: gruen|gelb|rot, konformLabel, accepted, meldungen[] }',
+          usage: 'POST XML (XRechnung/CII/UBL) ODER ZUGFeRD/Factur-X-PDF -> { konform: gruen|gelb|rot, konformLabel, accepted, meldungen[] }',
         },
       };
     }
 
-    const raw = await request.text();
-    const trimmed = (raw || '').trimStart(); // entfernt auch fuehrendes BOM
-    if (!trimmed || !trimmed.startsWith('<')) {
-      return problem(400, 'Bitte die E-Rechnungs-XML als Request-Body senden.');
+    // Body als Bytes lesen (XML oder ZUGFeRD-PDF). PDF -> eingebettete XML ziehen.
+    const buf = Buffer.from(await request.arrayBuffer());
+    const head = buf.subarray(0, 1024).toString('latin1');
+    const isPdf = head.includes('%PDF-');
+
+    let xml;
+    if (isPdf) {
+      try {
+        xml = await extractInvoiceXml(buf);
+      } catch (err) {
+        return problem(400, 'ZUGFeRD-PDF ohne lesbare E-Rechnungs-XML: '
+          + (err && err.message ? err.message : String(err)));
+      }
+    } else {
+      xml = buf.toString('utf8');
+      if (!xml.trimStart().startsWith('<')) {
+        return problem(400, 'Bitte die E-Rechnungs-XML oder ein ZUGFeRD-PDF als Request-Body senden.');
+      }
     }
 
     try {
-      const result = await validateXml(raw);
+      const result = await validateXml(xml);
+      result.quelle = isPdf ? 'ZUGFeRD-PDF' : 'XML';
       return { status: 200, jsonBody: result };
     } catch (err) {
       context.error('KoSIT-Validierung fehlgeschlagen:', err);
