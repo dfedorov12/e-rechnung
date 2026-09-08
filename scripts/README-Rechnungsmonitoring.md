@@ -26,7 +26,17 @@ Install-Module PnP.PowerShell -Scope CurrentUser
 Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "DIHAG-Rechnungsmonitoring" -Tenant dihag.onmicrosoft.com -Interactive
 ```
 
-Dann anlegen (ClientId aus dem obigen Befehl):
+**Ein‑Klick (Site + Bibliotheken in einem)** – legt die Site an, falls sie noch
+nicht existiert, und provisioniert anschließend alle Bibliotheken/Spalten:
+
+```powershell
+.\setup-rechnungsmonitoring.ps1 `
+    -SiteUrl https://dihag.sharepoint.com/sites/Rechnungsmonitoring `
+    -ClientId <APP-ID> `
+    -Werke WGC,SHB
+```
+
+**Nur Bibliotheken** (Site existiert bereits):
 
 ```powershell
 .\provision-rechnungsmonitoring.ps1 `
@@ -35,8 +45,9 @@ Dann anlegen (ClientId aus dem obigen Befehl):
     -Werke WGC,SHB
 ```
 
-Trockenlauf: zusätzlich `-WhatIfOnly`. Das Skript ist idempotent – vorhandene
-Bibliotheken/Spalten werden übersprungen.
+Trockenlauf: beim Provision‑Skript zusätzlich `-WhatIfOnly`. Beide Skripte sind
+idempotent – vorhandene Site/Bibliotheken/Spalten werden übersprungen. Der
+angemeldete Benutzer braucht das Recht, Site Collections anzulegen.
 
 ## Spaltensatz (je Bibliothek)
 
