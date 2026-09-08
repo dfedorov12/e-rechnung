@@ -158,9 +158,9 @@ async function spGetExports() {
 function _detectGesellschaft(verkaeufer) {
   const v = (verkaeufer || '').toLowerCase();
   if (v.includes('bösdorf') || v.includes('boesdorf') ||
-      v.includes('hartguss') || v.includes(' shb'))  return 'SHB';
+      v.includes('hartguss') || /\bshb\b/.test(v))   return 'SHB';
   if (v.includes('coswig')  || v.includes('walzen')  ||
-      v.includes(' wgc'))                             return 'WGC';
+      /\bwgc\b/.test(v))                             return 'WGC';
   return '';
 }
 
@@ -271,7 +271,11 @@ async function spSaveToMonitoring({ invoiceData, xml, pdfBytes, format }) {
   if (!token) return null;
   await _monInit(token);
 
-  const werk    = (invoiceData.gesellschaft || 'WGC').toUpperCase();
+  // Werk am Firmennamen des Rechnungsstellers erkennen (WGC=Coswig/Walzen,
+  // SHB=Boesdorf/Hartguss). Das Dropdown ist nur Fallback, falls der Name nicht
+  // eindeutig ist.
+  const werk    = (_detectGesellschaft(invoiceData.verkaeufer)
+                    || invoiceData.gesellschaft || 'WGC').toUpperCase();
   const libName = `AR_${werk}`;                       // Konverter = Ausgangsrechnung
   const key     = libName.toUpperCase();
   const listId  = _mon.lists[key];
