@@ -8,8 +8,6 @@
  * Der Daemon (offizieller KoSIT-Validator, Java) laeuft als eigener Container,
  * siehe kosit-service/. Seine URL kommt aus der App-Einstellung KOSIT_DAEMON_URL.
  */
-const { DOMParser } = require('@xmldom/xmldom');
-
 const KOSIT_DAEMON_URL = process.env.KOSIT_DAEMON_URL || 'http://localhost:8080/';
 
 /** XML an den KoSIT-Daemon senden und Report auswerten. */
@@ -20,47 +18,67 @@ async function validateXml(xml) {
     body: xml,
   });
   const reportXml = await resp.text();
-  if (!resp.ok) {
+  // KoSIT-Daemon signalisiert das Urteil auch per HTTP-Status:
+  //   200 = angenommen, 406 = abgelehnt. In BEIDEN Faellen steht der Report im Body.
+  // Nur echte Server-/Verbindungsfehler (kein Report) als Fehler behandeln.
+  if (resp.status !== 200 && resp.status !== 406) {
     throw new Error(`KoSIT-Daemon HTTP ${resp.status}: ${reportXml.slice(0, 200)}`);
   }
-  return parseReport(reportXml);
+  return parseReport(reportXml, resp.status === 406);
 }
 
 /**
- * KoSIT-/VARL-Report auswerten. Robust gegen Namespace-Varianten:
- * es werden alle <...:message>-Elemente eingesammelt und nach level gezaehlt.
+ * KoSIT-Report auswerten.
+ * Massgeblich ist das Urteil der Bewertung <rep:assessment>:
+ *   <rep:accept> = angenommen (konform),  <rep:reject> = abgelehnt.
+ * WICHTIG: NICHT jedes Element mit level-Attribut zaehlen — <s:customLevel> im
+ * Szenario ist nur die Severity-KONFIGURATION der Regelcodes, kein Befund.
+ * Einzelbefunde werden best effort aus den Schematron-Ergebnissen gezogen
+ * (svrl:failed-assert = Fehler, svrl:successful-report[flag=warning] = Warnung);
+ * fehlen diese, wird die HTML-Fehlertabelle des Reports als Fallback genutzt.
  */
-function parseReport(reportXml) {
-  const doc = new DOMParser({
-    errorHandler: { warning() {}, error() {}, fatalError() {} },
-  }).parseFromString(reportXml, 'application/xml');
+function parseReport(reportXml, httpRejected) {
+  const s = String(reportXml || '');
+  const strip = t => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-  const all = doc.getElementsByTagName('*');
-  const messages = [];
-  let acceptRec = '';
+  // Authoritatives Urteil: HTTP-Status 406 des Daemons ODER <rep:reject> im Report.
+  const rejected = httpRejected === true || /<rep:reject\b/i.test(s);
 
-  for (let i = 0; i < all.length; i++) {
-    const el = all[i];
-    const ln = (el.localName || el.nodeName || '').toLowerCase();
-    if (ln === 'message') {
-      const level = (el.getAttribute('level') || el.getAttribute('severity') || 'error').toLowerCase();
-      const code  = el.getAttribute('code') || el.getAttribute('id') || '';
-      const text  = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      messages.push({ level, code, text: text.slice(0, 300) });
-    } else if (ln === 'acceptrecommendation') {
-      acceptRec = (el.textContent || '').trim().toUpperCase();
+  const meldungen = [];
+  let m;
+
+  const failRe = /<svrl:failed-assert\b([^>]*)>([\s\S]*?)<\/svrl:failed-assert>/gi;
+  while ((m = failRe.exec(s))) {
+    const flag = (m[1].match(/flag="([^"]*)"/i) || ['', ''])[1].toLowerCase();
+    const level = (flag === 'warning' || flag === 'warn') ? 'warning' : 'error';
+    const text = strip(m[2]);
+    if (text) meldungen.push({ level, text: text.slice(0, 300) });
+  }
+  const okRe = /<svrl:successful-report\b([^>]*)>([\s\S]*?)<\/svrl:successful-report>/gi;
+  while ((m = okRe.exec(s))) {
+    const flag = (m[1].match(/flag="([^"]*)"/i) || ['', ''])[1].toLowerCase();
+    if (flag === 'warning' || flag === 'warn') {
+      const text = strip(m[2]);
+      if (text) meldungen.push({ level: 'warning', text: text.slice(0, 300) });
     }
   }
 
-  const errors   = messages.filter(m => m.level.startsWith('err'));
-  const warnings = messages.filter(m => m.level.startsWith('warn'));
+  // Fallback: HTML-Fehlertabelle, falls keine SVRL-Befunde eingebettet sind.
+  if (!meldungen.length && rejected) {
+    const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+    while ((m = rowRe.exec(s))) {
+      const text = strip(m[1]);
+      if (text && /[A-Z]{2,}-[A-Z0-9-]*\d/.test(text)) meldungen.push({ level: 'error', text: text.slice(0, 300) });
+    }
+  }
+
+  const errorCount   = meldungen.filter(x => x.level === 'error').length;
+  const warningCount = meldungen.filter(x => x.level === 'warning').length;
 
   let konform;
-  if (errors.length)        konform = 'rot';
-  else if (warnings.length) konform = 'gelb';
-  else                      konform = 'gruen';
-  // Explizite Ablehnung des Validators respektieren.
-  if (acceptRec === 'REJECT' && konform === 'gruen') konform = 'rot';
+  if (rejected || errorCount) konform = 'rot';
+  else if (warningCount)      konform = 'gelb';
+  else                        konform = 'gruen';
 
   const label = { gruen: 'Gruen - KoSIT ok', gelb: 'Gelb - Warnungen', rot: 'Rot - Fehler' }[konform];
 
@@ -68,9 +86,9 @@ function parseReport(reportXml) {
     konform,                    // 'gruen' | 'gelb' | 'rot'
     konformLabel: label,        // passend zur SharePoint-Choice-Spalte "Konformitaet"
     accepted: konform !== 'rot',
-    errorCount: errors.length,
-    warningCount: warnings.length,
-    meldungen: messages.slice(0, 50),
+    errorCount,
+    warningCount,
+    meldungen: meldungen.slice(0, 50),
   };
 }
 
