@@ -1,0 +1,4 @@
+# LF erzwingen, sonst schlaegt der Container-Build fehl.
+Dockerfile      text eol=lf
+server.js       text eol=lf
+auto-install.xml text eol=lf

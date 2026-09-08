@@ -15,6 +15,7 @@
 const { app } = require('@azure/functions');
 const { validateXml, KOSIT_DAEMON_URL } = require('../kosit');
 const { extractInvoiceXml } = require('../pdfxml');
+const { validatePdfA } = require('../verapdf');
 
 app.http('validate', {
   methods: ['GET', 'POST'],
@@ -55,6 +56,15 @@ app.http('validate', {
     try {
       const result = await validateXml(xml);
       result.quelle = isPdf ? 'ZUGFeRD-PDF' : 'XML';
+      // Bei PDF zusaetzlich die PDF/A-3b-Huelle pruefen (veraPDF), sofern konfiguriert.
+      if (isPdf) {
+        try {
+          const pdfa = await validatePdfA(buf);
+          if (pdfa) result.pdfa = pdfa;
+        } catch (e) {
+          result.pdfa = { konform: 'ungeprueft', error: (e && e.message ? e.message : String(e)) };
+        }
+      }
       return { status: 200, jsonBody: result };
     } catch (err) {
       context.error('KoSIT-Validierung fehlgeschlagen:', err);

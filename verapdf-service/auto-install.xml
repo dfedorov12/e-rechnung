@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AutomatedInstallation langpack="eng">
+  <com.izforge.izpack.panels.target.TargetPanel id="install_dir">
+    <installpath>/opt/verapdf</installpath>
+  </com.izforge.izpack.panels.target.TargetPanel>
+</AutomatedInstallation>

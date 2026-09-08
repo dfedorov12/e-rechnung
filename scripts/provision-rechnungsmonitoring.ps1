@@ -87,6 +87,7 @@ $Felder = @(
   @{ Name='Syntax';              Titel='Syntax';                     Typ='Choice';   FillIn=$true; Choices=@('CII','UBL') }
   @{ Name='Verarbeitungsstatus'; Titel='Verarbeitungsstatus';        Typ='Choice';   Choices=@('Eingegangen','Konvertiert','Validiert','Geprueft','Gebucht','Archiviert','Fehler') }
   @{ Name='Konformitaet';        Titel='Konformitaet';               Typ='Choice';   Choices=@('Gruen - KoSIT ok','Gelb - Warnungen','Rot - Fehler','Ungeprueft') }
+  @{ Name='PDFAStatus';          Titel='PDF/A-3b (veraPDF)';         Typ='Choice';   Choices=@('PDF/A-3b ok','PDF/A Fehler','Ungeprueft','n/a (nur XML)') }
   @{ Name='ValidierungsMeldung'; Titel='Validierungsmeldung';        Typ='Note' }
   @{ Name='Fehlermeldung';       Titel='Fehlermeldung';              Typ='Note' }
   @{ Name='Eingangszeitpunkt';   Titel='Eingang am';                 Typ='DateTime' }
