@@ -127,15 +127,12 @@
 
 <script>
 onAuthReady(async () => {
-  await loadRuntimeAccessConfig();
   initAdminNav();
   monInitFilterEvents();
-  const access = getCurrentUserAccess();
-  if (access.length === 0) {
-    monShowAccessDenied();
-  } else {
-    loadMonitoring(access);
-  }
+  // Zugriff regelt SharePoint (wer die Site/Bibliothek lesen darf, sieht sie).
+  // KEIN zusaetzlicher Gesellschafts-Filter -> alle Werke der Site erscheinen
+  // (sonst wurde z.B. SHB fuer WGC-only-Nutzer ausgeblendet).
+  loadMonitoring();
 });
 </script>
 <script>authInit();</script>

@@ -53,19 +53,14 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupGesellschaftSelector() {
   const sel = document.getElementById('gesellschaft');
   if (!sel) return;
-  const access = typeof getCurrentUserAccess === 'function' ? getCurrentUserAccess() : [];
-  sel.innerHTML = '';
-  if (access.length === 0) {
-    // Fallback: beide anzeigen (z.B. wenn access.js nicht geladen)
-    sel.innerHTML = '<option value="WGC">WGC</option><option value="SHB">SHB</option>';
-    return;
-  }
-  access.forEach(g => {
-    const opt = document.createElement('option');
-    opt.value = g.toUpperCase();
-    opt.textContent = (typeof GESELLSCHAFT_LABELS !== 'undefined' ? GESELLSCHAFT_LABELS[g] : null) || g.toUpperCase();
-    sel.appendChild(opt);
-  });
+  // Beide DIHAG-Werke IMMER anbieten. Frueher wurde nur nach der Ansichts-
+  // Zugriffsconfig befuellt -> war ein Nutzer nur WGC zugeordnet, fehlte SHB
+  // im Dropdown und SHB-Rechnungen wurden faelschlich als WGC in AR_WGC abgelegt.
+  const werke = ['WGC', 'SHB'];
+  sel.innerHTML = werke.map(g => {
+    const label = (typeof GESELLSCHAFT_LABELS !== 'undefined' && GESELLSCHAFT_LABELS[g.toLowerCase()]) || g;
+    return `<option value="${g}">${label}</option>`;
+  }).join('');
 }
 
 /* ── Pflichtfeld-Toggles für "mind. eines von zwei" ── */

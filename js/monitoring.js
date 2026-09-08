@@ -104,8 +104,10 @@ function _monMap(it, f, lib) {
     ? String(f.Title).trim()
     : String(f.FileLeafRef || '').replace(/_\d*\.(pdf|xml)$/i, '');
   return {
-    werk:     (f.Gesellschaft || lib.werk || '').toString(),
-    richtung: (f.Richtung || lib.richtung || '').toString(),
+    // Werk aus dem Bibliotheksnamen (AR_SHB -> SHB) = maessgeblich; das Feld
+    // Gesellschaft kann leer/falsch sein und wird nur als Fallback genutzt.
+    werk:     (lib.werk || f.Gesellschaft || '').toString(),
+    richtung: (lib.richtung || f.Richtung || '').toString(),
     nummer,
     art:      (f.Rechnungsart || '').toString(),
     steller:  (f.Rechnungssteller || '').toString(),
