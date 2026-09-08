@@ -23,10 +23,37 @@ Power Automate  ──POST XML──▶  Azure Function /api/validate  ──POS
 
 ## 1) Container bauen & deployen
 
+**Ohne lokales Docker** — in Azure bauen lassen (empfohlen). Aus dem Ordner
+`kosit-service`:
+
 ```bash
-cd kosit-service
+# einmalig: Container Registry (Name global eindeutig, nur Kleinbuchstaben/Ziffern)
+az acr create -g rg-erechnung-api -n dihagerechnungacr --sku Basic
+
+# Image in der Cloud bauen (kein Docker noetig)
+az acr build -r dihagerechnungacr -t erechnung-kosit:latest .
+
+# als Container Instance starten (zieht das Image aus der Registry)
+az acr update -n dihagerechnungacr --admin-enabled true
+az container create \
+  -g rg-erechnung-api \
+  --name erechnung-kosit \
+  --image dihagerechnungacr.azurecr.io/erechnung-kosit:latest \
+  --registry-login-server dihagerechnungacr.azurecr.io \
+  --registry-username dihagerechnungacr \
+  --registry-password "$(az acr credential show -n dihagerechnungacr --query 'passwords[0].value' -o tsv)" \
+  --ports 8080 --cpu 1 --memory 1.5 \
+  --dns-name-label erechnung-kosit
+# -> http://erechnung-kosit.<region>.azurecontainer.io:8080/
+```
+
+Namen (`dihagerechnungacr`, `rg-erechnung-api`) an eure Umgebung anpassen.
+
+**Optional lokal testen** (falls Docker vorhanden — sonst überspringen):
+
+```bash
 docker build -t erechnung-kosit .
-docker run -p 8080:8080 erechnung-kosit          # lokal testen
+docker run -p 8080:8080 erechnung-kosit
 curl -X POST --data-binary @rechnung.xml http://localhost:8080/   # liefert Report-XML
 ```
 
@@ -34,21 +61,6 @@ Der Daemon:
 - `POST /` mit XML-Body → **Report-XML** (HTTP 200 auch bei „rejected"; das
   Urteil steht im Report — der Wrapper wertet es aus).
 - `GET /` → HTML-Upload-Seite (dient als Liveness-Check).
-
-**Nach Azure** (z. B. Azure Container Registry + Container Instances):
-
-```bash
-az acr build -r <registry> -t erechnung-kosit:latest .
-
-az container create \
-  --resource-group rg-erechnung-api \
-  --name erechnung-kosit \
-  --image <registry>.azurecr.io/erechnung-kosit:latest \
-  --ports 8080 \
-  --cpu 1 --memory 1.5 \
-  --dns-name-label erechnung-kosit
-# -> http://erechnung-kosit.<region>.azurecontainer.io:8080/
-```
 
 > **Sicherheit:** Der Daemon hat **keine eigene Authentifizierung**. Er sollte
 > nur intern erreichbar sein — idealerweise Function + Container im selben VNet,
