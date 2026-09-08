@@ -11,7 +11,7 @@
 
 .EINMALIGE VORAUSSETZUNG
   Install-Module PnP.PowerShell -Scope CurrentUser
-  Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "DIHAG-Rechnungsmonitoring" -Tenant dihag.onmicrosoft.com -Interactive
+  Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "DIHAG-Rechnungsmonitoring" -Tenant dihag.onmicrosoft.com
   -> Die ausgegebene ClientId (App-ID) unten als -ClientId uebergeben.
   Der angemeldete Benutzer braucht das Recht, Site Collections anzulegen.
 

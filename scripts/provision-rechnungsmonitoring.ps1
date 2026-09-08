@@ -20,7 +20,7 @@
     Install-Module PnP.PowerShell -Scope CurrentUser
     Register-PnPEntraIDAppForInteractiveLogin `
         -ApplicationName "DIHAG-Rechnungsmonitoring" `
-        -Tenant dihag.onmicrosoft.com -Interactive
+        -Tenant dihag.onmicrosoft.com
 
   Der Befehl gibt eine ClientId (App-ID) aus -> unten als -ClientId uebergeben.
   (Alternativ per Azure CLI: `az ad app create --display-name DIHAG-Rechnungsmonitoring`

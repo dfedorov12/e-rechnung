@@ -23,7 +23,7 @@ Einmalig App registrieren (PnP 2.x braucht eine eigene Entra‑App):
 
 ```powershell
 Install-Module PnP.PowerShell -Scope CurrentUser
-Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "DIHAG-Rechnungsmonitoring" -Tenant dihag.onmicrosoft.com -Interactive
+Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "DIHAG-Rechnungsmonitoring" -Tenant dihag.onmicrosoft.com
 ```
 
 **Ein‑Klick (Site + Bibliotheken in einem)** – legt die Site an, falls sie noch
