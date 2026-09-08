@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitoring | E-Rechnung Konverter | DIHAG</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .mon-header { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px; margin-bottom:18px; }
+    .mon-header h2 { margin:0; }
+    .mon-header p { margin:4px 0 0; color:var(--gray-500); font-size:13px; }
+
+    .mon-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+    .mon-tile { background:#fff; border:1px solid var(--gray-200); border-left:4px solid var(--primary);
+                border-radius:var(--border-radius); padding:14px 16px; box-shadow:var(--shadow-sm); }
+    .mon-tile-val { font-size:24px; font-weight:700; color:var(--gray-900); line-height:1.1; }
+    .mon-tile-label { font-size:12px; color:var(--gray-500); margin-top:4px; }
+    .mon-tile.in   { border-left-color:#2563eb; }
+    .mon-tile.out  { border-left-color:#0e9f6e; }
+    .mon-tile.warn { border-left-color:var(--warning); }
+    .mon-tile.bad  { border-left-color:var(--danger); }
+    .mon-tile.sum  { border-left-color:#7c3aed; }
+
+    .mon-filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
+    .mon-filters select, .mon-filters input { padding:8px 10px; border:1px solid var(--gray-300);
+                border-radius:6px; font-size:13px; background:#fff; }
+    .mon-filters input { min-width:220px; }
+    .mon-count { margin-left:auto; font-size:12px; color:var(--gray-500); }
+
+    .mon-table-wrap { overflow-x:auto; background:#fff; border:1px solid var(--gray-200);
+                border-radius:var(--border-radius); box-shadow:var(--shadow-sm); }
+    table.mon-table { width:100%; border-collapse:collapse; font-size:13px; min-width:900px; }
+    table.mon-table th { text-align:left; padding:10px 12px; background:var(--gray-50); color:var(--gray-600);
+                font-weight:600; border-bottom:1px solid var(--gray-200); white-space:nowrap; position:sticky; top:0; }
+    table.mon-table td { padding:9px 12px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
+    table.mon-table tr:hover td { background:var(--gray-50); }
+    .mon-err { color:var(--danger); max-width:220px; }
+
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
+    .pill-werk   { background:var(--primary-light); color:var(--primary-dark); }
+    .pill-in     { background:#dbeafe; color:#1e40af; }
+    .pill-out    { background:#d1fae5; color:#065f46; }
+    .pill-status { background:var(--gray-100); color:var(--gray-700); }
+    .pill-ok     { background:#d1fae5; color:#065f46; }
+    .pill-warn   { background:#fef3c7; color:#92400e; }
+    .pill-bad    { background:#fee2e2; color:#991b1b; }
+
+    .mon-setup { display:none; }
+    .mon-setup-card { background:#fff; border:1px solid var(--gray-200); border-radius:var(--border-radius);
+                padding:36px; text-align:center; box-shadow:var(--shadow-sm); max-width:560px; margin:24px auto; }
+    .mon-setup-card h3 { margin:12px 0 6px; color:var(--gray-800); }
+    .mon-setup-card p  { color:var(--gray-500); font-size:14px; }
+  </style>
+</head>
+<body class="auth-guard">
+
+<header class="site-header">
+  <div class="site-logo">DIHAG <span>E-Rechnung</span></div>
+  <nav class="site-nav">
+    <a href="index.html">Konverter</a>
+    <a href="prozess.html">Prozess</a>
+    <a href="xml-zu-pdf.html">XML → PDF</a>
+    <a href="verlauf.html">Verlauf</a>
+    <a href="monitoring.html" class="active">Monitoring</a>
+    <a href="einstellungen.html" id="nav-einstellungen" style="display:none;">Einstellungen</a>
+  </nav>
+  <div class="auth-user">
+    <div class="auth-avatar" id="auth-initials">…</div>
+    <div class="auth-user-text">
+      <span class="auth-user-name" id="auth-name"></span>
+      <span class="auth-user-email" id="auth-email"></span>
+    </div>
+    <button class="btn-auth-logout" onclick="authLogout()">Abmelden</button>
+  </div>
+</header>
+
+<div class="page-content">
+
+  <div class="mon-header">
+    <div>
+      <h2>📊 Rechnungsmonitoring</h2>
+      <p id="mon-subtitle">Wird geladen…</p>
+    </div>
+  </div>
+
+  <!-- Setup-/Fehlerhinweis -->
+  <div id="mon-setup" class="mon-setup"></div>
+
+  <!-- Auswertung -->
+  <div id="mon-body" style="display:none;">
+    <div class="mon-kpis" id="mon-kpis"></div>
+
+    <div class="mon-filters">
+      <select id="mon-f-werk"><option value="">Alle Werke</option></select>
+      <select id="mon-f-richtung">
+        <option value="">Ein- + Ausgang</option>
+        <option value="Eingang">Eingang</option>
+        <option value="Ausgang">Ausgang</option>
+      </select>
+      <select id="mon-f-status"><option value="">Alle Status</option></select>
+      <select id="mon-f-format"><option value="">Alle Formate</option></select>
+      <input type="search" id="mon-f-q" placeholder="🔍 Nummer, Steller, Empfänger…">
+      <span class="mon-count" id="mon-count"></span>
+    </div>
+
+    <div class="mon-table-wrap">
+      <table class="mon-table">
+        <thead>
+          <tr>
+            <th>Datum</th><th>Werk</th><th>Richtung</th><th>Rechnungsnr.</th>
+            <th>Steller / Empfänger</th><th>Brutto</th><th>Format</th>
+            <th>Status</th><th>Konform.</th><th>Fehler</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="mon-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/vendor/msal-browser.min.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/access.js"></script>
+<script src="js/sharepoint.js"></script>
+<script src="js/monitoring.js"></script>
+
+<script>
+onAuthReady(async () => {
+  await loadRuntimeAccessConfig();
+  initAdminNav();
+  monInitFilterEvents();
+  const access = getCurrentUserAccess();
+  if (access.length === 0) {
+    monShowAccessDenied();
+  } else {
+    loadMonitoring(access);
+  }
+});
+</script>
+<script>authInit();</script>
+</body>
+</html>
