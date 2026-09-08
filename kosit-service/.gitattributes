@@ -1,0 +1,5 @@
+# Shell-Skripte und Dockerfile MUESSEN LF behalten, sonst schlaegt der
+# Container-Build fehl (bad interpreter / CRLF).
+*.sh        text eol=lf
+entrypoint.sh text eol=lf
+Dockerfile  text eol=lf

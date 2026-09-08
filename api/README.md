@@ -189,6 +189,22 @@ die Function jemals direkt aus einem Browser (JavaScript) aufgerufen werden soll
 
 ---
 
+## KoSIT-Validierung (`/api/validate`)
+
+Zusätzlicher Endpunkt, der eine E-Rechnungs-XML mit dem **echten KoSIT-Validator**
+prüft und ein JSON-Verdikt (`gruen`/`gelb`/`rot`) liefert — für das automatische
+Setzen der Spalte **Konformitaet** im Rechnungsmonitoring.
+
+```
+GET  /api/validate   -> Health/Info
+POST /api/validate   -> Body = XML, Antwort = { konform, konformLabel, accepted, meldungen[] }
+```
+
+Der eigentliche Validator läuft als eigener Container (Java 8) im **Daemon-Modus**;
+diese Function ist nur der JSON-Wrapper. Aufbau, Deployment und der passende
+Power-Automate-Flow stehen in [`../kosit-service/README.md`](../kosit-service/README.md).
+Voraussetzung: App-Einstellung `KOSIT_DAEMON_URL` zeigt auf den Container.
+
 ## Datenschutz
 
 - Keine Persistenz: die hochgeladene XML und das erzeugte PDF werden **nicht**
