@@ -731,10 +731,10 @@ async function exportInvoice(format) {
       audit,
     });
 
-    // SharePoint-Upload
-    showLoading(true, 'Wird in SharePoint gespeichert...');
+    // Monitoring-Upload (Bibliothek AR_<Werk> auf der Rechnungsmonitoring-Site)
+    showLoading(true, 'Wird ins Monitoring gespeichert...');
     try {
-      await spSaveExport({
+      await spSaveToMonitoring({
         invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit },
         xml,
         pdfBytes,
@@ -743,15 +743,15 @@ async function exportInvoice(format) {
       showLoading(false);
       showToast(
         format === 'zugferd'
-          ? `ZUGFeRD PDF exportiert & in SharePoint gespeichert. (${safeNr})`
-          : `XRechnung XML exportiert & in SharePoint gespeichert. (${safeNr})`,
+          ? `ZUGFeRD PDF exportiert & im Monitoring gespeichert. (${safeNr})`
+          : `XRechnung XML exportiert & im Monitoring gespeichert. (${safeNr})`,
         'success'
       );
     } catch (spErr) {
       showLoading(false);
-      console.warn('SharePoint save failed:', spErr);
+      console.warn('Monitoring save failed:', spErr);
       showToast(
-        `Exportiert (lokal) · SharePoint-Fehler: ${spErr.message}`,
+        `Exportiert (lokal) · Monitoring-Fehler: ${spErr.message}`,
         'info'
       );
     }

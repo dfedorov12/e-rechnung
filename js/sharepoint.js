@@ -216,6 +216,152 @@ async function spDeleteItem(itemId) {
 }
 
 /* ═══════════════════════════════════════════════════
+   Rechnungsmonitoring – Export in Bibliothek AR_<Werk>
+   Konverter-Ausgaben (Ausgangsrechnungen) landen direkt in der
+   Monitoring-Site, damit der Reiter „Monitoring" alles zeigt.
+   Bibliotheken: scripts/provision-rechnungsmonitoring.ps1
+═══════════════════════════════════════════════════ */
+
+const MON_SP = { siteHost: 'dihag.sharepoint.com:/sites/Rechnungsmonitoring' };
+const _mon = { siteId: null, lists: null, drives: null, cols: {} };
+
+const _RA_LABELS = {
+  '380': '380 - Rechnung', '381': '381 - Kaufmaennische Gutschrift',
+  '383': '383 - Belastungsanzeige', '384': '384 - Rechnungskorrektur',
+  '386': '386 - Vorauszahlung', '389': '389 - Gutschrift (Selbstfakturierung)',
+  '326': '326 - Teilrechnung',
+};
+
+async function _monInit(token) {
+  if (_mon.siteId) return;
+  const site = await _get(`${SP.graphBase}/sites/${MON_SP.siteHost}`, token);
+  _mon.siteId = site.id;
+
+  const lists = await _get(
+    `${SP.graphBase}/sites/${_mon.siteId}/lists?$select=id,name,displayName,list&$top=200`, token);
+  _mon.lists = {};
+  (lists.value || []).forEach(l => {
+    const n = l.name || l.displayName;
+    if (n) _mon.lists[n.toUpperCase()] = l.id;
+  });
+
+  const drives = await _get(`${SP.graphBase}/sites/${_mon.siteId}/drives?$top=200`, token);
+  _mon.drives = {};
+  (drives.value || []).forEach(d => { if (d.name) _mon.drives[d.name.toUpperCase()] = d.id; });
+}
+
+async function _monCols(token, listId, key) {
+  if (_mon.cols[key]) return _mon.cols[key];
+  const set = new Set(['Title']);
+  try {
+    const cols = await _get(`${SP.graphBase}/sites/${_mon.siteId}/lists/${listId}/columns`, token);
+    (cols.value || []).forEach(c => set.add(c.name));
+  } catch (e) { console.warn('[Monitoring] Spalten nicht lesbar:', e.message); }
+  _mon.cols[key] = set;
+  return set;
+}
+
+/**
+ * Konverter-Export in die Monitoring-Bibliothek AR_<Werk> schreiben:
+ * lädt die Datei (ZUGFeRD-PDF bzw. XRechnung-XML) hoch und setzt die
+ * Metadaten-Spalten direkt am Datei-Item (eine Zeile pro Rechnung).
+ */
+async function spSaveToMonitoring({ invoiceData, xml, pdfBytes, format }) {
+  const token = await acquireToken(SP.scopes);
+  if (!token) return null;
+  await _monInit(token);
+
+  const werk    = (invoiceData.gesellschaft || 'WGC').toUpperCase();
+  const libName = `AR_${werk}`;                       // Konverter = Ausgangsrechnung
+  const key     = libName.toUpperCase();
+  const listId  = _mon.lists[key];
+  const driveId = _mon.drives[key];
+  if (!listId || !driveId) {
+    throw new Error(`Monitoring-Bibliothek "${libName}" nicht gefunden. `
+      + `Bitte provision-rechnungsmonitoring.ps1 mit -Werke ${werk} ausfuehren.`);
+  }
+  const available = await _monCols(token, listId, key);
+
+  const safeNr  = _safe(invoiceData.rechnungsnummer);
+  const dateStr = (invoiceData.rechnungsdatum || '').replace(/-/g, '');
+  const isZ     = format === 'zugferd';
+  const fileName = isZ ? `${safeNr}_${dateStr}.pdf` : `${safeNr}_${dateStr}.xml`;
+  const bytes = isZ
+    ? (pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes))
+    : new TextEncoder().encode(String.fromCharCode(0xFEFF) + xml);   // BOM
+  const ctype = isZ ? 'application/pdf' : 'text/xml';
+
+  const up = await _monUpload(token, driveId, fileName, bytes, ctype);
+  const fileUrl = up.webUrl || '';
+
+  const nowIso = new Date().toISOString();
+  const a = invoiceData.audit;
+  const allFields = {
+    Title:               (invoiceData.rechnungsnummer || '').slice(0, 255),
+    Rechnungsart:        _RA_LABELS[String(invoiceData.rechnungsart || '380')] || String(invoiceData.rechnungsart || '380'),
+    Rechnungsdatum:      invoiceData.rechnungsdatum || nowIso.slice(0, 10),
+    Faelligkeitsdatum:   invoiceData.faelligkeitsdatum || '',
+    Rechnungssteller:    (invoiceData.verkaeufer || '').slice(0, 255),
+    Rechnungsempfaenger: (invoiceData.kaeufer || '').slice(0, 255),
+    Waehrung:            (invoiceData.waehrung || 'EUR').slice(0, 10),
+    Nettobetrag:         Number((invoiceData.netTotal   || 0).toFixed(2)),
+    MwStBetrag:          Number((invoiceData.vatTotal   || 0).toFixed(2)),
+    Bruttobetrag:        Number((invoiceData.grossTotal || 0).toFixed(2)),
+    Kaeuferreferenz:     (invoiceData.leitwegid || '').slice(0, 255),
+    Bestellnummer:       (invoiceData.bestellnummer || '').slice(0, 255),
+    Lieferscheinnummer:  (invoiceData.lieferscheinnummer || '').slice(0, 255),
+    Zahlungsreferenz:    (invoiceData.zahlungsreferenz || '').slice(0, 255),
+    Richtung:            'Ausgang',
+    Gesellschaft:        werk,
+    Format:              isZ ? 'ZUGFeRD' : 'XRechnung',
+    Verarbeitungsstatus: 'Konvertiert',
+    Konformitaet:        'Ungeprueft',
+    Eingangszeitpunkt:   nowIso,
+    Konvertiertam:       nowIso,
+    OriginalPdfName:     (invoiceData.originalPdfName || '').slice(0, 255),
+    XMLDateiUrl:         isZ ? '' : fileUrl,
+    ZUGFeRDPdfUrl:       isZ ? fileUrl : '',
+    Pruefstatus:         _auditStatus(a),
+    ManuelleAenderungen: a ? JSON.stringify(a.manuelleAenderungen || []).slice(0, 255) : '',
+    QuellPdfHash:        a ? (a.quellPdfHash || '').slice(0, 255) : '',
+    GeprueftVon:         a ? (a.geprueftVon || '').slice(0, 255) : '',
+    StammdatenEntsperrt: a ? (a.stammdatenEntsperrt ? 'Ja' : 'Nein') : 'Nein',
+  };
+
+  // leere Werte weglassen + nur real vorhandene Spalten senden
+  const fields = {};
+  for (const [k, val] of Object.entries(allFields)) {
+    if (val === '' || val == null) continue;
+    if (!available.has(k)) continue;
+    fields[k] = val;
+  }
+
+  await _patch(`${SP.graphBase}/drives/${driveId}/items/${up.id}/listItem/fields`, token, fields);
+  return { webUrl: fileUrl, lib: libName };
+}
+
+async function _monUpload(token, driveId, name, bytes, contentType) {
+  const url = `${SP.graphBase}/drives/${driveId}/root:/${encodeURIComponent(name)}:/content`;
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': contentType },
+    body: bytes,
+  });
+  if (!resp.ok) { const m = await resp.text(); throw new Error(`Upload ${resp.status}: ${m.slice(0, 200)}`); }
+  return resp.json();
+}
+
+async function _patch(url, token, body) {
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) { const m = await resp.text(); throw new Error(`Graph PATCH (${resp.status}): ${m.slice(0, 300)}`); }
+  return resp.json();
+}
+
+/* ═══════════════════════════════════════════════════
    Initialisierung & Spalten-Setup
 ═══════════════════════════════════════════════════ */
 
