@@ -98,10 +98,15 @@ async function loadMonitoring(accessList) {
 
 function _monMap(it, f, lib) {
   const num = v => (typeof v === 'number' ? v : (v == null || v === '' ? null : parseFloat(v)));
+  // Rechnungsnr.: Titelfeld bevorzugen; sonst reine Nummer aus dem Dateinamen
+  // (Muster "NR_JJJJMMTT.pdf|xml") ableiten statt den ganzen Dateinamen zu zeigen.
+  const nummer = (f.Title && String(f.Title).trim())
+    ? String(f.Title).trim()
+    : String(f.FileLeafRef || '').replace(/_\d*\.(pdf|xml)$/i, '');
   return {
     werk:     (f.Gesellschaft || lib.werk || '').toString(),
     richtung: (f.Richtung || lib.richtung || '').toString(),
-    nummer:   (f.Title || f.FileLeafRef || '').toString(),
+    nummer,
     art:      (f.Rechnungsart || '').toString(),
     steller:  (f.Rechnungssteller || '').toString(),
     empf:     (f.Rechnungsempfaenger || '').toString(),
