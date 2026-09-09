@@ -243,6 +243,29 @@
               <label>USt-IdNr.</label>
               <input type="text" id="kaeufer-vat" placeholder="DE123456789">
               <span class="hint">Optional — nur bei bestimmten Geschäftsvorfällen nötig (z. B. innergemeinschaftliche Lieferung, Reverse Charge). Für Inlandsrechnungen kein Pflichtfeld.</span>
+              <div id="vat-check-box">
+                <button type="button" id="vat-check-btn" title="Qualifizierte Bestätigung der USt-IdNr. beim Bundeszentralamt für Steuern – mit Nachweis (Anfrage-ID)">🛡 USt-IdNr. qualifiziert prüfen</button>
+                <div id="vat-check-result" hidden></div>
+              </div>
+              <style>
+                #vat-check-box { margin-top: 8px; }
+                #vat-check-btn { font-size: 12px; padding: 6px 12px; border: 1px solid var(--azur, #17509E);
+                  color: var(--azur, #17509E); background: #fff; border-radius: 6px; cursor: pointer; }
+                #vat-check-btn:hover:not(:disabled) { background: var(--azur, #17509E); color: #fff; }
+                #vat-check-btn:disabled { opacity: .6; cursor: default; }
+                #vat-check-result { margin-top: 8px; font-size: 12px; border-radius: 6px; padding: 10px 12px; border: 1px solid var(--gray-300, #cbd5e1); }
+                #vat-check-result.vat-ok { border-color: #16a34a; background: #f0fdf4; }
+                #vat-check-result.vat-bad { border-color: #dc2626; background: #fef2f2; }
+                #vat-check-result.vat-neutral { border-color: var(--lichtblau, #99B7CD); background: #f5f9fc; }
+                #vat-check-result.vat-err { border-color: var(--orange, #F08300); background: #fff7ed; }
+                #vat-check-result .vat-head { font-weight: 700; margin-bottom: 6px; color: var(--navy, #1A2644); }
+                #vat-check-result .vat-table { width: 100%; border-collapse: collapse; }
+                #vat-check-result .vat-table td { padding: 2px 6px; vertical-align: top; }
+                #vat-check-result .vat-table td:first-child { color: #64748b; white-space: nowrap; width: 42%; }
+                #vat-check-result .vat-actions { margin-top: 8px; display: flex; gap: 8px; }
+                #vat-check-result .vat-actions button { font-size: 11px; padding: 3px 10px; border: 1px solid var(--gray-300, #cbd5e1);
+                  background: #fff; border-radius: 5px; cursor: pointer; }
+              </style>
             </div>
           </div>
         </div>
@@ -487,6 +510,7 @@
 <script src="js/vendor/font-embed.js"></script>
 <script src="js/xml2pdf.js"></script>
 <script src="js/app.js"></script>
+<script src="js/vat.js"></script>
 <script>authInit();</script>
 <script>
   // "Stand" dynamisch = aktueller Monat/Jahr (bleibt nie veraltet)

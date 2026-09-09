@@ -237,6 +237,23 @@ dann nur als Gegenprobe (`werkMismatch`). Der komplette Flow (Postfach pro Werk 
 Prüfung → `ERAR_<Werk>`) steht in
 [`../docs/Eingangsrechnungen-Flow.md`](../docs/Eingangsrechnungen-Flow.md).
 
+## Qualifizierte USt-IdNr-Prüfung (`/api/vat`)
+
+Für den **Ausgangsrechnungs**-Prozess (Button im Browser-Tool): bestätigt die
+USt-IdNr. des Empfängers qualifiziert – **BZSt eVatR REST** (deutsche qualifizierte
+Bestätigung, A/B/C/D + Anfrage-ID) mit **EU-VIES** als Fallback.
+
+```
+GET  /api/vat   -> Info
+POST /api/vat   -> { vatIdOwn (DE…), vatId (EU, nicht-DE), company, city, zip, street }
+                   -> { gueltig, qualifiziert, quelle, status, ergebnis{firmenname,ort,plz,strasse},
+                        anfrageId, zeitpunkt, bericht }
+```
+
+`authLevel: anonymous` (BZSt/VIES sind selbst offen, kein Geheimnis; CORS auf die
+App-Domain begrenzt), Ergebnis 12 h gecacht. `src/bzst.js` / `src/vies.js`; Details in
+[`../docs/USt-IdNr-Pruefung.md`](../docs/USt-IdNr-Pruefung.md).
+
 ## Datenschutz
 
 - Keine Persistenz: die hochgeladene XML und das erzeugte PDF werden **nicht**
