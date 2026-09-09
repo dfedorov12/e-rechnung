@@ -16,10 +16,10 @@
   Der angemeldete Benutzer braucht das Recht, Site Collections anzulegen.
 
 .BEISPIEL
+  # Site + Bibliotheken fuer alle 10 DIHAG-Werke (Standard):
   .\setup-rechnungsmonitoring.ps1 `
       -SiteUrl https://dihag.sharepoint.com/sites/Rechnungsmonitoring `
-      -ClientId 00000000-0000-0000-0000-000000000000 `
-      -Werke WGC,SHB
+      -ClientId 00000000-0000-0000-0000-000000000000
 #>
 [CmdletBinding()]
 param(
@@ -29,8 +29,8 @@ param(
   # Entra-App-ID (ClientId) fuer den interaktiven PnP-Login.
   [Parameter(Mandatory)] [string]   $ClientId,
 
-  # ERP-Quellen / Werke.
-  [string[]] $Werke = @('WGC','SHB'),
+  # ERP-Quellen / Werke (Kuerzel). Standard = alle 10 DIHAG-Werke.
+  [string[]] $Werke = @('WGC','SHB','EIS','DSO','LEG','EWA','HOL','MEG','SCH','ZAI'),
 
   # Anzeigename der Site.
   [string]   $Title = 'Rechnungsmonitoring',

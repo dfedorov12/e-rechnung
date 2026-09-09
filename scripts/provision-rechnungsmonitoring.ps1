@@ -27,10 +27,14 @@
    und die noetigen Graph/SharePoint-Delegated-Permissions im Portal erteilen.)
 
 .BEISPIEL
+  # Alle 10 DIHAG-Werke (Standard):
   .\provision-rechnungsmonitoring.ps1 `
       -SiteUrl https://dihag.sharepoint.com/sites/Rechnungsmonitoring `
-      -ClientId 00000000-0000-0000-0000-000000000000 `
-      -Werke WGC,SHB,GIENANTH
+      -ClientId 00000000-0000-0000-0000-000000000000
+
+  # Nur einzelne / neue Werke nachziehen (idempotent, ueberspringt Bestehendes):
+  .\provision-rechnungsmonitoring.ps1 -SiteUrl ... -ClientId ... `
+      -Werke EIS,DSO,LEG,EWA,HOL,MEG,SCH,ZAI
 
   Testlauf ohne Aenderungen (zeigt nur, was passieren wuerde):
   .\provision-rechnungsmonitoring.ps1 -SiteUrl ... -ClientId ... -WhatIfOnly
@@ -43,8 +47,10 @@ param(
   # Entra-App-ID (ClientId) fuer den interaktiven PnP-Login (siehe Kopf: Register-PnPEntraIDAppForInteractiveLogin).
   [Parameter(Mandatory)] [string]   $ClientId,
 
-  # ERP-Quellen / Werke. Hier neue Werke ergaenzen und Skript erneut ausfuehren.
-  [string[]] $Werke = @('WGC','SHB'),
+  # ERP-Quellen / Werke (Kuerzel). Standard = alle 10 DIHAG-Werke.
+  # Neues Werk dazu: hier ergaenzen (oder per -Werke uebergeben) und Skript erneut
+  # ausfuehren -> nur die fehlenden Bibliotheken werden angelegt.
+  [string[]] $Werke = @('WGC','SHB','EIS','DSO','LEG','EWA','HOL','MEG','SCH','ZAI'),
 
   # Nur anzeigen, nichts anlegen.
   [switch]   $WhatIfOnly
@@ -81,7 +87,7 @@ $Felder = @(
 
   # -- Klassifikation / Monitoring --
   @{ Name='Richtung';            Titel='Richtung';                   Typ='Choice';   Choices=@('Eingang','Ausgang') }
-  @{ Name='Gesellschaft';        Titel='Werk / Gesellschaft';        Typ='Choice';   FillIn=$true; Choices=$Werke } # js/sharepoint.js
+  @{ Name='Gesellschaft';        Titel='Werk / Gesellschaft';        Typ='Choice';   FillIn=$true; Refresh=$true; Choices=$Werke } # js/sharepoint.js
   @{ Name='ERPQuelle';           Titel='ERP-Quellsystem';            Typ='Text' }
   @{ Name='Format';              Titel='Format';                     Typ='Choice';   FillIn=$true; Choices=@('XRechnung','ZUGFeRD','EDI','PDF','Sonstige') } # js/sharepoint.js
   @{ Name='Syntax';              Titel='Syntax';                     Typ='Choice';   FillIn=$true; Choices=@('CII','UBL') }
@@ -113,7 +119,17 @@ function Ensure-Field {
   param([string]$Liste, [hashtable]$Spec)
 
   $vorhanden = Get-PnPField -List $Liste -Identity $Spec.Name -ErrorAction SilentlyContinue
-  if ($vorhanden) { Write-Host ("      = {0}" -f $Spec.Name) -ForegroundColor DarkGray; return }
+  if ($vorhanden) {
+    # Auswahllisten, die mit neuen Werken wachsen (z. B. Gesellschaft), auf
+    # bestehenden Bibliotheken aktualisieren; alle anderen Spalten unveraendert lassen.
+    if ($Spec.Refresh -and $Spec.Choices -and -not $WhatIfOnly) {
+      Set-PnPField -List $Liste -Identity $Spec.Name -Values @{ Choices = [string[]]$Spec.Choices } | Out-Null
+      Write-Host ("      ~ {0} (Auswahl aktualisiert)" -f $Spec.Name) -ForegroundColor DarkCyan
+    } else {
+      Write-Host ("      = {0}" -f $Spec.Name) -ForegroundColor DarkGray
+    }
+    return
+  }
   if ($WhatIfOnly) { Write-Host ("      + {0} ({1}) [WhatIf]" -f $Spec.Name, $Spec.Typ) -ForegroundColor Yellow; return }
 
   switch ($Spec.Typ) {

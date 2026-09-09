@@ -12,8 +12,11 @@ Eine Site (z. B. `.../sites/Rechnungsmonitoring`), darauf **je Werk zwei Bibliot
 | `ERAR_<Werk>`| Eingangsrechnungen (Archiv)         |
 | `AR_<Werk>`  | Ausgangsrechnungen                  |
 
-Neues Werk = ein Eintrag mehr in `-Werke`, Skript erneut ausführen → zwei neue
-Bibliotheken mit identischem Spaltensatz. Die internen Spaltennamen sind **gleich**
+**Werke (Standard, 10 Stück):** `WGC, SHB, EIS, DSO, LEG, EWA, HOL, MEG, SCH, ZAI`
+→ 10 Werke × 2 Richtungen = **20 Bibliotheken**.
+
+Neues Werk = ein Eintrag mehr in `-Werke` (oder in der Standardliste im Skript),
+Skript erneut ausführen → zwei neue Bibliotheken mit identischem Spaltensatz. Die internen Spaltennamen sind **gleich**
 denen, die der Konverter (`js/sharepoint.js`) schreibt → ERP‑Automatik und Konverter
 sind spaltenkompatibel.
 
@@ -32,22 +35,31 @@ nicht existiert, und provisioniert anschließend alle Bibliotheken/Spalten:
 ```powershell
 .\setup-rechnungsmonitoring.ps1 `
     -SiteUrl https://dihag.sharepoint.com/sites/Rechnungsmonitoring `
-    -ClientId <APP-ID> `
-    -Werke WGC,SHB
+    -ClientId <APP-ID>
 ```
 
-**Nur Bibliotheken** (Site existiert bereits):
+**Nur Bibliotheken** (Site existiert bereits) – ohne `-Werke` werden alle 10
+Standard‑Werke angelegt; SHB/WGC bestehen schon und werden übersprungen:
+
+```powershell
+.\provision-rechnungsmonitoring.ps1 `
+    -SiteUrl https://dihag.sharepoint.com/sites/Rechnungsmonitoring `
+    -ClientId <APP-ID>
+```
+
+Nur einzelne / neue Werke nachziehen:
 
 ```powershell
 .\provision-rechnungsmonitoring.ps1 `
     -SiteUrl https://dihag.sharepoint.com/sites/Rechnungsmonitoring `
     -ClientId <APP-ID> `
-    -Werke WGC,SHB
+    -Werke EIS,DSO,LEG,EWA,HOL,MEG,SCH,ZAI
 ```
 
 Trockenlauf: beim Provision‑Skript zusätzlich `-WhatIfOnly`. Beide Skripte sind
-idempotent – vorhandene Site/Bibliotheken/Spalten werden übersprungen. Der
-angemeldete Benutzer braucht das Recht, Site Collections anzulegen.
+idempotent – vorhandene Site/Bibliotheken/Spalten werden übersprungen; die
+`Gesellschaft`‑Auswahl wird auch auf bestehenden Bibliotheken auf alle 10 Werke
+aktualisiert. Der angemeldete Benutzer braucht das Recht, Site Collections anzulegen.
 
 ## Spaltensatz (je Bibliothek)
 
