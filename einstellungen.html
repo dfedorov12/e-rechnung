@@ -92,6 +92,18 @@
 
     </div>
 
+    <!-- Fehler-Benachrichtigung pro Werk -->
+    <div class="settings-info-banner" style="margin-top:28px;">
+      <span>🚨</span>
+      <span>
+        Optional pro Werk: eine E-Mail-Adresse, die <strong>automatisch benachrichtigt</strong>
+        wird, wenn bei einer Rechnung etwas schiefläuft (Validierung „rot", Konvertierungs-/
+        Verarbeitungsfehler). Der Versand erfolgt serverseitig über einen Power-Automate-Flow –
+        Einrichtung siehe <code>docs/Fehler-Benachrichtigung.md</code>.
+      </span>
+    </div>
+    <div class="settings-grid" id="fehler-mail-grid"></div>
+
     <!-- Speichern -->
     <div class="settings-save-row">
       <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
@@ -127,6 +139,15 @@
 /* ── In-Memory Arbeitskopie der Config ── */
 let _editConfig = { wgc: [], shb: [] };
 
+/* ── Fehler-Benachrichtigung: E-Mail je Werk ── */
+const WERKE_ALL = [
+  ['WGC', 'Walzengießerei Coswig GmbH'],
+  ['SHB', 'Stahl- und Hartgusswerk Bösdorf GmbH'],
+  ['EIS', 'Werk EIS'], ['DSO', 'Werk DSO'], ['LEG', 'Werk LEG'], ['EWA', 'Werk EWA'],
+  ['HOL', 'Werk HOL'], ['MEG', 'Werk MEG'], ['SCH', 'Werk SCH'], ['ZAI', 'Werk ZAI'],
+];
+let _editFehler = {};
+
 /* ── Init nach Login ── */
 onAuthReady(async () => {
   if (!isCurrentUserAdmin()) {
@@ -156,7 +177,34 @@ onAuthReady(async () => {
   }
 
   renderLists();
+
+  // Fehler-Benachrichtigungs-Config laden + rendern
+  try { _editFehler = (await spLoadFehlerConfig()) || {}; }
+  catch (e) { _editFehler = {}; }
+  renderFehlerGrid();
 });
+
+/* ── Fehler-Benachrichtigung: Werk-Kacheln rendern ── */
+function renderFehlerGrid() {
+  const grid = document.getElementById('fehler-mail-grid');
+  if (!grid) return;
+  grid.innerHTML = WERKE_ALL.map(([code, name]) => {
+    const cls = (code === 'WGC') ? 'wgc' : (code === 'SHB') ? 'shb' : '';
+    const val = esc(_editFehler[code] || '');
+    return `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon"><span class="format-tag ${cls}" style="font-size:12px;">${code}</span></span>
+          <h3>${esc(name)}</h3>
+        </div>
+        <div class="card-body">
+          <input type="email" id="fehler-input-${code.toLowerCase()}" class="upn-input"
+                 placeholder="fehler-benachrichtigung@dihag.com" value="${val}"
+                 oninput="updateHint('ungespeicherte Änderungen')">
+        </div>
+      </div>`;
+  }).join('');
+}
 
 /* ── UPN-Listen rendern ── */
 function renderLists() {
@@ -210,8 +258,20 @@ async function saveSettings() {
   try {
     await spSaveAccessConfig(_editConfig);
     _runtimeConfig = JSON.parse(JSON.stringify(_editConfig)); // Cache aktualisieren
+
+    // Fehler-Benachrichtigungs-E-Mails einsammeln + speichern
+    const fehler = {};
+    for (const [code] of WERKE_ALL) {
+      const el = document.getElementById('fehler-input-' + code.toLowerCase());
+      const v = el ? (el.value || '').trim() : '';
+      if (v && !v.includes('@')) throw new Error('Ungültige E-Mail bei ' + code + ': ' + v);
+      if (v) fehler[code] = v;
+    }
+    await spSaveFehlerConfig(fehler);
+    _editFehler = fehler;
+
     showOverlay(false);
-    showToast('Zugriffsrechte erfolgreich gespeichert.', 'success');
+    showToast('Einstellungen erfolgreich gespeichert.', 'success');
     updateHint('Gespeichert ✓');
   } catch (e) {
     showOverlay(false);

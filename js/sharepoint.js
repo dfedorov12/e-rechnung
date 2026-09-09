@@ -203,6 +203,43 @@ async function spSaveAccessConfig(config) {
 }
 
 /**
+ * Fehler-Benachrichtigungs-Config laden (E-Mail je Werk).
+ * Datei: Dokumente/E-Rechnung/fehler-mail-config.json
+ * @returns {object|null}  z.B. { WGC: 'wgc-team@dihag.com', SHB: '' }
+ */
+async function spLoadFehlerConfig() {
+  const token = await acquireToken(SP.scopes);
+  if (!token) return null;
+  await _spInit(token);
+  if (!_sp.driveId) return null;
+
+  const url = `${SP.graphBase}/drives/${_sp.driveId}/root:/${SP.folder}/fehler-mail-config.json:/content`;
+  const resp = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+  });
+  if (!resp.ok) return null; // 404 = noch nicht angelegt
+  return resp.json();
+}
+
+/**
+ * Fehler-Benachrichtigungs-Config speichern.
+ * @param {object} config  z.B. { WGC: 'wgc-team@dihag.com', SHB: 'shb@dihag.com' }
+ */
+async function spSaveFehlerConfig(config) {
+  const token = await acquireToken(SP.scopes);
+  if (!token) throw new Error('Nicht angemeldet');
+  await _spInit(token);
+  if (!_sp.driveId) throw new Error('Keine Dokument-Bibliothek gefunden.');
+
+  await _uploadFile(
+    token,
+    `${SP.folder}/fehler-mail-config.json`,
+    new TextEncoder().encode(JSON.stringify(config, null, 2)),
+    'application/json'
+  );
+}
+
+/**
  * Eintrag aus der SharePoint-Liste löschen.
  */
 async function spDeleteItem(itemId) {
