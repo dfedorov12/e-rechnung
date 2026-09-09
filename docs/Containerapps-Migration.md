@@ -69,10 +69,26 @@ statt wie bei der ACI über offenes HTTP auf Port 8080.
 **Noch offen (Schritt 2, optional):** Der HTTPS-Endpunkt ist weiterhin öffentlich
 erreichbar (die Dienste selbst haben keine Authentifizierung). Eine IP-Allowlist auf
 die Function scheidet aus, weil Flex Consumption **keine festen Ausgangs-IPs**
-liefert. Volle Netzabschottung geht über ein **VNet-internes Environment** +
-**VNet-Integration der Function**, sodass die Dienste gar nicht mehr aus dem Internet
-erreichbar sind. Das ist ein eigener, etwas größerer Umbau (VNet, Subnetz-Delegation,
-Function-Integration) — auf Wunsch als Schritt 2.
+liefert.
+
+**VNet-interne Härtung — 2026-09-09 versucht und wieder zurückgebaut:** internes
+Environment (`--internal-only`), interne Apps, private DNS-Zone (Wildcard `*` **und**
+`*.internal` → Env-Static-IP) und Function-VNet-Integration (`snet-func`, Route-All,
+`WEBSITE_DNS_SERVER=168.63.129.16`) wurden komplett provisioniert. Die internen Apps
+liefen **healthy**, die Flex-Consumption-Function wurde aber nicht zum internen Ingress
+geroutet → dauerhaft **HTTP 404 „Azure Container App - Unavailable"**. Bekannter
+Reifegrad-Punkt von **Flex Consumption ↔ internem Container-Apps-Ingress**. Sauber
+zurückgebaut (externe URLs), Funktion voll erhalten.
+
+**Realistische Wege für echte Netz-Isolation** (falls Compliance es verlangt):
+1. **Auth statt Isolation:** KoSIT ist ein Stock-Daemon (bräuchte einen Auth-Reverse-
+   Proxy-Sidecar), der veraPDF-Wrapper könnte einen Header-Key selbst prüfen; oder
+   Container-Apps-EasyAuth (AAD) + Managed Identity der Function.
+2. **Function auf Container Apps hosten** (Functions-on-ACA) im selben internen
+   Environment → nativ im VNet, erreicht die internen Apps direkt (sauberste
+   Architektur, aber Re-Plattform der Function).
+3. **Elastic-Premium-Function-Plan** (reife regionale VNet-Integration) — funktioniert,
+   kostet aber fix (~120 €+/Monat) und hebt die Kostenersparnis auf.
 
 > Die verarbeiteten XML/PDF enthalten Rechnungsdaten; die Dienste **speichern nichts**
 > (nur Verarbeitung im Speicher). Trotzdem ist die VNet-Härtung für einen produktiven
