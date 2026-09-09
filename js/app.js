@@ -683,6 +683,10 @@ async function exportInvoice(format) {
     const { netTotal, vatTotal, grossTotal } = totals;
     const xml = buildXML(data, format);
 
+    // USt-IdNr-Bestätigung (falls zur aktuellen Empfänger-USt-IdNr geprüft) an
+    // Export (ZUGFeRD-Anhang) und Monitoring anhängen.
+    const ust = (typeof window.matchingVatCheck === 'function') ? window.matchingVatCheck(data.kaeufervat) : null;
+
     // #5: Selbstverifikation — erzeugtes XML zurücklesen und gegen Anzeige prüfen
     const rt = _verifyEmbeddedXml(xml, data, totals);
     if (rt.length) {
@@ -696,7 +700,7 @@ async function exportInvoice(format) {
 
     if (format === 'zugferd') {
       try {
-        pdfBytes = await _buildZugferdPdf(data, totals, xml);   // #6: Original einbetten ODER aus Daten rendern
+        pdfBytes = await _buildZugferdPdf(data, totals, xml, ust);   // #6: Original einbetten ODER aus Daten rendern
       } catch (e) {
         showLoading(false);
         showToast(e.message === 'NO_PDF'
@@ -730,7 +734,7 @@ async function exportInvoice(format) {
     showLoading(true, 'Wird ins Monitoring gespeichert...');
     try {
       await spSaveToMonitoring({
-        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit },
+        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit, ustPruefung: ust },
         xml,
         pdfBytes,
         format,
@@ -1029,7 +1033,7 @@ function _verifyEmbeddedXml(xml, data, totals) {
  * Bei aktiver Option „PDF aus Rechnungsdaten erzeugen" wird das PDF aus
  * denselben Daten wie das XML gerendert → PDF ≡ XML per Konstruktion.
  */
-async function _buildZugferdPdf(data, totals, xml) {
+async function _buildZugferdPdf(data, totals, xml, ust) {
   const renderFromData = !!(document.getElementById('opt-render-pdf') || {}).checked;
   let basePdf;
   if (renderFromData) {
@@ -1047,7 +1051,18 @@ async function _buildZugferdPdf(data, totals, xml) {
     if (!uploadedPdfBytes) throw new Error('NO_PDF');
     basePdf = uploadedPdfBytes;
   }
-  return await embedXMLIntoPDF(basePdf, xml, 'zugferd');
+
+  // USt-IdNr-Bestätigung als zusätzlichen Anhang ins ZUGFeRD-PDF (PDF/A-3).
+  const extras = [];
+  if (ust && typeof window.vatBerichtText === 'function') {
+    extras.push({
+      bytes: new TextEncoder().encode(window.vatBerichtText(ust)),
+      filename: 'USt-IdNr-Bestaetigung.txt',
+      mimeType: 'text/plain',
+      description: 'Qualifizierte USt-IdNr-Bestätigung (' + (ust.quelle || '') + ')',
+    });
+  }
+  return await embedXMLIntoPDF(basePdf, xml, 'zugferd', extras);
 }
 
 /** #7: SHA-256 des Quell-PDF (Hex) für den Prüfpfad. */

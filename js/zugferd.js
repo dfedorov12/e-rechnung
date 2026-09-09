@@ -85,7 +85,7 @@ function _base64ToBytes(b64) {
 
 /* ── Main entry point ────────────────────────────────────────────────── */
 
-async function embedXMLIntoPDF(pdfBytes, xmlString, profile) {
+async function embedXMLIntoPDF(pdfBytes, xmlString, profile, extraAttachments) {
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   const xmlBytes = new TextEncoder().encode(xmlString);
 
@@ -103,6 +103,20 @@ async function embedXMLIntoPDF(pdfBytes, xmlString, profile) {
     modificationDate: new Date(),
     afRelationship:   'Alternative',
   });
+
+  // Zusätzliche Anhänge (z. B. USt-IdNr-Bestätigung). PDF/A-3 erlaubt beliebige
+  // eingebettete Dateien; afRelationship=Supplement lässt die factur-x.xml die
+  // maßgebliche Rechnung bleiben.
+  for (const a of (extraAttachments || [])) {
+    if (!a || !a.bytes) continue;
+    await pdfDoc.attach(a.bytes, a.filename || 'anhang.txt', {
+      mimeType:         a.mimeType || 'text/plain',
+      description:      a.description || a.filename || 'Anhang',
+      creationDate:     new Date(),
+      modificationDate: new Date(),
+      afRelationship:   'Supplement',
+    });
+  }
 
   if (isZugferd) {
     // 1. sRGB ICC OutputIntent — satisfies ISO 19005-3 §6.2.4.3 for all DeviceRGB/DeviceGray

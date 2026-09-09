@@ -117,6 +117,16 @@
     w.document.close(); w.focus(); w.print();
   }
 
+  // Für Export/Monitoring: liefert die letzte Prüfung nur, wenn sie zur aktuellen
+  // Empfänger-USt-IdNr passt (verhindert Anhängen eines veralteten Ergebnisses).
+  function norm(s) { return String(s || '').replace(/\s+/g, '').toUpperCase(); }
+  window.matchingVatCheck = function (kaeufervat) {
+    var j = window._letzteVatPruefung;
+    if (!j || j.moeglich === false || j.fehler || j.error) return null;
+    return (j.pruefUstId && norm(j.pruefUstId) === norm(kaeufervat)) ? j : null;
+  };
+  window.vatBerichtText = berichtText;
+
   document.addEventListener('DOMContentLoaded', function () {
     var btn = $('vat-check-btn');
     if (btn) btn.addEventListener('click', pruefen);

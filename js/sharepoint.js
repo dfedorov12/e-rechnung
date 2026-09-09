@@ -300,6 +300,15 @@ async function spSaveToMonitoring({ invoiceData, xml, pdfBytes, format }) {
 
   const nowIso = new Date().toISOString();
   const a = invoiceData.audit;
+
+  // USt-IdNr-Bestätigung (aus /api/vat, falls im Tool geprüft) → Monitoring-Spalten.
+  const u = invoiceData.ustPruefung;
+  const ustStatus = !u ? 'Nicht geprueft'
+    : (u.moeglich === false ? 'entfaellt (Inland)'
+    : (u.gueltig ? (u.qualifiziert ? 'Qualifiziert bestaetigt' : 'Gueltig (einfach)') : 'Nicht gueltig'));
+  const ustBericht = (u && u.bericht && u.bericht.zeilen)
+    ? u.bericht.zeilen.map(z => z[0] + ': ' + z[1]).join('\n').slice(0, 2000) : '';
+
   const allFields = {
     Title:               (invoiceData.rechnungsnummer || '').slice(0, 255),
     Rechnungsart:        _RA_LABELS[String(invoiceData.rechnungsart || '380')] || String(invoiceData.rechnungsart || '380'),
@@ -330,6 +339,11 @@ async function spSaveToMonitoring({ invoiceData, xml, pdfBytes, format }) {
     QuellPdfHash:        a ? (a.quellPdfHash || '').slice(0, 255) : '',
     GeprueftVon:         a ? (a.geprueftVon || '').slice(0, 255) : '',
     StammdatenEntsperrt: a ? (a.stammdatenEntsperrt ? 'Ja' : 'Nein') : 'Nein',
+    // USt-IdNr-Bestätigung
+    UStIdStatus:         ustStatus,
+    UStIdAnfrageId:      u ? (u.anfrageId || '').slice(0, 255) : '',
+    UStIdPruefzeitpunkt: u ? (u.zeitpunkt || '') : '',
+    UStIdBericht:        ustBericht,
   };
 
   // leere Werte weglassen + nur real vorhandene Spalten senden

@@ -52,8 +52,13 @@ kann später an Export/Monitoring angehängt werden.
 - Greift nur für **EU-Ausland** (nicht DE); der Button meldet DE/Inland entsprechend.
 - `/api/vat` ist **anonymous** (BZSt/VIES sind selbst offen, kein Geheimnis im Spiel);
   für Produktion ließe sich der Zugriff über das MSAL-Token der App absichern.
-- Noch **nicht** automatisch an die Rechnung/den Export/das Monitoring angehängt –
-  der Bericht wird angezeigt/gedruckt. Anhängen an den ZUGFeRD-/XRechnung-Export bzw.
-  eine Monitoring-Spalte wäre der nächste Ausbauschritt.
+- **Anhängen erledigt:** Beim Export wird der Bericht (sofern zur aktuellen
+  Empfänger-USt-IdNr geprüft) automatisch mitgenommen:
+  - **ZUGFeRD-PDF:** als zusätzlicher Anhang `USt-IdNr-Bestaetigung.txt`
+    (afRelationship `Supplement`; PDF/A-3b bleibt konform, factur-x.xml bleibt
+    maßgeblich — beides mit veraPDF/KoSIT verifiziert).
+  - **Monitoring** (`AR_<Werk>`): Spalten `UStIdStatus`, `UStIdAnfrageId`,
+    `UStIdPruefzeitpunkt`, `UStIdBericht` (per `provision-rechnungsmonitoring.ps1`
+    anlegen). Gilt für ZUGFeRD **und** XRechnung-Export.
 - Amtliche **postalische** Bestätigungsmitteilung ist separat; die gespeicherte
   API-Antwort (Anfrage-ID + Zeitpunkt + Codes) ist der elektronische Nachweis.

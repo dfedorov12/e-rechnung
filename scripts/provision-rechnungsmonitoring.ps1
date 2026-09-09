@@ -115,6 +115,12 @@ $Felder = @(
   @{ Name='StammdatenEntsperrt'; Titel='Stammdaten entsperrt';       Typ='Choice';   Choices=@('Ja','Nein') } # js/sharepoint.js
   @{ Name='GoBDArchiviert';      Titel='GoBD archiviert (Aufbewahrung gesetzt)'; Typ='Boolean' }
 
+  # -- USt-IdNr-Bestaetigung (BZSt/VIES, aus dem Tool; interne Namen wie js/sharepoint.js) --
+  @{ Name='UStIdStatus';         Titel='USt-IdNr-Pruefung';          Typ='Choice';   Choices=@('Qualifiziert bestaetigt','Gueltig (einfach)','Nicht gueltig','Nicht geprueft','entfaellt (Inland)') }
+  @{ Name='UStIdAnfrageId';      Titel='USt-IdNr Anfrage-ID (Nachweis)'; Typ='Text' }
+  @{ Name='UStIdPruefzeitpunkt'; Titel='USt-IdNr geprueft am';       Typ='DateTime' }
+  @{ Name='UStIdBericht';        Titel='USt-IdNr-Bericht';           Typ='Note' }
+
   # -- Verknuepfungen (vom Konverter geschrieben; Note wegen langer URLs) --
   @{ Name='XMLDateiUrl';         Titel='XML-Datei (URL)';            Typ='Note' }   # js/sharepoint.js
   @{ Name='ZUGFeRDPdfUrl';       Titel='ZUGFeRD-PDF (URL)';          Typ='Note' }   # js/sharepoint.js
