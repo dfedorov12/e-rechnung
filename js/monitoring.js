@@ -91,12 +91,13 @@ async function loadMonitoring(accessList) {
       }
     }
 
-    _monRecords = recs;
+    // XML + PDF + KoSIT-Bericht derselben Rechnung zu EINER Zeile zusammenfassen.
+    _monRecords = _monGroup(recs);
     _monBuildFilterOptions(libs);
     _monApply();
 
     if (sub) sub.textContent =
-      `${recs.length} Rechnung(en) aus ${libs.length} Bibliothek(en) · Stand ${new Date().toLocaleString('de-DE')}`;
+      `${_monRecords.length} Rechnung(en) (${recs.length} Datei(en)) aus ${libs.length} Bibliothek(en) · Stand ${new Date().toLocaleString('de-DE')}`;
     const setup = document.getElementById('mon-setup');
     if (setup) setup.style.display = 'none';
     document.getElementById('mon-body').style.display = '';
@@ -107,12 +108,22 @@ async function loadMonitoring(accessList) {
 
 function _monMap(it, f, lib) {
   const num = v => (typeof v === 'number' ? v : (v == null || v === '' ? null : parseFloat(v)));
-  // Rechnungsnr.: Titelfeld bevorzugen; sonst reine Nummer aus dem Dateinamen
-  // (Muster "NR_JJJJMMTT.pdf|xml") ableiten statt den ganzen Dateinamen zu zeigen.
+
+  // Dateiname zerlegen: Endung + Sidecar-Typ (KoSIT-Bericht / lesbares PDF) erkennen,
+  // damit XML, PDF und Bericht derselben Rechnung zusammengefasst werden können.
+  const file = String(f.FileLeafRef || '');
+  const ext  = (file.match(/\.(pdf|xml)$/i) || ['', ''])[1].toLowerCase();
+  let stem   = file.replace(/\.(pdf|xml)$/i, '');
+  let sidecar = '';
+  if (/_kosit-?bericht$/i.test(stem)) { sidecar = 'kosit';  stem = stem.replace(/_kosit-?bericht$/i, ''); }
+  else if (/_lesbar$/i.test(stem))    { sidecar = 'lesbar'; stem = stem.replace(/_lesbar$/i, ''); }
+
+  // Rechnungsnr.: Titelfeld bevorzugen; sonst Dateiname ohne Datum-Suffix (NR_JJJJMMTT).
   const nummer = (f.Title && String(f.Title).trim())
     ? String(f.Title).trim()
-    : String(f.FileLeafRef || '').replace(/_\d*\.(pdf|xml)$/i, '');
+    : stem.replace(/_\d{6,8}$/, '');
   return {
+    file, ext, sidecar,
     // Werk aus dem Bibliotheksnamen (AR_SHB -> SHB) = maessgeblich; das Feld
     // Gesellschaft kann leer/falsch sein und wird nur als Fallback genutzt.
     // Eingangsstufe: Werk erst nach Erkennung (Gesellschaft) bekannt, sonst "(Eingang)".
@@ -132,6 +143,46 @@ function _monMap(it, f, lib) {
     fehler:   (f.Fehlermeldung || '').toString(),
     url:      (it.webUrl || '').toString(),
   };
+}
+
+/* ── Zusammenfassen: XML + PDF + KoSIT-Bericht einer Rechnung = 1 Zeile ── */
+
+function _monGroup(recs) {
+  const groups = new Map();
+  for (const r of recs) {
+    const key = [r.werk, r.richtung, (r.nummer || r.file || '').toLowerCase()].join('|');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  const out = [];
+  for (const arr of groups.values()) {
+    const primaries = arr.filter(r => !r.sidecar);
+    const primary = _monBestPrimary(primaries.length ? primaries : arr);
+
+    // Verknüpfte Dateien der Rechnung (die anderen Repräsentationen + Bericht).
+    primary.dateien = [];
+    for (const r of arr) {
+      if (r === primary || !r.url) continue;
+      const label = r.sidecar === 'kosit' ? 'KoSIT-Bericht'
+                  : r.sidecar === 'lesbar' ? 'Lesbares PDF'
+                  : (r.ext ? r.ext.toUpperCase() : 'Datei');
+      primary.dateien.push({ label, url: r.url });
+    }
+    // Metadaten aus Geschwisterdateien auffüllen, falls die Primärzeile sie nicht hat.
+    for (const key of ['steller', 'empf', 'format', 'status', 'konform', 'fehler']) {
+      if (!primary[key]) { const s = arr.find(r => r[key]); if (s) primary[key] = s[key]; }
+    }
+    if (primary.brutto == null) { const s = arr.find(r => r.brutto != null); if (s) primary.brutto = s.brutto; }
+    out.push(primary);
+  }
+  return out;
+}
+
+// Beste Primärzeile: die mit den meisten Metadaten; bei Gleichstand PDF vor XML.
+function _monBestPrimary(arr) {
+  const score = r => (r.steller ? 2 : 0) + (r.empf ? 2 : 0) + (r.brutto != null ? 1 : 0)
+                   + (r.format ? 1 : 0) + (r.konform ? 1 : 0) + (r.ext === 'pdf' ? 0.5 : 0);
+  return arr.slice().sort((a, b) => score(b) - score(a))[0];
 }
 
 /* ── Filter & Rendering ─────────────────────────────────────────────── */
@@ -196,7 +247,13 @@ function _monRenderTable(rows) {
     const richtCls = r.richtung === 'Eingang' ? 'pill-in' : 'pill-out';
     const kon = _monKonPill(r);
     const stat = r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : '';
-    const link = r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">öffnen ↗</a>` : '';
+    const extra = (r.dateien || [])
+      .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`)
+      .join(' · ');
+    const link = [
+      r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">öffnen ↗</a>` : '',
+      extra,
+    ].filter(Boolean).join(' · ');
     return `<tr>
       <td>${_esc(datum)}</td>
       <td><span class="pill pill-werk">${_esc(r.werk)}</span></td>
