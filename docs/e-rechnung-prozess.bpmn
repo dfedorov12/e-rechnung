@@ -1,336 +1,424 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_ERechnung" targetNamespace="http://dihag.de/erechnung">
-  <bpmn:process id="Process_ERechnung" name="DIHAG E-Rechnung (Ein- und Ausgang)" isExecutable="false">
-    <bpmn:startEvent id="se_out" name="Ausgangsrechnung zu erstellen (Werk)">
+  <bpmn:collaboration id="Collab_ERechnung">
+    <bpmn:participant id="Pool_ERechnung" name="DIHAG E-Rechnung (Ein- und Ausgang)" processRef="Process_ERechnung" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_ERechnung" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_Werk" name="Werk / ERP">
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_ea</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_erar</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Konv" name="Konverter (E-Rechnung-App)">
+        <bpmn:flowNodeRef>t_upload</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_felder</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_format</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_xr</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_zf</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_pruef</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_SP" name="SharePoint (Rechnungsmonitoring)">
+        <bpmn:flowNodeRef>t_ar</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_mon</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_PA" name="Power Automate">
+        <bpmn:flowNodeRef>t_trigger</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_call</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_konform</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_spalten</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_fehler</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_err</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Azure" name="Azure-Pruefdienste (KoSIT, veraPDF)">
+        <bpmn:flowNodeRef>g_typ</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_kosit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_pdf</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_ergebnis</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_GoBD" name="Purview (GoBD) &amp; Buchhaltung">
+        <bpmn:flowNodeRef>t_gobd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_buchung</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_ok</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Neue Rechnung (Vorgang startet)">
       <bpmn:outgoing>f1</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:startEvent id="se_in" name="Eingangsrechnung trifft ein (ERP/Portal)">
-      <bpmn:outgoing>f11</bpmn:outgoing>
-    </bpmn:startEvent>
-    <bpmn:task id="t_upload" name="Konverter: PDF hochladen oder Daten erfassen">
+    <bpmn:exclusiveGateway id="g_ea" name="Eingang oder Ausgang?">
       <bpmn:incoming>f1</bpmn:incoming>
       <bpmn:outgoing>f2</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_felder" name="Konverter: Belegart (BT-3), Felder; Werk aus Firmenname erkennen">
-      <bpmn:incoming>f2</bpmn:incoming>
       <bpmn:outgoing>f3</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:exclusiveGateway id="g_format" name="Format?">
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_erar" name="ERP-System: Rechnung in ERAR_&lt;Werk&gt; ablegen">
       <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f12</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="t_upload" name="PDF hochladen oder Daten erfassen">
+      <bpmn:incoming>f2</bpmn:incoming>
       <bpmn:outgoing>f4</bpmn:outgoing>
-      <bpmn:outgoing>f5</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
-    <bpmn:task id="t_xr" name="Konverter: XRechnung (XML) erzeugen">
+    </bpmn:userTask>
+    <bpmn:userTask id="t_felder" name="Belegart (BT-3) &amp; Felder pruefen; Werk aus Firmenname">
       <bpmn:incoming>f4</bpmn:incoming>
-      <bpmn:outgoing>f6</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_zf" name="Konverter: ZUGFeRD-PDF (PDF/A-3b + eingebettete XML) erzeugen">
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_format" name="Format?">
       <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
       <bpmn:outgoing>f7</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:exclusiveGateway id="g_format_m">
-      <bpmn:incoming>f6</bpmn:incoming>
-      <bpmn:incoming>f7</bpmn:incoming>
-      <bpmn:outgoing>f8</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:task id="t_pruef" name="Konverter: Selbstpruefung + Pruefpfad (SHA-256, Audit)">
-      <bpmn:incoming>f8</bpmn:incoming>
+    <bpmn:serviceTask id="t_xr" name="XRechnung (XML) erzeugen">
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_zf" name="ZUGFeRD-PDF (PDF/A-3b + XML) erzeugen">
+      <bpmn:incoming>f7</bpmn:incoming>
       <bpmn:outgoing>f9</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_ar" name="SharePoint: Ablage in AR_&#60;Werk&#62; mit Metadaten">
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_pruef" name="Selbstpruefung + Pruefpfad (SHA-256)">
+      <bpmn:incoming>f8</bpmn:incoming>
       <bpmn:incoming>f9</bpmn:incoming>
       <bpmn:outgoing>f10</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_erar" name="ERP/Power Automate: Ablage in ERAR_&#60;Werk&#62;">
-      <bpmn:incoming>f11</bpmn:incoming>
-      <bpmn:outgoing>f12</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_trigger" name="Power Automate: Trigger &#34;Datei erstellt&#34; -&#62; Dateiinhalt abrufen">
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_ar" name="Ablage in AR_&lt;Werk&gt; mit Metadaten">
       <bpmn:incoming>f10</bpmn:incoming>
+      <bpmn:outgoing>f11</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_trigger" name="Trigger &quot;Datei erstellt&quot; -&gt; Inhalt abrufen">
+      <bpmn:incoming>f11</bpmn:incoming>
       <bpmn:incoming>f12</bpmn:incoming>
       <bpmn:outgoing>f13</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_call" name="Power Automate: POST /api/validate">
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_call" name="POST /api/validate">
       <bpmn:incoming>f13</bpmn:incoming>
       <bpmn:outgoing>f14</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:exclusiveGateway id="g_typ" name="XML oder PDF?">
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_typ" name="XML oder ZUGFeRD-PDF?">
       <bpmn:incoming>f14</bpmn:incoming>
       <bpmn:outgoing>f15</bpmn:outgoing>
       <bpmn:outgoing>f16</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:task id="t_kosit" name="Azure: KoSIT prueft XRechnung-XML (EN 16931)">
+    <bpmn:serviceTask id="t_kosit" name="KoSIT prueft XRechnung-XML (EN 16931)">
       <bpmn:incoming>f15</bpmn:incoming>
       <bpmn:outgoing>f17</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_pdf" name="Azure: XML aus PDF extrahieren -&#62; KoSIT + veraPDF (PDF/A-3b)">
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_pdf" name="XML aus PDF extrahieren -&gt; KoSIT + veraPDF">
       <bpmn:incoming>f16</bpmn:incoming>
       <bpmn:outgoing>f18</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:exclusiveGateway id="g_typ_m">
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_ergebnis" name="Ergebnis: Konformitaet + PDF/A">
       <bpmn:incoming>f17</bpmn:incoming>
       <bpmn:incoming>f18</bpmn:incoming>
       <bpmn:outgoing>f19</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
-    <bpmn:task id="t_ergebnis" name="Azure: Ergebnis Konformitaet (gruen/gelb/rot) + PDF/A">
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_konform" name="Konform?">
       <bpmn:incoming>f19</bpmn:incoming>
       <bpmn:outgoing>f20</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:exclusiveGateway id="g_konform" name="Konform?">
-      <bpmn:incoming>f20</bpmn:incoming>
       <bpmn:outgoing>f21</bpmn:outgoing>
-      <bpmn:outgoing>f22</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:task id="t_fehler" name="Power Automate: Status=Fehler + ValidierungsMeldung setzen">
-      <bpmn:incoming>f21</bpmn:incoming>
+    <bpmn:serviceTask id="t_spalten" name="Konformitaet, PDFAStatus, Status=Validiert setzen">
+      <bpmn:incoming>f20</bpmn:incoming>
       <bpmn:outgoing>f23</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_spalten" name="Power Automate: Konformitaet, PDFAStatus, Status=Validiert setzen">
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_fehler" name="Status=Fehler + ValidierungsMeldung setzen">
+      <bpmn:incoming>f21</bpmn:incoming>
+      <bpmn:outgoing>f22</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e_err" name="Fehler - Nachbearbeitung">
       <bpmn:incoming>f22</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="t_gobd" name="_ComplianceTag lesen -&gt; GoBDArchiviert setzen">
+      <bpmn:incoming>f23</bpmn:incoming>
       <bpmn:outgoing>f24</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_gobd" name="Purview: _ComplianceTag lesen -&#62; GoBDArchiviert setzen">
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t_mon" name="Im Monitoring-Dashboard sichtbar">
       <bpmn:incoming>f24</bpmn:incoming>
       <bpmn:outgoing>f25</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_mon" name="Monitoring: im Dashboard sichtbar (KPIs, Filter, Deep-Link)">
+    </bpmn:serviceTask>
+    <bpmn:userTask id="t_buchung" name="Manuelle Buchung (XML rechtlich fuehrend)">
       <bpmn:incoming>f25</bpmn:incoming>
       <bpmn:outgoing>f26</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="t_buchung" name="Buchhaltung: manuelle Buchung (XML rechtlich fuehrend)">
+    </bpmn:userTask>
+    <bpmn:endEvent id="e_ok" name="Rechnung verarbeitet &amp; GoBD-aufbewahrt">
       <bpmn:incoming>f26</bpmn:incoming>
-      <bpmn:outgoing>f27</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:endEvent id="e_ok" name="Rechnung verarbeitet &#38; GoBD-aufbewahrt">
-      <bpmn:incoming>f27</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:endEvent id="e_err" name="Fehler - Nachbearbeitung">
-      <bpmn:incoming>f23</bpmn:incoming>
-    </bpmn:endEvent>
-    <bpmn:sequenceFlow id="f1" sourceRef="se_out" targetRef="t_upload" />
-    <bpmn:sequenceFlow id="f2" sourceRef="t_upload" targetRef="t_felder" />
-    <bpmn:sequenceFlow id="f3" sourceRef="t_felder" targetRef="g_format" />
-    <bpmn:sequenceFlow id="f4" name="XRechnung" sourceRef="g_format" targetRef="t_xr" />
-    <bpmn:sequenceFlow id="f5" name="ZUGFeRD" sourceRef="g_format" targetRef="t_zf" />
-    <bpmn:sequenceFlow id="f6" sourceRef="t_xr" targetRef="g_format_m" />
-    <bpmn:sequenceFlow id="f7" sourceRef="t_zf" targetRef="g_format_m" />
-    <bpmn:sequenceFlow id="f8" sourceRef="g_format_m" targetRef="t_pruef" />
-    <bpmn:sequenceFlow id="f9" sourceRef="t_pruef" targetRef="t_ar" />
-    <bpmn:sequenceFlow id="f10" sourceRef="t_ar" targetRef="t_trigger" />
-    <bpmn:sequenceFlow id="f11" sourceRef="se_in" targetRef="t_erar" />
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="g_ea" />
+    <bpmn:sequenceFlow id="f2" sourceRef="g_ea" targetRef="t_upload" name="Ausgang" />
+    <bpmn:sequenceFlow id="f3" sourceRef="g_ea" targetRef="t_erar" name="Eingang" />
+    <bpmn:sequenceFlow id="f4" sourceRef="t_upload" targetRef="t_felder" />
+    <bpmn:sequenceFlow id="f5" sourceRef="t_felder" targetRef="g_format" />
+    <bpmn:sequenceFlow id="f6" sourceRef="g_format" targetRef="t_xr" name="XRechnung" />
+    <bpmn:sequenceFlow id="f7" sourceRef="g_format" targetRef="t_zf" name="ZUGFeRD" />
+    <bpmn:sequenceFlow id="f8" sourceRef="t_xr" targetRef="t_pruef" />
+    <bpmn:sequenceFlow id="f9" sourceRef="t_zf" targetRef="t_pruef" />
+    <bpmn:sequenceFlow id="f10" sourceRef="t_pruef" targetRef="t_ar" />
+    <bpmn:sequenceFlow id="f11" sourceRef="t_ar" targetRef="t_trigger" />
     <bpmn:sequenceFlow id="f12" sourceRef="t_erar" targetRef="t_trigger" />
     <bpmn:sequenceFlow id="f13" sourceRef="t_trigger" targetRef="t_call" />
     <bpmn:sequenceFlow id="f14" sourceRef="t_call" targetRef="g_typ" />
-    <bpmn:sequenceFlow id="f15" name="XML" sourceRef="g_typ" targetRef="t_kosit" />
-    <bpmn:sequenceFlow id="f16" name="ZUGFeRD-PDF" sourceRef="g_typ" targetRef="t_pdf" />
-    <bpmn:sequenceFlow id="f17" sourceRef="t_kosit" targetRef="g_typ_m" />
-    <bpmn:sequenceFlow id="f18" sourceRef="t_pdf" targetRef="g_typ_m" />
-    <bpmn:sequenceFlow id="f19" sourceRef="g_typ_m" targetRef="t_ergebnis" />
-    <bpmn:sequenceFlow id="f20" sourceRef="t_ergebnis" targetRef="g_konform" />
-    <bpmn:sequenceFlow id="f21" name="rot / abgelehnt" sourceRef="g_konform" targetRef="t_fehler" />
-    <bpmn:sequenceFlow id="f22" name="gruen / gelb" sourceRef="g_konform" targetRef="t_spalten" />
-    <bpmn:sequenceFlow id="f23" sourceRef="t_fehler" targetRef="e_err" />
-    <bpmn:sequenceFlow id="f24" sourceRef="t_spalten" targetRef="t_gobd" />
-    <bpmn:sequenceFlow id="f25" sourceRef="t_gobd" targetRef="t_mon" />
-    <bpmn:sequenceFlow id="f26" sourceRef="t_mon" targetRef="t_buchung" />
-    <bpmn:sequenceFlow id="f27" sourceRef="t_buchung" targetRef="e_ok" />
+    <bpmn:sequenceFlow id="f15" sourceRef="g_typ" targetRef="t_kosit" name="XML" />
+    <bpmn:sequenceFlow id="f16" sourceRef="g_typ" targetRef="t_pdf" name="ZUGFeRD-PDF" />
+    <bpmn:sequenceFlow id="f17" sourceRef="t_kosit" targetRef="t_ergebnis" />
+    <bpmn:sequenceFlow id="f18" sourceRef="t_pdf" targetRef="t_ergebnis" />
+    <bpmn:sequenceFlow id="f19" sourceRef="t_ergebnis" targetRef="g_konform" />
+    <bpmn:sequenceFlow id="f20" sourceRef="g_konform" targetRef="t_spalten" name="gruen / gelb (akzeptiert)" />
+    <bpmn:sequenceFlow id="f21" sourceRef="g_konform" targetRef="t_fehler" name="rot (abgelehnt)" />
+    <bpmn:sequenceFlow id="f22" sourceRef="t_fehler" targetRef="e_err" />
+    <bpmn:sequenceFlow id="f23" sourceRef="t_spalten" targetRef="t_gobd" />
+    <bpmn:sequenceFlow id="f24" sourceRef="t_gobd" targetRef="t_mon" />
+    <bpmn:sequenceFlow id="f25" sourceRef="t_mon" targetRef="t_buchung" />
+    <bpmn:sequenceFlow id="f26" sourceRef="t_buchung" targetRef="e_ok" />
   </bpmn:process>
-  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_ERechnung">
-    <bpmndi:BPMNPlane id="BPMNPlane_Process_ERechnung" bpmnElement="Process_ERechnung">
-      <bpmndi:BPMNShape id="se_out_di" bpmnElement="se_out">
-        <dc:Bounds x="57" y="52" width="36" height="36" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collab_ERechnung">
+      <bpmndi:BPMNShape id="Pool_ERechnung_di" bpmnElement="Pool_ERechnung" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="3370" height="900" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_upload_di" bpmnElement="t_upload">
-        <dc:Bounds x="175" y="30" width="100" height="80" />
+      <bpmndi:BPMNShape id="Lane_Werk_di" bpmnElement="Lane_Werk" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="3340" height="100" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_felder_di" bpmnElement="t_felder">
-        <dc:Bounds x="325" y="30" width="100" height="80" />
+      <bpmndi:BPMNShape id="Lane_Konv_di" bpmnElement="Lane_Konv" isHorizontal="true">
+        <dc:Bounds x="190" y="180" width="3340" height="200" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="g_format_di" bpmnElement="g_format" isMarkerVisible="true">
-        <dc:Bounds x="500" y="45" width="50" height="50" />
+      <bpmndi:BPMNShape id="Lane_SP_di" bpmnElement="Lane_SP" isHorizontal="true">
+        <dc:Bounds x="190" y="380" width="3340" height="100" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_xr_di" bpmnElement="t_xr">
-        <dc:Bounds x="625" y="30" width="100" height="80" />
+      <bpmndi:BPMNShape id="Lane_PA_di" bpmnElement="Lane_PA" isHorizontal="true">
+        <dc:Bounds x="190" y="480" width="3340" height="200" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="g_format_m_di" bpmnElement="g_format_m" isMarkerVisible="true">
-        <dc:Bounds x="800" y="45" width="50" height="50" />
+      <bpmndi:BPMNShape id="Lane_Azure_di" bpmnElement="Lane_Azure" isHorizontal="true">
+        <dc:Bounds x="190" y="680" width="3340" height="200" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_pruef_di" bpmnElement="t_pruef">
-        <dc:Bounds x="925" y="30" width="100" height="80" />
+      <bpmndi:BPMNShape id="Lane_GoBD_di" bpmnElement="Lane_GoBD" isHorizontal="true">
+        <dc:Bounds x="190" y="880" width="3340" height="100" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_ar_di" bpmnElement="t_ar">
-        <dc:Bounds x="1075" y="30" width="100" height="80" />
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start" >
+        <dc:Bounds x="242" y="112" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_trigger_di" bpmnElement="t_trigger">
-        <dc:Bounds x="1225" y="30" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_call_di" bpmnElement="t_call">
-        <dc:Bounds x="1375" y="30" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="g_typ_di" bpmnElement="g_typ" isMarkerVisible="true">
-        <dc:Bounds x="1550" y="45" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_kosit_di" bpmnElement="t_kosit">
-        <dc:Bounds x="1675" y="30" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="g_typ_m_di" bpmnElement="g_typ_m" isMarkerVisible="true">
-        <dc:Bounds x="1850" y="45" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_ergebnis_di" bpmnElement="t_ergebnis">
-        <dc:Bounds x="1975" y="30" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="g_konform_di" bpmnElement="g_konform" isMarkerVisible="true">
-        <dc:Bounds x="2150" y="45" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="t_fehler_di" bpmnElement="t_fehler">
-        <dc:Bounds x="2275" y="30" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="e_err_di" bpmnElement="e_err">
-        <dc:Bounds x="2457" y="52" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="se_in_di" bpmnElement="se_in">
-        <dc:Bounds x="57" y="192" width="36" height="36" />
+      <bpmndi:BPMNShape id="g_ea_di" bpmnElement="g_ea" >
+        <dc:Bounds x="410" y="105" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_erar_di" bpmnElement="t_erar">
-        <dc:Bounds x="175" y="170" width="100" height="80" />
+        <dc:Bounds x="555" y="95" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_upload_di" bpmnElement="t_upload">
+        <dc:Bounds x="555" y="195" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_felder_di" bpmnElement="t_felder">
+        <dc:Bounds x="730" y="195" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_format_di" bpmnElement="g_format" >
+        <dc:Bounds x="935" y="205" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_xr_di" bpmnElement="t_xr">
+        <dc:Bounds x="1080" y="195" width="110" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_zf_di" bpmnElement="t_zf">
-        <dc:Bounds x="625" y="170" width="100" height="80" />
+        <dc:Bounds x="1080" y="295" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_pruef_di" bpmnElement="t_pruef">
+        <dc:Bounds x="1255" y="195" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_ar_di" bpmnElement="t_ar">
+        <dc:Bounds x="1430" y="395" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_trigger_di" bpmnElement="t_trigger">
+        <dc:Bounds x="1605" y="495" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_call_di" bpmnElement="t_call">
+        <dc:Bounds x="1780" y="495" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_typ_di" bpmnElement="g_typ" >
+        <dc:Bounds x="1985" y="705" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_kosit_di" bpmnElement="t_kosit">
+        <dc:Bounds x="2130" y="695" width="110" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_pdf_di" bpmnElement="t_pdf">
-        <dc:Bounds x="1675" y="170" width="100" height="80" />
+        <dc:Bounds x="2130" y="795" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_ergebnis_di" bpmnElement="t_ergebnis">
+        <dc:Bounds x="2305" y="695" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_konform_di" bpmnElement="g_konform" >
+        <dc:Bounds x="2510" y="505" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_spalten_di" bpmnElement="t_spalten">
-        <dc:Bounds x="2275" y="170" width="100" height="80" />
+        <dc:Bounds x="2655" y="495" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_fehler_di" bpmnElement="t_fehler">
+        <dc:Bounds x="2655" y="595" width="110" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_err_di" bpmnElement="e_err" >
+        <dc:Bounds x="2867" y="612" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_gobd_di" bpmnElement="t_gobd">
-        <dc:Bounds x="2425" y="170" width="100" height="80" />
+        <dc:Bounds x="2830" y="895" width="110" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_mon_di" bpmnElement="t_mon">
-        <dc:Bounds x="2575" y="170" width="100" height="80" />
+        <dc:Bounds x="3005" y="395" width="110" height="70" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="t_buchung_di" bpmnElement="t_buchung">
-        <dc:Bounds x="2725" y="170" width="100" height="80" />
+        <dc:Bounds x="3180" y="895" width="110" height="70" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="e_ok_di" bpmnElement="e_ok">
-        <dc:Bounds x="2907" y="192" width="36" height="36" />
+      <bpmndi:BPMNShape id="e_ok_di" bpmnElement="e_ok" >
+        <dc:Bounds x="3392" y="912" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
-        <di:waypoint x="93" y="70" />
-        <di:waypoint x="175" y="70" />
+        <di:waypoint x="278" y="130" />
+        <di:waypoint x="410" y="130" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
-        <di:waypoint x="275" y="70" />
-        <di:waypoint x="325" y="70" />
+        <di:waypoint x="460" y="130" />
+        <di:waypoint x="508" y="130" />
+        <di:waypoint x="508" y="230" />
+        <di:waypoint x="555" y="230" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="514" y="106" width="110" height="20" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
-        <di:waypoint x="425" y="70" />
-        <di:waypoint x="500" y="70" />
+        <di:waypoint x="460" y="130" />
+        <di:waypoint x="555" y="130" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="466" y="106" width="110" height="20" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
-        <di:waypoint x="550" y="70" />
-        <di:waypoint x="625" y="70" />
+        <di:waypoint x="665" y="230" />
+        <di:waypoint x="730" y="230" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5">
-        <di:waypoint x="525" y="95" />
-        <di:waypoint x="525" y="210" />
-        <di:waypoint x="625" y="210" />
+        <di:waypoint x="840" y="230" />
+        <di:waypoint x="935" y="230" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6">
-        <di:waypoint x="725" y="70" />
-        <di:waypoint x="800" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8">
-        <di:waypoint x="850" y="70" />
-        <di:waypoint x="925" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f9_di" bpmnElement="f9">
-        <di:waypoint x="1025" y="70" />
-        <di:waypoint x="1075" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f10_di" bpmnElement="f10">
-        <di:waypoint x="1175" y="70" />
-        <di:waypoint x="1225" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f13_di" bpmnElement="f13">
-        <di:waypoint x="1325" y="70" />
-        <di:waypoint x="1375" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f14_di" bpmnElement="f14">
-        <di:waypoint x="1475" y="70" />
-        <di:waypoint x="1550" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f15_di" bpmnElement="f15">
-        <di:waypoint x="1600" y="70" />
-        <di:waypoint x="1675" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f16_di" bpmnElement="f16">
-        <di:waypoint x="1575" y="95" />
-        <di:waypoint x="1575" y="210" />
-        <di:waypoint x="1675" y="210" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f17_di" bpmnElement="f17">
-        <di:waypoint x="1775" y="70" />
-        <di:waypoint x="1850" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f19_di" bpmnElement="f19">
-        <di:waypoint x="1900" y="70" />
-        <di:waypoint x="1975" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f20_di" bpmnElement="f20">
-        <di:waypoint x="2075" y="70" />
-        <di:waypoint x="2150" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f21_di" bpmnElement="f21">
-        <di:waypoint x="2200" y="70" />
-        <di:waypoint x="2275" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f22_di" bpmnElement="f22">
-        <di:waypoint x="2175" y="95" />
-        <di:waypoint x="2175" y="210" />
-        <di:waypoint x="2275" y="210" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f23_di" bpmnElement="f23">
-        <di:waypoint x="2375" y="70" />
-        <di:waypoint x="2457" y="70" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f11_di" bpmnElement="f11">
-        <di:waypoint x="93" y="210" />
-        <di:waypoint x="175" y="210" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f12_di" bpmnElement="f12">
-        <di:waypoint x="275" y="210" />
-        <di:waypoint x="300" y="210" />
-        <di:waypoint x="300" y="140" />
-        <di:waypoint x="1200" y="140" />
-        <di:waypoint x="1200" y="70" />
-        <di:waypoint x="1225" y="70" />
+        <di:waypoint x="985" y="230" />
+        <di:waypoint x="1080" y="230" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="991" y="206" width="110" height="20" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7">
-        <di:waypoint x="725" y="210" />
-        <di:waypoint x="825" y="210" />
-        <di:waypoint x="825" y="95" />
+        <di:waypoint x="985" y="230" />
+        <di:waypoint x="1033" y="230" />
+        <di:waypoint x="1033" y="330" />
+        <di:waypoint x="1080" y="330" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1039" y="206" width="110" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8">
+        <di:waypoint x="1190" y="230" />
+        <di:waypoint x="1255" y="230" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f9_di" bpmnElement="f9">
+        <di:waypoint x="1190" y="330" />
+        <di:waypoint x="1223" y="330" />
+        <di:waypoint x="1223" y="230" />
+        <di:waypoint x="1255" y="230" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f10_di" bpmnElement="f10">
+        <di:waypoint x="1365" y="230" />
+        <di:waypoint x="1398" y="230" />
+        <di:waypoint x="1398" y="430" />
+        <di:waypoint x="1430" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f11_di" bpmnElement="f11">
+        <di:waypoint x="1540" y="430" />
+        <di:waypoint x="1573" y="430" />
+        <di:waypoint x="1573" y="530" />
+        <di:waypoint x="1605" y="530" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f12_di" bpmnElement="f12">
+        <di:waypoint x="665" y="130" />
+        <di:waypoint x="1135" y="130" />
+        <di:waypoint x="1135" y="530" />
+        <di:waypoint x="1605" y="530" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f13_di" bpmnElement="f13">
+        <di:waypoint x="1715" y="530" />
+        <di:waypoint x="1780" y="530" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f14_di" bpmnElement="f14">
+        <di:waypoint x="1890" y="530" />
+        <di:waypoint x="1938" y="530" />
+        <di:waypoint x="1938" y="730" />
+        <di:waypoint x="1985" y="730" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f15_di" bpmnElement="f15">
+        <di:waypoint x="2035" y="730" />
+        <di:waypoint x="2130" y="730" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2041" y="706" width="110" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f16_di" bpmnElement="f16">
+        <di:waypoint x="2035" y="730" />
+        <di:waypoint x="2083" y="730" />
+        <di:waypoint x="2083" y="830" />
+        <di:waypoint x="2130" y="830" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2089" y="706" width="110" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f17_di" bpmnElement="f17">
+        <di:waypoint x="2240" y="730" />
+        <di:waypoint x="2305" y="730" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f18_di" bpmnElement="f18">
-        <di:waypoint x="1775" y="210" />
-        <di:waypoint x="1875" y="210" />
-        <di:waypoint x="1875" y="95" />
+        <di:waypoint x="2240" y="830" />
+        <di:waypoint x="2273" y="830" />
+        <di:waypoint x="2273" y="730" />
+        <di:waypoint x="2305" y="730" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f19_di" bpmnElement="f19">
+        <di:waypoint x="2415" y="730" />
+        <di:waypoint x="2463" y="730" />
+        <di:waypoint x="2463" y="530" />
+        <di:waypoint x="2510" y="530" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f20_di" bpmnElement="f20">
+        <di:waypoint x="2560" y="530" />
+        <di:waypoint x="2655" y="530" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2566" y="506" width="110" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f21_di" bpmnElement="f21">
+        <di:waypoint x="2560" y="530" />
+        <di:waypoint x="2608" y="530" />
+        <di:waypoint x="2608" y="630" />
+        <di:waypoint x="2655" y="630" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2614" y="506" width="110" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f22_di" bpmnElement="f22">
+        <di:waypoint x="2765" y="630" />
+        <di:waypoint x="2867" y="630" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f23_di" bpmnElement="f23">
+        <di:waypoint x="2765" y="530" />
+        <di:waypoint x="2798" y="530" />
+        <di:waypoint x="2798" y="930" />
+        <di:waypoint x="2830" y="930" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f24_di" bpmnElement="f24">
-        <di:waypoint x="2375" y="210" />
-        <di:waypoint x="2425" y="210" />
+        <di:waypoint x="2940" y="930" />
+        <di:waypoint x="2973" y="930" />
+        <di:waypoint x="2973" y="430" />
+        <di:waypoint x="3005" y="430" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f25_di" bpmnElement="f25">
-        <di:waypoint x="2525" y="210" />
-        <di:waypoint x="2575" y="210" />
+        <di:waypoint x="3115" y="430" />
+        <di:waypoint x="3148" y="430" />
+        <di:waypoint x="3148" y="930" />
+        <di:waypoint x="3180" y="930" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f26_di" bpmnElement="f26">
-        <di:waypoint x="2675" y="210" />
-        <di:waypoint x="2725" y="210" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f27_di" bpmnElement="f27">
-        <di:waypoint x="2825" y="210" />
-        <di:waypoint x="2907" y="210" />
+        <di:waypoint x="3290" y="930" />
+        <di:waypoint x="3392" y="930" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
