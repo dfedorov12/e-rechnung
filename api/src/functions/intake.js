@@ -36,6 +36,7 @@ const { extractInvoiceXml } = require('../pdfxml');
 const { validatePdfA } = require('../verapdf');
 const { convertXmlToPdf, parseInvoiceData } = require('../converter');
 const { detectWerkFromBuyer } = require('../werk');
+const { normalizeBody } = require('../httpbody');
 
 app.http('intake', {
   methods: ['GET', 'POST'],
@@ -54,11 +55,17 @@ app.http('intake', {
       };
     }
 
-    const buf = Buffer.from(await request.arrayBuffer());
-    if (!buf.length) return problem(400, 'Leerer Request-Body. Bitte PDF oder XML senden.');
+    const raw = Buffer.from(await request.arrayBuffer());
+    if (!raw.length) return problem(400, 'Leerer Request-Body. Bitte PDF oder XML senden.');
 
-    const head = buf.subarray(0, 1024).toString('latin1');
-    const isPdf = head.includes('%PDF-');
+    // Body robust normalisieren (roh, base64 oder Power-Automate-{$content}-Wrapper).
+    const norm = normalizeBody(raw);
+    if (!norm) {
+      return problem(400, 'Body ist weder ein PDF (%PDF-) noch XML (<…>) — '
+        + 'auch nicht als base64 oder Power-Automate-Wrapper erkennbar.');
+    }
+    const buf = norm.buf;
+    const isPdf = norm.isPdf;
 
     // Werk ist bei Eingang i. d. R. schon durch das Postfach / die E-Mail-Adresse
     // bekannt -> als ?werk=<Kuerzel> uebergeben. Dann dient die Kaeufer-Erkennung
@@ -92,11 +99,7 @@ app.http('intake', {
       try { xml = await extractInvoiceXml(buf); } catch { xml = null; }
       res.klassifizierung = xml ? 'zugferd' : 'pdf-ohne-xml';
     } else {
-      const s = buf.toString('utf8');
-      if (!s.trimStart().startsWith('<')) {
-        return problem(400, 'Body ist weder ein PDF (%PDF-) noch XML (<...>).');
-      }
-      xml = s;
+      xml = buf.toString('utf8');
       res.klassifizierung = 'xrechnung-xml';
     }
 

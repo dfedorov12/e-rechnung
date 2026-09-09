@@ -16,6 +16,7 @@ const { app } = require('@azure/functions');
 const { validateXml, KOSIT_DAEMON_URL } = require('../kosit');
 const { extractInvoiceXml } = require('../pdfxml');
 const { validatePdfA } = require('../verapdf');
+const { normalizeBody } = require('../httpbody');
 
 app.http('validate', {
   methods: ['GET', 'POST'],
@@ -33,10 +34,15 @@ app.http('validate', {
       };
     }
 
-    // Body als Bytes lesen (XML oder ZUGFeRD-PDF). PDF -> eingebettete XML ziehen.
-    const buf = Buffer.from(await request.arrayBuffer());
-    const head = buf.subarray(0, 1024).toString('latin1');
-    const isPdf = head.includes('%PDF-');
+    // Body robust normalisieren (roh, base64 oder Power-Automate-{$content}-Wrapper).
+    const raw = Buffer.from(await request.arrayBuffer());
+    const norm = normalizeBody(raw);
+    if (!norm) {
+      return problem(400, 'Bitte die E-Rechnungs-XML oder ein ZUGFeRD-PDF als Request-Body senden '
+        + '(auch base64 / Power-Automate-Wrapper werden akzeptiert).');
+    }
+    const buf = norm.buf;
+    const isPdf = norm.isPdf;
 
     let xml;
     if (isPdf) {
@@ -48,9 +54,6 @@ app.http('validate', {
       }
     } else {
       xml = buf.toString('utf8');
-      if (!xml.trimStart().startsWith('<')) {
-        return problem(400, 'Bitte die E-Rechnungs-XML oder ein ZUGFeRD-PDF als Request-Body senden.');
-      }
     }
 
     // ?bericht=1 (auch report/withReport) haengt den vollstaendigen KoSIT-Pruefbericht
