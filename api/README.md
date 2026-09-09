@@ -219,10 +219,11 @@ XRechnung-XML **oder** ein normales PDF entgegen und liefert alles, was Power
 Automate zum geprüften Einsortieren nach `ERAR_<Werk>` braucht.
 
 ```
-GET  /api/intake   -> Health/Info
-POST /api/intake   -> Body = PDF|XML, Antwort = {
+GET  /api/intake                -> Health/Info
+POST /api/intake?werk=<Kuerzel>  -> Body = PDF|XML, Antwort = {
        klassifizierung: zugferd|xrechnung-xml|pdf-ohne-xml,
-       werk,                       // aus dem RechnungsEMPFÄNGER (Käufer = WGC/SHB)
+       werk,                       // Postfach-Hinweis (?werk=) sonst aus Empfänger erkannt
+       werkErkannt, werkMismatch,  // Gegenprobe aus dem RechnungsEMPFÄNGER
        konform, konformLabel, meldungen[], bericht,   // KoSIT (+ voller Bericht)
        pdfa,                       // veraPDF (nur bei PDF)
        daten,                      // nummer, datum, steller, empfaenger, betraege, …
@@ -230,9 +231,10 @@ POST /api/intake   -> Body = PDF|XML, Antwort = {
        lesbarPdfBase64 }           // nur bei reiner XML: gerendertes PDF/A
 ```
 
-Das Werk wird bei Eingang aus dem **Empfänger** erkannt (`src/werk.js`); aktuell
-befüllt für **WGC** und **SHB**, weitere Werke dort ergänzen. Der komplette Flow
-(zentrale Bibliothek `Rechnungseingang` → Prüfung → `ERAR_<Werk>`) steht in
+Bei Eingang ist das Werk meist schon durch das **Postfach** bekannt → als
+`?werk=<Kuerzel>` übergeben; die Empfänger-Erkennung (`src/werk.js`, WGC/SHB) dient
+dann nur als Gegenprobe (`werkMismatch`). Der komplette Flow (Postfach pro Werk →
+Prüfung → `ERAR_<Werk>`) steht in
 [`../docs/Eingangsrechnungen-Flow.md`](../docs/Eingangsrechnungen-Flow.md).
 
 ## Datenschutz

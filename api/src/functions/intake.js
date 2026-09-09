@@ -2,19 +2,22 @@
 /**
  * HTTP-Trigger: Eingangsrechnung -> Klassifizierung + Validierung + Werk + Daten
  * ============================================================================
- *   GET  /api/intake  -> JSON-Info (Health)
- *   POST /api/intake  -> Body = ZUGFeRD-PDF | XRechnung-XML | normales PDF
- *                        Antwort = JSON-Umschlag (siehe unten)
+ *   GET  /api/intake              -> JSON-Info (Health)
+ *   POST /api/intake?werk=<Kuerzel> -> Body = ZUGFeRD-PDF | XRechnung-XML | normales PDF
+ *                                    Antwort = JSON-Umschlag (siehe unten)
  *
- * ZWECK: zentrale Eingangsstufe ("Monitoring"). Eine Datei rein, ein JSON raus,
- * das Power Automate alles liefert, um die Rechnung geprueft in die richtige
- * Werk-Bibliothek ERAR_<Werk> einzusortieren.
+ * ZWECK: Eingangsstufe. Eine Datei rein, ein JSON raus, das Power Automate alles
+ * liefert, um die Rechnung geprueft in ERAR_<Werk> abzulegen. Das Werk ist bei
+ * Eingang meist schon durch das Postfach bekannt -> ?werk= uebergeben; ohne
+ * Hinweis wird es aus dem Empfaenger abgeleitet.
  *
  * Antwort:
  *   {
  *     klassifizierung: 'zugferd' | 'xrechnung-xml' | 'pdf-ohne-xml',
  *     quelle:          'PDF' | 'XML',
- *     werk:            'WGC' | 'SHB' | '' (aus dem RechnungsEMPFÄNGER erkannt),
+ *     werk:            Postfach-Hinweis (?werk=) sonst aus Empfaenger erkannt,
+ *     werkErkannt:     aus dem RechnungsEMPFÄNGER abgeleitet (Gegenprobe),
+ *     werkMismatch:    true, wenn ?werk= != werkErkannt (moegliche Fehlleitung),
  *     konform:         'gruen'|'gelb'|'rot'|'ungeprueft',
  *     konformLabel, accepted, errorCount, warningCount, meldungen[],
  *     bericht:         <roher KoSIT-Pruefbericht als String>  (Archiv/GoBD),
@@ -44,8 +47,9 @@ app.http('intake', {
         status: 200,
         jsonBody: {
           service: 'E-Rechnung Eingangsstufe (Klassifizierung + Validierung + Werk)',
-          usage: 'POST ZUGFeRD-PDF | XRechnung-XML | normales PDF -> JSON '
-               + '{ klassifizierung, werk, konform, bericht, pdfa, daten, xml, lesbarPdfBase64 }',
+          usage: 'POST ZUGFeRD-PDF | XRechnung-XML | normales PDF (optional ?werk=<Kuerzel> '
+               + 'aus dem Postfach) -> JSON { klassifizierung, werk, werkErkannt, werkMismatch, '
+               + 'konform, bericht, pdfa, daten, xml, lesbarPdfBase64 }',
         },
       };
     }
@@ -56,10 +60,19 @@ app.http('intake', {
     const head = buf.subarray(0, 1024).toString('latin1');
     const isPdf = head.includes('%PDF-');
 
+    // Werk ist bei Eingang i. d. R. schon durch das Postfach / die E-Mail-Adresse
+    // bekannt -> als ?werk=<Kuerzel> uebergeben. Dann dient die Kaeufer-Erkennung
+    // nur noch als Gegenprobe (werkMismatch). Ohne Hinweis wird das Werk aus dem
+    // Empfaenger abgeleitet.
+    const werkHinweis = String(request.query.get('werk') || request.query.get('gesellschaft') || '')
+      .toUpperCase().trim();
+
     const res = {
       klassifizierung: null,
       quelle: isPdf ? 'PDF' : 'XML',
-      werk: '',
+      werk: werkHinweis,
+      werkErkannt: '',
+      werkMismatch: false,
       konform: 'ungeprueft',
       konformLabel: 'Ungeprueft',
       accepted: null,
@@ -118,11 +131,15 @@ app.http('intake', {
       res.validierungsFehler = msg(e);
     }
 
-    // 5) Kopfdaten + Werk aus dem Empfaenger.
+    // 5) Kopfdaten + Werk-Gegenprobe aus dem Empfaenger.
     try {
       const d = parseInvoiceData(xml);
       res.daten = mapDaten(d);
-      res.werk = detectWerkFromBuyer(res.daten);
+      res.werkErkannt = detectWerkFromBuyer(res.daten);
+      // Ohne Postfach-Hinweis: erkanntes Werk uebernehmen. Mit Hinweis: Hinweis
+      // bleibt maessgeblich, aber Abweichung melden (moegliche Fehlleitung).
+      if (!werkHinweis) res.werk = res.werkErkannt;
+      res.werkMismatch = !!(werkHinweis && res.werkErkannt && werkHinweis !== res.werkErkannt);
     } catch (e) {
       res.datenFehler = msg(e);
     }
