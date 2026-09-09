@@ -13,6 +13,7 @@ const MON = {
   // MUSS zur provisionierten Site passen (Format: host:/sites/<Name>).
   siteHost: 'dihag.sharepoint.com:/sites/Rechnungsmonitoring',
   libRe: /^(ERAR|AR)_(.+)$/i,   // ERAR_WGC, AR_SHB, ...
+  intakeRe: /^Rechnungseingang$/i, // zentrale Eingangsstufe (werkuebergreifend)
   maxPagesPerLib: 30,            // Sicherheitslimit: 30 x 200 = 6000 Items je Bibliothek
 };
 
@@ -47,17 +48,25 @@ async function loadMonitoring(accessList) {
     const allow = new Set((accessList || []).map(s => String(s).toLowerCase()));
     const libs = (listsRes.value || [])
       .map(l => {
-        const m = MON.libRe.exec(l.name || l.displayName || '');
-        if (!m) return null;
-        return {
-          id: l.id,
-          name: l.name || l.displayName,
-          richtung: m[1].toUpperCase() === 'ERAR' ? 'Eingang' : 'Ausgang',
-          werk: m[2].toUpperCase(),
-        };
+        const nm = l.name || l.displayName || '';
+        const m = MON.libRe.exec(nm);
+        if (m) {
+          return {
+            id: l.id, name: nm,
+            richtung: m[1].toUpperCase() === 'ERAR' ? 'Eingang' : 'Ausgang',
+            werk: m[2].toUpperCase(),
+          };
+        }
+        // Zentrale Eingangsstufe: Werk noch nicht bekannt (wird beim Einsortieren gesetzt).
+        if (MON.intakeRe.test(nm)) {
+          return { id: l.id, name: nm, richtung: 'Eingang', werk: '', intake: true };
+        }
+        return null;
       })
       .filter(Boolean)
-      .filter(l => allow.size === 0 ? true : allow.has(l.werk.toLowerCase()));
+      // Zugriffsfilter greift nur fuer Werk-Bibliotheken; die Eingangsstufe ist
+      // werkuebergreifend und immer sichtbar (SharePoint-Rechte gaten den Zugriff).
+      .filter(l => l.intake || allow.size === 0 || allow.has(l.werk.toLowerCase()));
 
     if (!libs.length) {
       return _monShowSetup('Keine Rechnungsbibliotheken vorhanden',
@@ -106,7 +115,9 @@ function _monMap(it, f, lib) {
   return {
     // Werk aus dem Bibliotheksnamen (AR_SHB -> SHB) = maessgeblich; das Feld
     // Gesellschaft kann leer/falsch sein und wird nur als Fallback genutzt.
-    werk:     (lib.werk || f.Gesellschaft || '').toString(),
+    // Eingangsstufe: Werk erst nach Erkennung (Gesellschaft) bekannt, sonst "(Eingang)".
+    werk:     (lib.werk || f.Gesellschaft || (lib.intake ? '(Eingang)' : '')).toString(),
+    intake:   !!lib.intake,
     richtung: (lib.richtung || f.Richtung || '').toString(),
     nummer,
     art:      (f.Rechnungsart || '').toString(),

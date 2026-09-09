@@ -10,8 +10,14 @@
  */
 const KOSIT_DAEMON_URL = process.env.KOSIT_DAEMON_URL || 'http://localhost:8080/';
 
-/** XML an den KoSIT-Daemon senden und Report auswerten. */
-async function validateXml(xml) {
+/**
+ * XML an den KoSIT-Daemon senden und Report auswerten.
+ * @param {string} xml
+ * @param {{ withReport?: boolean }} [opts]  withReport=true haengt den vollstaendigen
+ *        KoSIT-Pruefbericht an das Ergebnis an (Feld `bericht`, roh vom Daemon; bei
+ *        eingebetteter HTML-Darstellung zusaetzlich `berichtHtml`). Fuer Archiv/GoBD.
+ */
+async function validateXml(xml, opts = {}) {
   const resp = await fetch(KOSIT_DAEMON_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/xml' },
@@ -24,7 +30,15 @@ async function validateXml(xml) {
   if (resp.status !== 200 && resp.status !== 406) {
     throw new Error(`KoSIT-Daemon HTTP ${resp.status}: ${reportXml.slice(0, 200)}`);
   }
-  return parseReport(reportXml, resp.status === 406);
+  const result = parseReport(reportXml, resp.status === 406);
+  if (opts.withReport) {
+    // Roher KoSIT-Pruefbericht (offizielles, revisionssicher archivierbares Artefakt).
+    result.bericht = reportXml;
+    // Manche Reportvarianten betten eine HTML-Darstellung ein -> separat mitgeben.
+    const hm = reportXml.match(/<html[\s\S]*?<\/html>/i);
+    if (hm) result.berichtHtml = hm[0];
+  }
+  return result;
 }
 
 /**

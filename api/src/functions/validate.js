@@ -53,8 +53,14 @@ app.http('validate', {
       }
     }
 
+    // ?bericht=1 (auch report/withReport) haengt den vollstaendigen KoSIT-Pruefbericht
+    // an die Antwort (Feld "bericht") — zum Archivieren pro Rechnung.
+    const q = request.query;
+    const withReport = ['1', 'true', 'ja', 'yes'].includes(
+      String(q.get('bericht') || q.get('report') || q.get('withReport') || '').toLowerCase());
+
     try {
-      const result = await validateXml(xml);
+      const result = await validateXml(xml, { withReport });
       result.quelle = isPdf ? 'ZUGFeRD-PDF' : 'XML';
       // Bei PDF zusaetzlich die PDF/A-3b-Huelle pruefen (veraPDF), sofern konfiguriert.
       if (isPdf) {

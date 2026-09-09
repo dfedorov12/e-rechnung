@@ -205,6 +205,36 @@ diese Function ist nur der JSON-Wrapper. Aufbau, Deployment und der passende
 Power-Automate-Flow stehen in [`../kosit-service/README.md`](../kosit-service/README.md).
 Voraussetzung: App-Einstellung `KOSIT_DAEMON_URL` zeigt auf den Container.
 
+**ZUGFeRD-PDF** wird ebenfalls akzeptiert (die eingebettete XML wird extrahiert und
+geprüft; zusätzlich läuft die PDF/A-Hülle durch veraPDF, sofern `VERAPDF_URL` gesetzt).
+
+**KoSIT-Prüfbericht mitliefern:** `POST /api/validate?bericht=1` hängt den
+vollständigen KoSIT-Report als Feld `bericht` an die Antwort (zum Archivieren pro
+Rechnung). Ohne den Parameter bleibt die Antwort schlank (nur Verdikt + Meldungen).
+
+## Eingangsstufe (`/api/intake`)
+
+Ein-Aufruf-Endpunkt für den **Eingangsrechnungs-Flow**: nimmt ZUGFeRD-PDF,
+XRechnung-XML **oder** ein normales PDF entgegen und liefert alles, was Power
+Automate zum geprüften Einsortieren nach `ERAR_<Werk>` braucht.
+
+```
+GET  /api/intake   -> Health/Info
+POST /api/intake   -> Body = PDF|XML, Antwort = {
+       klassifizierung: zugferd|xrechnung-xml|pdf-ohne-xml,
+       werk,                       // aus dem RechnungsEMPFÄNGER (Käufer = WGC/SHB)
+       konform, konformLabel, meldungen[], bericht,   // KoSIT (+ voller Bericht)
+       pdfa,                       // veraPDF (nur bei PDF)
+       daten,                      // nummer, datum, steller, empfaenger, betraege, …
+       xml,                        // extrahierte/empfangene E-Rechnungs-XML
+       lesbarPdfBase64 }           // nur bei reiner XML: gerendertes PDF/A
+```
+
+Das Werk wird bei Eingang aus dem **Empfänger** erkannt (`src/werk.js`); aktuell
+befüllt für **WGC** und **SHB**, weitere Werke dort ergänzen. Der komplette Flow
+(zentrale Bibliothek `Rechnungseingang` → Prüfung → `ERAR_<Werk>`) steht in
+[`../docs/Eingangsrechnungen-Flow.md`](../docs/Eingangsrechnungen-Flow.md).
+
 ## Datenschutz
 
 - Keine Persistenz: die hochgeladene XML und das erzeugte PDF werden **nicht**

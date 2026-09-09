@@ -92,6 +92,17 @@ async function convertXmlToPdf(xmlString) {
   return { data, pdf };
 }
 
+/**
+ * XML-String -> reine Kopf-/Positionsdaten (ohne PDF-Rendering).
+ * Fuer die Eingangsstufe (/api/intake): Werk-Erkennung + Spaltenbefuellung.
+ * @param   {string} xmlString  E-Rechnungs-XML (CII oder UBL)
+ * @returns {object}            Datenobjekt (verkaeufer, kaeufer, netTotal, ...)
+ */
+function parseInvoiceData(xmlString) {
+  const { parseInvoiceXML } = modules();
+  return parseInvoiceXML(xmlString);
+}
+
 /** Kleine Info-Antwort fuer GET (Health-Check / Erreichbarkeitstest). */
 function healthInfo() {
   return {
@@ -106,4 +117,4 @@ function healthInfo() {
   };
 }
 
-module.exports = { convertXmlToPdf, healthInfo };
+module.exports = { convertXmlToPdf, parseInvoiceData, healthInfo };

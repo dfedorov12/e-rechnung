@@ -52,6 +52,12 @@ param(
   # ausfuehren -> nur die fehlenden Bibliotheken werden angelegt.
   [string[]] $Werke = @('WGC','SHB','EIS','DSO','LEG','EWA','HOL','MEG','SCH','ZAI'),
 
+  # Zentrale Eingangsstufe: EINE werkuebergreifende Bibliothek, in der ALLE
+  # Eingangsrechnungen zuerst landen, geprueft (/api/intake: KoSIT + veraPDF) und
+  # dann per Power Automate ins jeweilige ERAR_<Werk> einsortiert werden.
+  [string]   $EingangsBibliothek = 'Rechnungseingang',
+  [switch]   $OhneEingangsstufe,
+
   # Nur anzeigen, nichts anlegen.
   [switch]   $WhatIfOnly
 )
@@ -91,6 +97,7 @@ $Felder = @(
   @{ Name='ERPQuelle';           Titel='ERP-Quellsystem';            Typ='Text' }
   @{ Name='Format';              Titel='Format';                     Typ='Choice';   FillIn=$true; Choices=@('XRechnung','ZUGFeRD','EDI','PDF','Sonstige') } # js/sharepoint.js
   @{ Name='Syntax';              Titel='Syntax';                     Typ='Choice';   FillIn=$true; Choices=@('CII','UBL') }
+  @{ Name='Klassifizierung';     Titel='Klassifizierung (Eingang)';  Typ='Choice';   Choices=@('ZUGFeRD (PDF+XML)','XRechnung (XML)','PDF ohne E-Rechnung','EDI','Sonstige') } # /api/intake
   @{ Name='Verarbeitungsstatus'; Titel='Verarbeitungsstatus';        Typ='Choice';   Choices=@('Eingegangen','Konvertiert','Validiert','Geprueft','Gebucht','Archiviert','Fehler') }
   @{ Name='Konformitaet';        Titel='Konformitaet';               Typ='Choice';   Choices=@('Gruen - KoSIT ok','Gelb - Warnungen','Rot - Fehler','Ungeprueft') }
   @{ Name='PDFAStatus';          Titel='PDF/A-3b (veraPDF)';         Typ='Choice';   Choices=@('PDF/A-3b ok','PDF/A Fehler','Ungeprueft','n/a (nur XML)') }
@@ -111,6 +118,8 @@ $Felder = @(
   # -- Verknuepfungen (vom Konverter geschrieben; Note wegen langer URLs) --
   @{ Name='XMLDateiUrl';         Titel='XML-Datei (URL)';            Typ='Note' }   # js/sharepoint.js
   @{ Name='ZUGFeRDPdfUrl';       Titel='ZUGFeRD-PDF (URL)';          Typ='Note' }   # js/sharepoint.js
+  @{ Name='LesbarPdfUrl';        Titel='Lesbares PDF (URL)';         Typ='Note' }   # /api/intake: XML -> gerendertes PDF/A
+  @{ Name='KoSITBerichtUrl';     Titel='KoSIT-Bericht (URL)';        Typ='Note' }   # /api/intake: archivierter Pruefbericht
   @{ Name='OriginalPdfName';     Titel='Original-PDF-Name';          Typ='Text' }   # js/sharepoint.js
 )
 
@@ -191,6 +200,40 @@ foreach ($werk in $Werke) {
   }
 }
 
+# --- Zentrale Eingangsstufe (werkuebergreifend) ---------------------------------
+$intakeAngelegt = 0
+if (-not $OhneEingangsstufe) {
+  Write-Host ""
+  Write-Host "== Zentrale Eingangsbibliothek: $EingangsBibliothek ==" -ForegroundColor Cyan
+  Write-Host "   Alle Eingangsrechnungen landen hier zuerst (Pruefung), dann -> ERAR_<Werk>."
+
+  $liste = Get-PnPList -Identity $EingangsBibliothek -ErrorAction SilentlyContinue
+  if (-not $liste) {
+    if ($WhatIfOnly) {
+      Write-Host "   (wuerde angelegt) [WhatIf]" -ForegroundColor Yellow
+    } else {
+      New-PnPList -Title $EingangsBibliothek -Template DocumentLibrary -OnQuickLaunch | Out-Null
+      Set-PnPList -Identity $EingangsBibliothek -Description 'Zentraler Rechnungseingang aller Werke (Pruefstufe vor ERAR_<Werk>)' -EnableVersioning $true | Out-Null
+      Set-PnPField -List $EingangsBibliothek -Identity 'Title' -Values @{ Title = 'Rechnungsnummer' } | Out-Null
+      Write-Host "   Bibliothek angelegt (Versionierung an)." -ForegroundColor Green
+    }
+  } else {
+    Write-Host "   Bibliothek existiert bereits." -ForegroundColor DarkGray
+  }
+
+  Write-Host "   Spalten:"
+  foreach ($f in $Felder) { Ensure-Field -Liste $EingangsBibliothek -Spec $f }
+
+  # Vorbelegung: Richtung=Eingang, Status=Eingegangen; Werk bleibt leer (wird beim
+  # Einsortieren aus /api/intake gesetzt).
+  if (-not $WhatIfOnly) {
+    Set-PnPField -List $EingangsBibliothek -Identity 'Richtung'            -Values @{ DefaultValue = 'Eingang' }     -ErrorAction SilentlyContinue | Out-Null
+    Set-PnPField -List $EingangsBibliothek -Identity 'Verarbeitungsstatus' -Values @{ DefaultValue = 'Eingegangen' } -ErrorAction SilentlyContinue | Out-Null
+  }
+  $intakeAngelegt = 1
+}
+
 Write-Host ""
-Write-Host "Fertig. $($Werke.Count) Werk(e) x $($Richtungen.Count) Richtungen = $($Werke.Count * $Richtungen.Count) Bibliothek(en)." -ForegroundColor Cyan
+$anzahl = $Werke.Count * $Richtungen.Count + $intakeAngelegt
+Write-Host "Fertig. $($Werke.Count) Werk(e) x $($Richtungen.Count) Richtungen$(if($intakeAngelegt){' + 1 Eingangsstufe'}) = $anzahl Bibliothek(en)." -ForegroundColor Cyan
 Disconnect-PnPOnline
