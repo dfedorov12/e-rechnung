@@ -169,18 +169,18 @@ function _hinweisAusBefunden(konform, meldungenText, rejected) {
   if (konform === 'gruen') return '';
   const s = String(meldungenText || '');
   const regeln = [
-    [/BR-CL-18\b/i, 'Rechnungspositionen ohne USt-Kategorie-Code (BT-151) — der Rechnungssteller muss je Position eine USt-Kategorie angeben; sonst laesst sich die Steueraufschluesselung nicht zuordnen.'],
+    [/BR-CL-18\b/i, 'Rechnungspositionen ohne USt-Kategorie-Code (BT-151) — der Rechnungssteller muss je Position eine USt-Kategorie angeben; sonst lässt sich die Steueraufschlüsselung nicht zuordnen.'],
     [/BR-CO-1[0-7]\b/i, 'Rechnerische Summen stimmen nicht zusammen (Netto/USt/Brutto passen nicht).'],
-    [/BR-[A-Z]{1,2}-0[6-9]\b/i, 'USt-Aufschluesselung passt nicht zu den Positionssummen (Steuerbasis oder Steuerbetrag).'],
-    [/BR-[A-Z]{1,2}-0[1-5]\b/i, 'USt-Kategorie in der Steueraufschluesselung unvollstaendig ausgewiesen.'],
-    [/BR-DEC-\d/i, 'Betraege mit falscher Anzahl Nachkommastellen.'],
-    [/BR-CL-\d/i, 'Ungueltiger Code — eine Code-Liste (Einheit, Land, USt-Kategorie …) wird nicht eingehalten.'],
+    [/BR-[A-Z]{1,2}-0[6-9]\b/i, 'USt-Aufschlüsselung passt nicht zu den Positionssummen (Steuerbasis oder Steuerbetrag).'],
+    [/BR-[A-Z]{1,2}-0[1-5]\b/i, 'USt-Kategorie in der Steueraufschlüsselung unvollständig ausgewiesen.'],
+    [/BR-DEC-\d/i, 'Beträge mit falscher Anzahl Nachkommastellen.'],
+    [/BR-CL-\d/i, 'Ungültiger Code — eine Code-Liste (Einheit, Land, USt-Kategorie …) wird nicht eingehalten.'],
     [/CII-(SR|DT)-/i, 'CII-Syntaxfehler — Struktur oder Datentyp entspricht nicht dem ZUGFeRD/Factur-X-Schema.'],
-    [/BR-\d|BR-[A-Z]/i, 'Verstoss gegen EN16931-Pflichtfelder oder -Geschaeftsregeln.'],
+    [/BR-\d|BR-[A-Z]/i, 'Verstoß gegen EN16931-Pflichtfelder oder -Geschäftsregeln.'],
   ];
   for (const [re, text] of regeln) if (re.test(s)) return text;
-  // Abgelehnt, aber keine Einzelbefunde greifbar (z. B. gar kein Pruefszenario).
-  if (rejected) return 'Von KoSIT als nicht konform abgelehnt (kein passendes Pruefszenario / Dokumenttyp nicht erkannt).';
+  // Abgelehnt, aber keine Einzelbefunde greifbar (z. B. gar kein Prüfszenario).
+  if (rejected) return 'Von KoSIT als nicht konform abgelehnt (kein passendes Prüfszenario / Dokumenttyp nicht erkannt).';
   return '';
 }
 
