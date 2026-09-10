@@ -176,6 +176,9 @@ function _monGroup(recs) {
       if (!primary[key]) { const s = arr.find(r => r[key]); if (s) primary[key] = s[key]; }
     }
     if (primary.brutto == null) { const s = arr.find(r => r.brutto != null); if (s) primary.brutto = s.brutto; }
+    // "öffnen" muss immer eine Datei treffen: hat die Primärzeile keine URL,
+    // die erste verfügbare Geschwisterdatei nehmen.
+    if (!primary.url) { const s = arr.find(r => r.url); if (s) primary.url = s.url; }
     out.push(primary);
   }
   return out;
