@@ -86,6 +86,8 @@ app.http('intake', {
       errorCount: 0,
       warningCount: 0,
       meldungen: [],
+      meldungenText: '',
+      hinweis: '',
       bericht: null,
       pdfa: null,
       daten: null,
@@ -126,6 +128,8 @@ app.http('intake', {
       res.errorCount = v.errorCount;
       res.warningCount = v.warningCount;
       res.meldungen = v.meldungen;
+      res.meldungenText = v.meldungenText || '';
+      res.hinweis = v.hinweis || '';
       res.bericht = v.bericht || null;
       if (v.berichtHtml) res.berichtHtml = v.berichtHtml;
       if (v.profilFallback) res.profilFallback = v.profilFallback;

@@ -141,6 +141,7 @@ function parseReport(reportXml, httpRejected) {
   const label = { gruen: 'Gruen - KoSIT ok', gelb: 'Gelb - Warnungen', rot: 'Rot - Fehler' }[konform];
 
   const top = meldungen.slice(0, 50);
+  const meldungenText = top.map(m => (m.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + m.text).join(' | ');
   return {
     konform,                    // 'gruen' | 'gelb' | 'rot'
     konformLabel: label,        // passend zur SharePoint-Choice-Spalte "Konformitaet"
@@ -150,8 +151,37 @@ function parseReport(reportXml, httpRejected) {
     meldungen: top,
     // Fertig zusammengesetzter Text fuer die SharePoint-Spalte (Power Automate braucht
     // dann kein Select/join ueber die Objekt-Liste). Leer, wenn keine Befunde.
-    meldungenText: top.map(m => (m.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + m.text).join(' | '),
+    meldungenText,
+    // Ein-Satz-Klartext, warum die Rechnung nicht konform ist (siehe _hinweisAusBefunden).
+    hinweis: _hinweisAusBefunden(konform, meldungenText, rejected),
   };
+}
+
+/**
+ * Kurzer, verstaendlicher Klartext-Hinweis aus den KoSIT-Befunden.
+ * EN16931-Fehler treten oft in Kaskaden auf (eine Wurzel loest mehrere Regel-
+ * verstoesse aus, z. B. fehlende Positions-USt-Kategorie -> auch die Steuer-
+ * aufschluesselung stimmt dann nicht). Darum wird NUR der wichtigste Hinweis
+ * zurueckgegeben (erste zutreffende Regel, haeufigste Grundursache zuerst),
+ * statt alle kryptischen BR-Codes aufzuzaehlen. Leer bei gruen/ohne Befund.
+ */
+function _hinweisAusBefunden(konform, meldungenText, rejected) {
+  if (konform === 'gruen') return '';
+  const s = String(meldungenText || '');
+  const regeln = [
+    [/BR-CL-18\b/i, 'Rechnungspositionen ohne USt-Kategorie-Code (BT-151) — der Rechnungssteller muss je Position eine USt-Kategorie angeben; sonst laesst sich die Steueraufschluesselung nicht zuordnen.'],
+    [/BR-CO-1[0-7]\b/i, 'Rechnerische Summen stimmen nicht zusammen (Netto/USt/Brutto passen nicht).'],
+    [/BR-[A-Z]{1,2}-0[6-9]\b/i, 'USt-Aufschluesselung passt nicht zu den Positionssummen (Steuerbasis oder Steuerbetrag).'],
+    [/BR-[A-Z]{1,2}-0[1-5]\b/i, 'USt-Kategorie in der Steueraufschluesselung unvollstaendig ausgewiesen.'],
+    [/BR-DEC-\d/i, 'Betraege mit falscher Anzahl Nachkommastellen.'],
+    [/BR-CL-\d/i, 'Ungueltiger Code — eine Code-Liste (Einheit, Land, USt-Kategorie …) wird nicht eingehalten.'],
+    [/CII-(SR|DT)-/i, 'CII-Syntaxfehler — Struktur oder Datentyp entspricht nicht dem ZUGFeRD/Factur-X-Schema.'],
+    [/BR-\d|BR-[A-Z]/i, 'Verstoss gegen EN16931-Pflichtfelder oder -Geschaeftsregeln.'],
+  ];
+  for (const [re, text] of regeln) if (re.test(s)) return text;
+  // Abgelehnt, aber keine Einzelbefunde greifbar (z. B. gar kein Pruefszenario).
+  if (rejected) return 'Von KoSIT als nicht konform abgelehnt (kein passendes Pruefszenario / Dokumenttyp nicht erkannt).';
+  return '';
 }
 
 module.exports = { validateXml, parseReport, KOSIT_DAEMON_URL };

@@ -144,6 +144,9 @@ function _monMap(it, f, lib) {
     status:   (f.Verarbeitungsstatus || '').toString(),
     konform:  (f.Konformitaet || '').toString(),
     fehler:   (f.Fehlermeldung || '').toString(),
+    // KoSIT-Meldungen: entweder der fertige Klartext-Hinweis (API-Feld "hinweis")
+    // oder der rohe meldungenText mit BR-Codes — _monHinweis macht daraus einen Satz.
+    meldung:  (f.ValidierungsMeldung || '').toString(),
     url:      (it.webUrl || '').toString(),
   };
 }
@@ -172,7 +175,7 @@ function _monGroup(recs) {
       primary.dateien.push({ label, url: r.url });
     }
     // Metadaten aus Geschwisterdateien auffüllen, falls die Primärzeile sie nicht hat.
-    for (const key of ['steller', 'empf', 'format', 'status', 'konform', 'fehler']) {
+    for (const key of ['steller', 'empf', 'format', 'status', 'konform', 'fehler', 'meldung']) {
       if (!primary[key]) { const s = arr.find(r => r[key]); if (s) primary[key] = s[key]; }
     }
     if (primary.brutto == null) { const s = arr.find(r => r.brutto != null); if (s) primary.brutto = s.brutto; }
@@ -252,6 +255,10 @@ function _monRenderTable(rows) {
     const datum = r.datum ? (r.datum.slice(0, 10)) : '';
     const richtCls = r.richtung === 'Eingang' ? 'pill-in' : 'pill-out';
     const kon = _monKonPill(r);
+    const hinweis = _monHinweis(r);
+    const konCell = kon + (hinweis
+      ? `<div class="mon-hint" title="${_esc(hinweis)}" style="font-size:11px;color:var(--gray-600,#6b7280);margin-top:3px;max-width:260px;line-height:1.3;">${_esc(hinweis)}</div>`
+      : '');
     const stat = r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : '';
     const extra = (r.dateien || [])
       .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`)
@@ -270,7 +277,7 @@ function _monRenderTable(rows) {
       <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
       <td>${_esc(r.format)}</td>
       <td>${stat}</td>
-      <td>${kon}</td>
+      <td>${konCell}</td>
       <td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>
       <td>${link}</td>
     </tr>`;
@@ -279,6 +286,29 @@ function _monRenderTable(rows) {
   document.getElementById('mon-tbody').innerHTML = body
     || `<tr><td colspan="11" style="text-align:center;color:var(--gray-500);padding:24px;">Keine Treffer.</td></tr>`;
   document.getElementById('mon-count').textContent = `${rows.length} angezeigt`;
+}
+
+// Klartext-Hinweis zur Konformität. Nimmt einen bereits fertigen API-Hinweis
+// unverändert; enthält der gespeicherte Text noch die rohen KoSIT-Codes
+// (BR-*/CII-*), wird daraus ein verständlicher Satz gemacht. Spiegelt
+// _hinweisAusBefunden in api/src/kosit.js wider. Leer bei grün/ohne Meldung.
+function _monHinweis(r) {
+  const s = (r.meldung || '').trim();
+  if ((r.konform || '').toLowerCase().startsWith('gr')) return '';
+  if (!s) return '';
+  if (!/BR-[A-Z0-9]|CII-(SR|DT)-/i.test(s)) return s; // schon Klartext -> so anzeigen
+  const regeln = [
+    [/BR-CL-18\b/i, 'Positionen ohne USt-Kategorie-Code (BT-151) — Rechnungssteller muss je Position eine USt-Kategorie angeben.'],
+    [/BR-CO-1[0-7]\b/i, 'Rechnerische Summen stimmen nicht zusammen (Netto/USt/Brutto).'],
+    [/BR-[A-Z]{1,2}-0[6-9]\b/i, 'USt-Aufschlüsselung passt nicht zu den Positionssummen.'],
+    [/BR-[A-Z]{1,2}-0[1-5]\b/i, 'USt-Kategorie in der Steueraufschlüsselung unvollständig.'],
+    [/BR-DEC-\d/i, 'Beträge mit falscher Anzahl Nachkommastellen.'],
+    [/BR-CL-\d/i, 'Ungültiger Code — eine Code-Liste wird nicht eingehalten.'],
+    [/CII-(SR|DT)-/i, 'CII-Syntaxfehler (Struktur/Datentyp nicht schemakonform).'],
+    [/BR-\d|BR-[A-Z]/i, 'Verstoß gegen EN16931-Geschäftsregeln.'],
+  ];
+  for (const [re, text] of regeln) if (re.test(s)) return text;
+  return 'Nicht konform (siehe KoSIT-Bericht).';
 }
 
 function _monKonPill(r) {

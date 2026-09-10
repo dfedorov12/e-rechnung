@@ -29,7 +29,10 @@ app.http('validate', {
         jsonBody: {
           service: 'E-Rechnung KoSIT-Validierung',
           daemon: KOSIT_DAEMON_URL,
-          usage: 'POST XML (XRechnung/CII/UBL) ODER ZUGFeRD/Factur-X-PDF -> { konform: gruen|gelb|rot, konformLabel, accepted, meldungen[] }',
+          usage: 'POST XML (XRechnung/CII/UBL) ODER ZUGFeRD/Factur-X-PDF (roh, base64 oder '
+               + 'Power-Automate-Wrapper) -> { konform: gruen|gelb|rot, konformLabel, accepted, '
+               + 'errorCount, warningCount, meldungen[], meldungenText, quelle, pdfa? }. '
+               + 'Mit ?bericht=1 zusaetzlich { bericht, berichtHtml } (voller KoSIT-Pruefbericht).',
         },
       };
     }
