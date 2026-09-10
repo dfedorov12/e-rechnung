@@ -18,19 +18,25 @@ const KOSIT_DAEMON_URL = process.env.KOSIT_DAEMON_URL || 'http://localhost:8080/
  *        eingebetteter HTML-Darstellung zusaetzlich `berichtHtml`). Fuer Archiv/GoBD.
  */
 async function validateXml(xml, opts = {}) {
-  const resp = await fetch(KOSIT_DAEMON_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/xml' },
-    body: xml,
-  });
-  const reportXml = await resp.text();
-  // KoSIT-Daemon signalisiert das Urteil auch per HTTP-Status:
-  //   200 = angenommen, 406 = abgelehnt. In BEIDEN Faellen steht der Report im Body.
-  // Nur echte Server-/Verbindungsfehler (kein Report) als Fehler behandeln.
-  if (resp.status !== 200 && resp.status !== 406) {
-    throw new Error(`KoSIT-Daemon HTTP ${resp.status}: ${reportXml.slice(0, 200)}`);
+  let { status, reportXml } = await _postKosit(xml);
+  let result = parseReport(reportXml, status === 406);
+
+  // Kein Prüfszenario gegriffen ("Dokumenttyp unbekannt")? Bei Factur-X/ZUGFeRD-
+  // Profilen (eingehende Rechnungen) gegen REINES EN16931 erneut prüfen — der
+  // Inhalt ist identisch, nur die Profilkennung passt nicht zur XRechnung-Konfig.
+  if (opts.profilFallback !== false && _keinSzenario(result, reportXml)) {
+    const en = _en16931Guideline(xml);
+    if (en !== xml) {
+      const r2 = await _postKosit(en);
+      const res2 = parseReport(r2.reportXml, r2.status === 406);
+      if (!_keinSzenario(res2, r2.reportXml)) {
+        result = res2;
+        result.profilFallback = 'Gegen EN16931 geprüft (Factur-X/ZUGFeRD-Profil, nicht XRechnung).';
+        reportXml = r2.reportXml;
+      }
+    }
   }
-  const result = parseReport(reportXml, resp.status === 406);
+
   if (opts.withReport) {
     // Roher KoSIT-Pruefbericht (offizielles, revisionssicher archivierbares Artefakt).
     result.bericht = reportXml;
@@ -39,6 +45,38 @@ async function validateXml(xml, opts = {}) {
     if (hm) result.berichtHtml = hm[0];
   }
   return result;
+}
+
+/** Eine XML an den KoSIT-Daemon senden. 200=accept, 406=reject; sonst Fehler. */
+async function _postKosit(xml) {
+  const resp = await fetch(KOSIT_DAEMON_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/xml' },
+    body: xml,
+  });
+  const reportXml = await resp.text();
+  if (resp.status !== 200 && resp.status !== 406) {
+    throw new Error(`KoSIT-Daemon HTTP ${resp.status}: ${reportXml.slice(0, 200)}`);
+  }
+  return { status: resp.status, reportXml };
+}
+
+/** "Kein Szenario gegriffen / Dokumenttyp unbekannt" im Report erkennen. */
+function _keinSzenario(result, reportXml) {
+  const s = String(reportXml || '');
+  return /keinem?\s+zul[aä]ssigen\s+Dokumenttyp|kein\w*\s+Pr[uü]fszenario|Dokumenttyp[^<]{0,40}unbekannt|kein\s+passendes\s+Szenario/i.test(s);
+}
+
+/**
+ * Factur-X/ZUGFeRD-Profilkennung auf reines EN16931 zurücksetzen, damit die
+ * EN16931-Szenarien der KoSIT-XRechnung-Konfig greifen. Nur die GuidelineID/
+ * CustomizationID wird angefasst; der fachliche Inhalt bleibt unverändert.
+ */
+function _en16931Guideline(xml) {
+  return String(xml).replace(
+    /urn:cen\.eu:en16931:2017#compliant#urn:(?:factur-x\.eu|zugferd\.de|ferd-net\.de)[^<\s"']*/gi,
+    'urn:cen.eu:en16931:2017'
+  );
 }
 
 /**

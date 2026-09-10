@@ -118,12 +118,15 @@ function _monMap(it, f, lib) {
   if (/_kosit-?bericht$/i.test(stem)) { sidecar = 'kosit';  stem = stem.replace(/_kosit-?bericht$/i, ''); }
   else if (/_lesbar$/i.test(stem))    { sidecar = 'lesbar'; stem = stem.replace(/_lesbar$/i, ''); }
 
-  // Rechnungsnr.: Titelfeld bevorzugen; sonst Dateiname ohne Datum-Suffix (NR_JJJJMMTT).
-  const nummer = (f.Title && String(f.Title).trim())
-    ? String(f.Title).trim()
-    : stem.replace(/_\d{6,8}$/, '');
+  // baseKey = Dateiname ohne Endung/Sidecar/Datum -> Gruppierungsschlüssel.
+  // (Title ist im Flow oft leer ODER der ganze Dateiname -> zum Gruppieren untauglich.)
+  const baseKey = stem.replace(/_\d{6,8}$/, '');
+  const titleClean = (f.Title && String(f.Title).trim()) || '';
+  // Anzeige-Nr.: echter Title (ohne Dateiendung/Sidecar-Suffix) sonst baseKey.
+  const nummer = (titleClean && !/\.(pdf|xml)$/i.test(titleClean) && !/_kosit-?bericht$|_lesbar$/i.test(titleClean))
+    ? titleClean : baseKey;
   return {
-    file, ext, sidecar,
+    file, ext, sidecar, baseKey,
     // Werk aus dem Bibliotheksnamen (AR_SHB -> SHB) = maessgeblich; das Feld
     // Gesellschaft kann leer/falsch sein und wird nur als Fallback genutzt.
     // Eingangsstufe: Werk erst nach Erkennung (Gesellschaft) bekannt, sonst "(Eingang)".
@@ -150,7 +153,7 @@ function _monMap(it, f, lib) {
 function _monGroup(recs) {
   const groups = new Map();
   for (const r of recs) {
-    const key = [r.werk, r.richtung, (r.nummer || r.file || '').toLowerCase()].join('|');
+    const key = [r.werk, r.richtung, (r.baseKey || r.file || '').toLowerCase()].join('|');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(r);
   }

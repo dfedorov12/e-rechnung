@@ -128,6 +128,7 @@ app.http('intake', {
       res.meldungen = v.meldungen;
       res.bericht = v.bericht || null;
       if (v.berichtHtml) res.berichtHtml = v.berichtHtml;
+      if (v.profilFallback) res.profilFallback = v.profilFallback;
     } catch (e) {
       context.error('KoSIT-Validierung fehlgeschlagen:', e);
       res.konform = 'ungeprueft';
