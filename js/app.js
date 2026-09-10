@@ -713,6 +713,15 @@ async function exportInvoice(format) {
       downloadText(xml, `${safeNr}_xrechnung.xml`);
     }
 
+    // Für reine XRechnung zusätzlich ein lesbares PDF rendern → wird im Monitoring
+    // als "_lesbar.pdf" mit abgelegt und verlinkt. Bei ZUGFeRD ist das PDF selbst
+    // bereits lesbar (kein zusätzliches nötig).
+    let lesbarPdf = null;
+    if (format !== 'zugferd') {
+      try { lesbarPdf = await _renderReadablePdf(data, totals); }
+      catch (e) { console.warn('Lesbares PDF nicht erzeugt:', e); }
+    }
+
     // #7: Prüfpfad (Hash, manuelle Änderungen, Prüfer)
     const audit = await _buildAudit(data);
 
@@ -734,7 +743,7 @@ async function exportInvoice(format) {
     showLoading(true, 'Wird ins Monitoring gespeichert...');
     try {
       await spSaveToMonitoring({
-        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit, ustPruefung: ust },
+        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit, ustPruefung: ust, lesbarPdfBytes: lesbarPdf },
         xml,
         pdfBytes,
         format,
@@ -1063,6 +1072,27 @@ async function _buildZugferdPdf(data, totals, xml, ust) {
     });
   }
   return await embedXMLIntoPDF(basePdf, xml, 'zugferd', extras);
+}
+
+/**
+ * Lesbares PDF/A aus den Rechnungsdaten rendern (ohne eingebettetes XML) –
+ * für die XRechnung-Ablage im Monitoring, damit dort auch eine PDF verlinkt ist.
+ */
+async function _renderReadablePdf(data, totals) {
+  if (typeof buildInvoicePdf !== 'function') return null;
+  const pdfData = {
+    ...data,
+    netTotal: totals.netTotal, vatTotal: totals.vatTotal, grossTotal: totals.grossTotal,
+    positionen: (data.positionen || []).map(p => ({
+      ...p,
+      gesamt: (parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0) * (1 - (parseFloat(p.rabatt) || 0) / 100),
+    })),
+  };
+  let pdf = await buildInvoicePdf(pdfData);
+  if (typeof makeReadablePdfA3 === 'function') {
+    try { pdf = await makeReadablePdfA3(pdf); } catch (e) { console.warn('PDF/A-Finalisierung übersprungen:', e.message); }
+  }
+  return pdf;
 }
 
 /** #7: SHA-256 des Quell-PDF (Hex) für den Prüfpfad. */

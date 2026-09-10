@@ -335,6 +335,18 @@ async function spSaveToMonitoring({ invoiceData, xml, pdfBytes, format }) {
   const up = await _monUpload(token, driveId, fileName, bytes, ctype);
   const fileUrl = up.webUrl || '';
 
+  // Bei reiner XRechnung zusätzlich das gerenderte lesbare PDF ablegen, damit im
+  // Monitoring auch eine PDF verlinkt ist. Bei ZUGFeRD ist das Original-PDF lesbar.
+  let lesbarUrl = '';
+  if (!isZ && invoiceData.lesbarPdfBytes) {
+    try {
+      const lb = invoiceData.lesbarPdfBytes instanceof Uint8Array
+        ? invoiceData.lesbarPdfBytes : new Uint8Array(invoiceData.lesbarPdfBytes);
+      const lup = await _monUpload(token, driveId, `${safeNr}_${dateStr}_lesbar.pdf`, lb, 'application/pdf');
+      lesbarUrl = lup.webUrl || '';
+    } catch (e) { console.warn('[Monitoring] Lesbares PDF nicht hochgeladen:', e.message); }
+  }
+
   const nowIso = new Date().toISOString();
   const a = invoiceData.audit;
 
@@ -371,6 +383,7 @@ async function spSaveToMonitoring({ invoiceData, xml, pdfBytes, format }) {
     OriginalPdfName:     (invoiceData.originalPdfName || '').slice(0, 255),
     XMLDateiUrl:         isZ ? '' : fileUrl,
     ZUGFeRDPdfUrl:       isZ ? fileUrl : '',
+    LesbarPdfUrl:        isZ ? fileUrl : lesbarUrl,
     Pruefstatus:         _auditStatus(a),
     ManuelleAenderungen: a ? JSON.stringify(a.manuelleAenderungen || []).slice(0, 255) : '',
     QuellPdfHash:        a ? (a.quellPdfHash || '').slice(0, 255) : '',
