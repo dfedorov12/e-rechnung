@@ -256,8 +256,9 @@ function _monRenderTable(rows) {
     const extra = (r.dateien || [])
       .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`)
       .join(' · ');
+    const origLabel = r.ext ? `Original (${r.ext.toUpperCase()})` : 'Original';
     const link = [
-      r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">öffnen ↗</a>` : '',
+      r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">${origLabel} ↗</a>` : '',
       extra,
     ].filter(Boolean).join(' · ');
     return `<tr>
