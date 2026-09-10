@@ -71,10 +71,16 @@ function _keinSzenario(result, reportXml) {
  * Factur-X/ZUGFeRD-Profilkennung auf reines EN16931 zurücksetzen, damit die
  * EN16931-Szenarien der KoSIT-XRechnung-Konfig greifen. Nur die GuidelineID/
  * CustomizationID wird angefasst; der fachliche Inhalt bleibt unverändert.
+ *
+ * Deckt beide Profil-Schlüsselwörter ab: BASIC nutzt "#compliant#",
+ * EXTENDED nutzt "#conformant#" (z. B. ...#conformant#urn:factur-x.eu:1p0:extended).
+ * Das Wort wird bewusst generisch ([a-z]+) gematcht, damit künftige Varianten
+ * ebenfalls greifen; der urn:factur-x/zugferd/ferd-net-Anker schützt davor,
+ * die echte XRechnung-Kennung (urn:xoev-de:...) versehentlich umzuschreiben.
  */
 function _en16931Guideline(xml) {
   return String(xml).replace(
-    /urn:cen\.eu:en16931:2017#compliant#urn:(?:factur-x\.eu|zugferd\.de|ferd-net\.de)[^<\s"']*/gi,
+    /urn:cen\.eu:en16931:2017#[a-z]+#urn:(?:factur-x\.eu|zugferd\.de|ferd-net\.de)[^<\s"']*/gi,
     'urn:cen.eu:en16931:2017'
   );
 }
