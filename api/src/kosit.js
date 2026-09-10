@@ -134,13 +134,17 @@ function parseReport(reportXml, httpRejected) {
 
   const label = { gruen: 'Gruen - KoSIT ok', gelb: 'Gelb - Warnungen', rot: 'Rot - Fehler' }[konform];
 
+  const top = meldungen.slice(0, 50);
   return {
     konform,                    // 'gruen' | 'gelb' | 'rot'
     konformLabel: label,        // passend zur SharePoint-Choice-Spalte "Konformitaet"
     accepted: konform !== 'rot',
     errorCount,
     warningCount,
-    meldungen: meldungen.slice(0, 50),
+    meldungen: top,
+    // Fertig zusammengesetzter Text fuer die SharePoint-Spalte (Power Automate braucht
+    // dann kein Select/join ueber die Objekt-Liste). Leer, wenn keine Befunde.
+    meldungenText: top.map(m => (m.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + m.text).join(' | '),
   };
 }
 
