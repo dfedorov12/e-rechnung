@@ -82,6 +82,7 @@ async function loadMonitoring(accessList) {
 
     // XML + PDF + KoSIT-Bericht derselben Rechnung zu EINER Zeile zusammenfassen.
     _monRecords = _monGroup(recs);
+    _monMarkDupes(_monRecords);   // echte Dubletten (Nummer + Aussteller) kennzeichnen
     _monBuildFilterOptions(libs);
     _monApply();
 
@@ -215,6 +216,32 @@ function _monBestPrimary(arr) {
   return arr.slice().sort((a, b) => score(b) - score(a))[0];
 }
 
+// Echte Dubletten kennzeichnen: dieselbe Rechnungsnummer beim SELBEN Aussteller im
+// selben Werk/Richtung, verteilt auf mehrere Einträge = mögliche Doppelerfassung.
+// Gleiche Nummer bei VERSCHIEDENEN Lieferanten ist keine Dublette -> der Aussteller
+// ist Teil des Schlüssels. Läuft rein clientseitig über die geladenen Datensätze
+// (kein Flow-Schritt, keine Extra-Spalte). Setzt r.dublette + r.dubletteInfo.
+function _monMarkDupes(records) {
+  const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const groups = new Map();
+  for (const r of records) {
+    const nr = norm(r.nummer);
+    const steller = norm(r.steller);
+    if (!nr || !steller) continue;                 // ohne Nummer/Aussteller nicht bewertbar
+    const key = [r.werk, r.richtung, nr, steller].join('|');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  for (const arr of groups.values()) {
+    if (arr.length < 2) continue;
+    for (const r of arr) {
+      r.dublette = true;
+      r.dubletteInfo = `${arr.length}× dieselbe Nummer „${r.nummer}" von „${r.steller}" `
+                     + '– mögliche Doppelerfassung, bitte prüfen.';
+    }
+  }
+}
+
 /* ── Filter & Rendering ─────────────────────────────────────────────── */
 
 function _monBuildFilterOptions(libs) {
@@ -253,6 +280,7 @@ function _monRenderKpis(rows) {
   const ausgang = rows.filter(r => r.richtung === 'Ausgang').length;
   const offen = rows.filter(r => r.status && !['Gebucht', 'Archiviert'].includes(r.status)).length;
   const fehler = rows.filter(r => r.status === 'Fehler' || /^Rot/i.test(r.konform) || r.fehler).length;
+  const dubletten = rows.filter(r => r.dublette).length;
   const summe = rows.reduce((s, r) => s + (r.brutto || 0), 0);
 
   const tiles = [
@@ -261,6 +289,7 @@ function _monRenderKpis(rows) {
     ['Ausgang', ausgang, 'out'],
     ['Offen (nicht gebucht)', offen, 'warn'],
     ['Fehler / rot', fehler, 'bad'],
+    ['Dubletten', dubletten, dubletten ? 'bad' : ''],
     ['Bruttosumme', summe.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }), 'sum'],
   ];
   document.getElementById('mon-kpis').innerHTML = tiles.map(([label, val, cls]) =>
@@ -293,7 +322,9 @@ function _monRenderTable(rows) {
       <td>${_esc(datum)}</td>
       <td><span class="pill pill-werk">${_esc(r.werk)}</span></td>
       <td><span class="pill ${richtCls}">${_esc(r.richtung)}</span></td>
-      <td>${_esc(r.nummer)}</td>
+      <td>${_esc(r.nummer)}${r.dublette
+        ? `<div class="mon-dupe" title="${_esc(r.dubletteInfo || '')}" style="display:inline-block;margin-top:2px;font-size:11px;font-weight:600;color:#fff;background:#b40000;border-radius:3px;padding:1px 6px;">⚠ Dublette</div>`
+        : ''}</td>
       <td>${_esc(r.richtung === 'Eingang' ? r.steller : r.empf)}</td>
       <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
       <td>${_esc(r.format)}</td>

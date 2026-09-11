@@ -112,27 +112,20 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       - **Kein** „Chunked"/`transferMode` (Azure Functions kann das nicht → sonst 400).
 
    b. **Dateibasis** (Compose): `basis = coalesce(body('HTTP')?['dateibasis'], <Anlagenname ohne Endung>)`.
-      Das ist **Dateiname und Dedup-Schlüssel** zugleich: `<Nummer>_<StellerVat>` (bereinigt).
-      Zwei Lieferanten mit derselben Nummer kollidieren dadurch nicht mehr.
+      `dateibasis` = `<Nummer>_<StellerVat>` (bereinigt) — als Dateiname verwendet
+      kollidieren zwei Lieferanten mit derselben Nummer nicht mehr (kein Überschreiben).
 
-   c. **Dublettenprüfung** – *Dateimetadaten über Pfad abrufen* für
-      `ERAR_<Werk>/@{outputs('basis')}.<ext>` (Aktion → *Konfigurieren nach Ausführung*:
-      auch bei „ist fehlgeschlagen" fortsetzen; **404 = nicht vorhanden**, 200 = existiert
-      bereits = **echte Dublette**, weil der Name Nummer **und** Aussteller-USt-IdNr. enthält).
-
-   d. **Original in `ERAR_<Werk>` ablegen** – *Datei erstellen*
+   c. **Original in `ERAR_<Werk>` ablegen** – *Datei erstellen*
       - Ordnerpfad: `ERAR_WGC` (bzw. `concat('ERAR_', <werk>)` beim gemeinsamen Flow)
-      - **Nicht-Dublette** (Schritt c = 404): Dateiname `@{outputs('basis')}.pdf` / `.xml`.
-      - **Dublette** (Schritt c = 200): Original **nicht** überschreiben, die neue Datei als
-        `@{outputs('basis')}_DUBLETTE_@{utcNow('yyyyMMddHHmmss')}.<ext>` ablegen.
-      - Dateiinhalt: Anlageninhalt → merkt sich die **ItemId** für Schritt f.
+      - Dateiname: `@{outputs('basis')}.pdf` / `.xml` (Anlagen-Endung übernehmen)
+      - Dateiinhalt: Anlageninhalt → merkt sich die **ItemId** für Schritt e.
 
-   e. **Sidecars** in dieselbe `ERAR_<Werk>` (nur wenn vorhanden; Basis = derselbe Name wie in d):
+   d. **Sidecars** in dieselbe `ERAR_<Werk>` (nur wenn vorhanden; Basis = derselbe Name wie in c):
       - **XML:** `body('HTTP')?['xml']` → `@{outputs('basis')}.xml`
       - **Lesbares PDF:** `base64ToBinary(body('HTTP')?['lesbarPdfBase64'])` → `@{outputs('basis')}_lesbar.pdf`
       - **KoSIT-Bericht:** `body('HTTP')?['bericht']` → `@{outputs('basis')}_KoSIT-Bericht.xml`
 
-   f. **Dateieigenschaften aktualisieren** (am in d erstellten Element):
+   e. **Dateieigenschaften aktualisieren** (am in c erstellten Element):
       | Spalte | Wert |
       |--------|------|
       | `Title` | `body('HTTP')?['daten']?['nummer']` |
@@ -147,11 +140,18 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       | `Konformitaet` | `body('HTTP')?['konformLabel']` |
       | `ValidierungsMeldung` | `body('HTTP')?['hinweis']` (fertiger Klartext-Satz) — **nicht** `join(meldungen)`, das ergäbe „[object Object]". Alternativ `meldungenText` (alle Befunde). |
       | `PDFAStatus` | aus `pdfa.konform`: ok→`PDF/A-3b ok` · fehler→`PDF/A Fehler` · xml→`n/a (nur XML)` · sonst `Ungeprueft` |
-      | `KoSITBerichtUrl` / `LesbarPdfUrl` | WebUrl der Sidecars aus Schritt e |
-      | `Verarbeitungsstatus` | **Dublette** (Schritt c = 200) → `Dublette`; sonst `if(equals(body('HTTP')?['konform'],'rot'),'Fehler','Validiert')` |
-      | `Fehlermeldung` (bei Dublette) | „Doppelerfassung: @{outputs('basis')} bereits vorhanden – bitte prüfen" |
+      | `KoSITBerichtUrl` / `LesbarPdfUrl` | WebUrl der Sidecars aus Schritt d |
+      | `Verarbeitungsstatus` | `if(equals(body('HTTP')?['konform'],'rot'),'Fehler','Validiert')` |
 
-   g. **Fehlleitung prüfen** – Bedingung `body('HTTP')?['werkMismatch']` = `true`:
+   > **Dubletten braucht der Flow nicht zu prüfen.** Die Erkennung läuft automatisch im
+   > Monitoring (`monitoring.js`, `_monMarkDupes`): gleiche Rechnungsnummer beim selben
+   > Aussteller = „⚠ Dublette"-Badge + KPI-Kachel. Der `dateibasis`-Dateiname (Schritt b)
+   > verhindert zusätzlich, dass sich verschiedene Lieferanten mit gleicher Nummer beim
+   > Ablegen überschreiben. Optional kann der Flow vor Schritt c per *Dateimetadaten über
+   > Pfad abrufen* auf `ERAR_<Werk>/@{outputs('basis')}.<ext>` prüfen (200 = existiert
+   > bereits) und den Status `Dublette` setzen — nötig ist es für die Sichtbarkeit nicht.
+
+   f. **Fehlleitung prüfen** – Bedingung `body('HTTP')?['werkMismatch']` = `true`:
       → `Fehlermeldung` = „Empfänger (@{body('HTTP')?['werkErkannt']}) ≠ Postfach-Werk
       – bitte Zuordnung prüfen" und ggf. `Verarbeitungsstatus = Fehler`. Die Datei
       bleibt im Werk, wird aber im Dashboard als Fehler sichtbar.
@@ -176,19 +176,23 @@ umwandeln. Eine automatische OCR-Konvertierung wäre ein eigener, größerer Aus
 ## Dubletten & Nummernkollisionen
 
 Eine Rechnungsnummer ist **nur beim selben Aussteller** eindeutig — zwei Lieferanten
-können dieselbe Nummer vergeben. Der Schlüssel darf daher nicht die Nummer allein sein:
+können dieselbe Nummer vergeben. Der Schlüssel ist daher **Nummer + Aussteller**, nie
+die Nummer allein.
 
-- **Eindeutig = Nummer + Aussteller-USt-IdNr. (BT-31).** Genau das steckt in
-  `dateibasis` (`<Nummer>_<StellerVat>`), das die API fertig liefert. Als Dateiname
-  verwendet, ist es zugleich der Dedup-Schlüssel.
-- **Echte Dublette** = gleiche Nummer **und** gleicher Aussteller → dieselbe
-  `dateibasis` liegt schon in `ERAR_<Werk>`. Der Flow (Schritt c) erkennt das an der
-  Datei-Existenz: **Original bleibt unangetastet**, die Neuankunft wird als
-  Status **`Dublette`** + `Fehlermeldung` abgelegt und ist im Monitoring sichtbar
-  (Sachbearbeiter entscheidet). Nichts wird überschrieben, nichts geht verloren.
-- **Gleiche Nummer, verschiedene Lieferanten** ist **keine** Dublette: unterschiedliche
-  `StellerVat` → unterschiedliche `dateibasis` → zwei getrennte Dateien und zwei
-  getrennte Monitoring-Zeilen (kein Fehl-Merge mehr).
+**Erkennung passiert automatisch im Monitoring** (`monitoring.js`, `_monMarkDupes`) —
+**kein Flow-Schritt nötig**:
+
+- **Echte Dublette** = gleiche Rechnungsnummer **und** gleicher Aussteller (im selben
+  Werk/Richtung) → jede betroffene Zeile bekommt ein **„⚠ Dublette"-Badge**, dazu eine
+  **KPI-Kachel „Dubletten"**. Der Sachbearbeiter sieht die Doppelerfassung sofort und
+  entscheidet. Nichts wird automatisch gelöscht oder überschrieben.
+- **Gleiche Nummer, verschiedene Lieferanten** ist **keine** Dublette: der Aussteller
+  ist Teil des Schlüssels → wird nicht markiert.
+
+Ergänzend liefert `/api/intake` den kollisionssicheren Dateinamen **`dateibasis`**
+(`<Nummer>_<StellerVat>`): als Dateiname verwendet, überschreiben sich verschiedene
+Lieferanten mit gleicher Nummer beim Ablegen nicht (und echte Dubletten bleiben als
+getrennte Einträge sichtbar, statt sich zu ersetzen).
 
 > **Ausgang (AR) ist nicht betroffen:** dort ist der Aussteller immer das Werk selbst,
 > die Nummern sind pro Werk eindeutig und der Dateiname trägt zusätzlich das Datum.
