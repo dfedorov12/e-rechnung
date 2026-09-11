@@ -197,7 +197,8 @@ Setzen der Spalte **Konformitaet** im Rechnungsmonitoring.
 
 ```
 GET  /api/validate   -> Health/Info
-POST /api/validate   -> Body = XML, Antwort = { konform, konformLabel, accepted, meldungen[] }
+POST /api/validate   -> Body = XML|ZUGFeRD-PDF, Antwort = { konform, konformLabel, accepted,
+                        errorCount, warningCount, meldungen[], meldungenText, hinweis, quelle, pdfa? }
 ```
 
 Der eigentliche Validator läuft als eigener Container (Java 8) im **Daemon-Modus**;
@@ -212,6 +213,20 @@ geprüft; zusätzlich läuft die PDF/A-Hülle durch veraPDF, sofern `VERAPDF_URL
 vollständigen KoSIT-Report als Feld `bericht` an die Antwort (zum Archivieren pro
 Rechnung). Ohne den Parameter bleibt die Antwort schlank (nur Verdikt + Meldungen).
 
+**Factur-X/ZUGFeRD-Profile (eingehende Rechnungen):** BASIC (`#compliant#`) und
+EXTENDED (`#conformant#`) tragen eine Profilkennung, die die KoSIT-XRechnung-Konfig
+nicht als Szenario erkennt. Der Wrapper schreibt solche GuidelineIDs **vorab** auf
+reines `urn:cen.eu:en16931:2017` um und prüft **nur einmal** gegen EN16931 (Feld
+`profilFallback` dokumentiert das; halbiert die KoSIT-Aufrufe je Rechnung). Echte
+XRechnung-IDs bleiben unberührt. **MINIMUM/BASIC-WL** werden NICHT umgeschrieben
+(keine Positionsdaten → keine vollständige E-Rechnung) und im `hinweis` als solche
+benannt.
+
+**Klartext-Felder für die Sachbearbeiter-Ansicht:** `hinweis` = ein-Satz-Grund,
+WARUM nicht konform (aus den KoSIT-Codes abgeleitet, häufigste Wurzel zuerst).
+`meldungenText` = alle Befunde als fertiger Text — so braucht der Power-Automate-Flow
+keinen Array-Join über die `meldungen[]`-Objekte.
+
 ## Eingangsstufe (`/api/intake`)
 
 Ein-Aufruf-Endpunkt für den **Eingangsrechnungs-Flow**: nimmt ZUGFeRD-PDF,
@@ -224,7 +239,9 @@ POST /api/intake?werk=<Kuerzel>  -> Body = PDF|XML, Antwort = {
        klassifizierung: zugferd|xrechnung-xml|pdf-ohne-xml,
        werk,                       // Postfach-Hinweis (?werk=) sonst aus Empfänger erkannt
        werkErkannt, werkMismatch,  // Gegenprobe aus dem RechnungsEMPFÄNGER
-       konform, konformLabel, meldungen[], bericht,   // KoSIT (+ voller Bericht)
+       konform, konformLabel, meldungen[], meldungenText, hinweis, // KoSIT + Klartext
+       profilFallback,             // gesetzt, wenn gegen EN16931 statt XRechnung geprüft
+       bericht,                    // vollständiger KoSIT-Report (archivieren)
        pdfa,                       // veraPDF (nur bei PDF)
        daten,                      // nummer, datum, steller, empfaenger, betraege, …
        xml,                        // extrahierte/empfangene E-Rechnungs-XML

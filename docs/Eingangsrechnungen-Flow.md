@@ -32,7 +32,8 @@ die API `werkMismatch = true` → im Flow als Prüf-Hinweis kennzeichnen.
 ## Voraussetzungen (einmalig)
 
 1. **Provisionierung** (legt die neuen Spalten `Klassifizierung`, `LesbarPdfUrl`,
-   `KoSITBerichtUrl` an; `Rechnungseingang` nur, wenn gewünscht):
+   `KoSITBerichtUrl` an, **indiziert `Created`** — nötig fürs Neueste-zuerst-Laden im
+   Monitoring jenseits von 5.000 Items/Bibliothek; `Rechnungseingang` nur, wenn gewünscht):
    ```powershell
    .\provision-rechnungsmonitoring.ps1 `
        -SiteUrl https://dihag.sharepoint.com/sites/Rechnungsmonitoring `
@@ -65,11 +66,22 @@ fehlt es, wird das Werk aus dem Empfänger abgeleitet). Antwort = JSON:
 | `werkMismatch` | `true`, wenn `?werk=` ≠ `werkErkannt` → mögliche Fehlleitung |
 | `konform` / `konformLabel` | KoSIT-Urteil `gruen`/`gelb`/`rot` bzw. `Ungeprueft` |
 | `accepted`, `errorCount`, `warningCount`, `meldungen[]` | KoSIT-Details |
+| `meldungenText` | alle KoSIT-Befunde als **fertiger Text** (kein Array-Join im Flow nötig) |
+| `hinweis` | **Ein-Satz-Klartext**, *warum* nicht konform (häufigste Ursache zuerst) → in `ValidierungsMeldung` schreiben |
+| `profilFallback` | gesetzt, wenn gegen **EN16931** statt XRechnung geprüft (Factur-X/ZUGFeRD BASIC/EXTENDED) |
 | `bericht` | **vollständiger KoSIT-Prüfbericht** (String) → archivieren |
 | `pdfa` | veraPDF-Ergebnis der PDF/A-Hülle (nur bei PDF-Eingang) |
 | `daten` | `nummer, datum, faelligkeit, steller, empfaenger, netto, mwst, brutto, waehrung, leitwegid, bestellnummer, lieferscheinnummer, …` |
 | `xml` | extrahierte (ZUGFeRD) bzw. empfangene E-Rechnungs-XML; `null` bei `pdf-ohne-xml` |
 | `lesbarPdfBase64` | **nur bei `xrechnung-xml`**: das aus der XML gerenderte, lesbare PDF/A (base64). Bei ZUGFeRD ist das Original-PDF bereits lesbar. |
+
+> **Factur-X/ZUGFeRD-Profil-Fallback:** BASIC (`#compliant#`) und EXTENDED
+> (`#conformant#`) sind keine XRechnung – die KoSIT-XRechnung-Konfig kennt dafür kein
+> Szenario. Die API schreibt solche Profil-IDs **vorab** auf reines
+> `urn:cen.eu:en16931:2017` um und prüft **einmal** gegen EN16931 (`profilFallback`
+> gesetzt); ohne den Fix käme sonst „Dokumenttyp unbekannt". **MINIMUM/BASIC-WL**
+> (ohne Positionsdaten) werden nicht umgeschrieben und im `hinweis` als „keine
+> vollständige E-Rechnung" benannt.
 
 Schneller Test (PowerShell):
 ```powershell
@@ -123,7 +135,7 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       | `Netto-/MwSt-/Bruttobetrag`, `Waehrung` | aus `daten` |
       | `Bestellnummer` / `Lieferscheinnummer` / `Kaeuferreferenz` | `daten.bestellnummer` / `…lieferscheinnummer` / `…leitwegid` |
       | `Konformitaet` | `body('HTTP')?['konformLabel']` |
-      | `ValidierungsMeldung` | `join(body('HTTP')?['meldungen'], '; ')` |
+      | `ValidierungsMeldung` | `body('HTTP')?['hinweis']` (fertiger Klartext-Satz) — **nicht** `join(meldungen)`, das ergäbe „[object Object]". Alternativ `meldungenText` (alle Befunde). |
       | `PDFAStatus` | aus `pdfa.konform`: ok→`PDF/A-3b ok` · fehler→`PDF/A Fehler` · xml→`n/a (nur XML)` · sonst `Ungeprueft` |
       | `KoSITBerichtUrl` / `LesbarPdfUrl` | WebUrl der Sidecars aus Schritt d |
       | `Verarbeitungsstatus` | `if(equals(body('HTTP')?['konform'],'rot'),'Fehler','Validiert')` |
