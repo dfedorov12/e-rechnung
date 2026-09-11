@@ -74,22 +74,11 @@ async function loadMonitoring(accessList) {
         + '(bzw. keine, auf die Sie Zugriff haben). Provisionierungsskript ausführen.');
     }
 
-    // Positionen aller Bibliotheken einsammeln
-    const recs = [];
-    for (const lib of libs) {
-      let url = `${SP.graphBase}/sites/${siteId}/lists/${lib.id}/items?$expand=fields&$top=200`;
-      let pages = 0;
-      while (url && pages < MON.maxPagesPerLib) {
-        const page = await _get(url, token);
-        for (const it of (page.value || [])) {
-          const f = it.fields || {};
-          if (!f.FileLeafRef && !f.Title) continue;         // Ordner / Leerzeilen überspringen
-          recs.push(_monMap(it, f, lib));
-        }
-        url = page['@odata.nextLink'] || null;
-        pages++;
-      }
-    }
+    // Positionen aller Bibliotheken einsammeln — parallel (je Bibliothek ein
+    // eigener, intern seitenweiser Abruf). Beschleunigt das Laden bei vielen
+    // Werken deutlich gegenüber der früheren sequenziellen Schleife.
+    const recsArrays = await Promise.all(libs.map(lib => _monFetchLib(siteId, lib, token)));
+    const recs = recsArrays.flat();
 
     // XML + PDF + KoSIT-Bericht derselben Rechnung zu EINER Zeile zusammenfassen.
     _monRecords = _monGroup(recs);
@@ -104,6 +93,38 @@ async function loadMonitoring(accessList) {
   } catch (e) {
     _monShowSetup('Fehler beim Laden', e.message || String(e));
   }
+}
+
+// Eine Bibliothek seitenweise abrufen. Sortiert NEUESTE ZUERST (fields/Created
+// desc): so liefert das Seitenlimit maxPagesPerLib immer die aktuellsten
+// Rechnungen, statt in der Graph-Default-Reihenfolge (ID aufsteigend = älteste
+// zuerst) die neuen abzuschneiden. $orderby verlangt jenseits von 5000 Items eine
+// indizierte Created-Spalte (Provisioning: provision-rechnungsmonitoring.ps1).
+// Wird die Sortierung abgelehnt (noch nicht indiziert), wird ungeordnet geladen.
+async function _monFetchLib(siteId, lib, token) {
+  const base = `${SP.graphBase}/sites/${siteId}/lists/${lib.id}/items?$expand=fields&$top=200`;
+  let url = `${base}&$orderby=fields/Created desc`;
+  let ordered = true;
+  const out = [];
+  let pages = 0;
+  while (url && pages < MON.maxPagesPerLib) {
+    let page;
+    try {
+      page = await _get(url, token);
+    } catch (e) {
+      // Sortierung nicht möglich (unindiziert) -> einmalig ungeordnet neu starten.
+      if (ordered && pages === 0) { ordered = false; url = base; continue; }
+      throw e;
+    }
+    for (const it of (page.value || [])) {
+      const f = it.fields || {};
+      if (!f.FileLeafRef && !f.Title) continue;             // Ordner / Leerzeilen überspringen
+      out.push(_monMap(it, f, lib));
+    }
+    url = page['@odata.nextLink'] || null;
+    pages++;
+  }
+  return out;
 }
 
 function _monMap(it, f, lib) {

@@ -18,23 +18,32 @@ const KOSIT_DAEMON_URL = process.env.KOSIT_DAEMON_URL || 'http://localhost:8080/
  *        eingebetteter HTML-Darstellung zusaetzlich `berichtHtml`). Fuer Archiv/GoBD.
  */
 async function validateXml(xml, opts = {}) {
-  let { status, reportXml } = await _postKosit(xml);
-  let result = parseReport(reportXml, status === 406);
-
-  // Kein Prüfszenario gegriffen ("Dokumenttyp unbekannt")? Bei Factur-X/ZUGFeRD-
-  // Profilen (eingehende Rechnungen) gegen REINES EN16931 erneut prüfen — der
-  // Inhalt ist identisch, nur die Profilkennung passt nicht zur XRechnung-Konfig.
-  if (opts.profilFallback !== false && _keinSzenario(result, reportXml)) {
+  // Factur-X/ZUGFeRD-Profil VORAB auf reines EN16931 umschreiben und nur EINMAL
+  // prüfen: Die XRechnung-Szenarien der KoSIT-Konfig matchen diese Profile nie
+  // (die Profil-ID trägt einen #compliant#/#conformant#-Suffix), ein separater
+  // Erst-Call gegen das Originalprofil wäre für JEDE Eingangsrechnung verschwendet.
+  // Der urn:factur-x/zugferd/ferd-net-Anker schützt echte XRechnung-IDs (unberührt).
+  let xmlToCheck = xml;
+  let profilFallback = null;
+  if (opts.profilFallback !== false) {
     const en = _en16931Guideline(xml);
     if (en !== xml) {
-      const r2 = await _postKosit(en);
-      const res2 = parseReport(r2.reportXml, r2.status === 406);
-      if (!_keinSzenario(res2, r2.reportXml)) {
-        result = res2;
-        result.profilFallback = 'Gegen EN16931 geprüft (Factur-X/ZUGFeRD-Profil, nicht XRechnung).';
-        reportXml = r2.reportXml;
-      }
+      xmlToCheck = en;
+      profilFallback = 'Gegen EN16931 geprüft (Factur-X/ZUGFeRD-Profil, nicht XRechnung).';
     }
+  }
+
+  const { status, reportXml } = await _postKosit(xmlToCheck);
+  const result = parseReport(reportXml, status === 406);
+  if (profilFallback) result.profilFallback = profilFallback;
+
+  // MINIMUM/BASIC-WL sind KEINE vollständigen E-Rechnungen (keine Positionsdaten)
+  // und werden absichtlich nicht auf EN16931 umgeschrieben -> sie greifen kein
+  // Szenario. Statt des generischen "kein Prüfszenario" einen klaren Hinweis geben.
+  if (result.konform !== 'gruen' && _minimalprofil(xml)) {
+    result.hinweis = 'Profil Factur-X/ZUGFeRD MINIMUM bzw. BASIC-WL — keine vollständige '
+      + 'E-Rechnung (nur Buchungshilfe, Positionsdaten fehlen); nach §14 UStG nicht als '
+      + 'E-Rechnung anerkannt.';
   }
 
   if (opts.withReport) {
@@ -61,10 +70,9 @@ async function _postKosit(xml) {
   return { status: resp.status, reportXml };
 }
 
-/** "Kein Szenario gegriffen / Dokumenttyp unbekannt" im Report erkennen. */
-function _keinSzenario(result, reportXml) {
-  const s = String(reportXml || '');
-  return /keinem?\s+zul[aä]ssigen\s+Dokumenttyp|kein\w*\s+Pr[uü]fszenario|Dokumenttyp[^<]{0,40}unbekannt|kein\s+passendes\s+Szenario/i.test(s);
+/** Factur-X/ZUGFeRD MINIMUM oder BASIC-WL erkennen (Profil-ID ohne Positionsdaten). */
+function _minimalprofil(xml) {
+  return /urn:(?:factur-x\.eu|zugferd\.de|ferd-net\.de)[^<\s"']*(?:minimum|basic-?wl)/i.test(String(xml));
 }
 
 /**

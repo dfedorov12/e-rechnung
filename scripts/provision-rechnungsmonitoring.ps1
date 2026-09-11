@@ -167,6 +167,22 @@ function Ensure-Field {
   Write-Host ("      + {0} ({1})" -f $Spec.Name, $Spec.Typ) -ForegroundColor Green
 }
 
+# Eine (Bibliotheks-)Spalte indizieren. Noetig, damit das Monitoring per
+# $orderby=fields/Created desc jenseits von 5000 Items (SharePoint-Listenschwelle)
+# die NEUESTEN Rechnungen laden kann, statt sie am Seitenlimit abzuschneiden.
+# 'Created' ist eine eingebaute Spalte und immer befuellt (auch auf Sidecar-Dateien
+# wie KoSIT-Bericht / lesbares PDF), daher als Sortier-/Filterschluessel geeignet.
+function Ensure-Index {
+  param([string]$Liste, [string]$Feld)
+  if ($WhatIfOnly) { Write-Host "   Index: $Feld (wuerde indiziert) [WhatIf]" -ForegroundColor Yellow; return }
+  try {
+    Set-PnPField -List $Liste -Identity $Feld -Values @{ Indexed = $true } -ErrorAction Stop | Out-Null
+    Write-Host "   Index: $Feld indiziert." -ForegroundColor Green
+  } catch {
+    Write-Host "   Index: $Feld nicht indizierbar ($($_.Exception.Message))." -ForegroundColor Yellow
+  }
+}
+
 # --- Verbindung -----------------------------------------------------------------
 Write-Host "Verbinde mit $SiteUrl ..." -ForegroundColor Cyan
 Connect-PnPOnline -Url $SiteUrl -Interactive -ClientId $ClientId
@@ -197,6 +213,7 @@ foreach ($werk in $Werke) {
 
     Write-Host "   Spalten:"
     foreach ($f in $Felder) { Ensure-Field -Liste $listTitle -Spec $f }
+    Ensure-Index -Liste $listTitle -Feld 'Created'
 
     # Sinnvolle Vorbelegung: Richtung + Werk je Bibliothek als Default
     if (-not $WhatIfOnly) {
@@ -229,6 +246,7 @@ if (-not $OhneEingangsstufe) {
 
   Write-Host "   Spalten:"
   foreach ($f in $Felder) { Ensure-Field -Liste $EingangsBibliothek -Spec $f }
+  Ensure-Index -Liste $EingangsBibliothek -Feld 'Created'
 
   # Vorbelegung: Richtung=Eingang, Status=Eingegangen; Werk bleibt leer (wird beim
   # Einsortieren aus /api/intake gesetzt).
