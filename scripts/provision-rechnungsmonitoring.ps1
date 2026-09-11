@@ -98,7 +98,7 @@ $Felder = @(
   @{ Name='Format';              Titel='Format';                     Typ='Choice';   FillIn=$true; Choices=@('XRechnung','ZUGFeRD','EDI','PDF','Sonstige') } # js/sharepoint.js
   @{ Name='Syntax';              Titel='Syntax';                     Typ='Choice';   FillIn=$true; Choices=@('CII','UBL') }
   @{ Name='Klassifizierung';     Titel='Klassifizierung (Eingang)';  Typ='Choice';   Choices=@('ZUGFeRD (PDF+XML)','XRechnung (XML)','PDF ohne E-Rechnung','EDI','Sonstige') } # /api/intake
-  @{ Name='Verarbeitungsstatus'; Titel='Verarbeitungsstatus';        Typ='Choice';   Choices=@('Eingegangen','Konvertiert','Validiert','Geprueft','Gebucht','Archiviert','Dublette','Fehler') }
+  @{ Name='Verarbeitungsstatus'; Titel='Verarbeitungsstatus';        Typ='Choice';   Refresh=$true; Choices=@('Eingegangen','Konvertiert','Validiert','Geprueft','Gebucht','Archiviert','Dublette','Fehler') } # Refresh: neue Werte (z. B. Dublette) auf Bestand nachziehen
   @{ Name='Konformitaet';        Titel='Konformitaet';               Typ='Choice';   Choices=@('Gruen - KoSIT ok','Gelb - Warnungen','Rot - Fehler','Ungeprueft') }
   @{ Name='PDFAStatus';          Titel='PDF/A-3b (veraPDF)';         Typ='Choice';   Choices=@('PDF/A-3b ok','PDF/A Fehler','Ungeprueft','n/a (nur XML)') }
   @{ Name='ValidierungsMeldung'; Titel='Validierungsmeldung';        Typ='Note' }
@@ -147,24 +147,36 @@ function Ensure-Field {
   }
   if ($WhatIfOnly) { Write-Host ("      + {0} ({1}) [WhatIf]" -f $Spec.Name, $Spec.Typ) -ForegroundColor Yellow; return }
 
-  switch ($Spec.Typ) {
-    'Choice' {
-      Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Choice `
-                   -Choices $Spec.Choices -Group $SpaltenGruppe -AddToDefaultView | Out-Null
-      if ($Spec.FillIn) { Set-PnPField -List $Liste -Identity $Spec.Name -Values @{ FillInChoice = $true } | Out-Null }
+  # Anlegen. Existiert das Feld schon unter einem abweichenden internen Namen (der
+  # Get-PnPField-Identity-Check oben greift dann nicht), meldet SharePoint "Field
+  # already exists" – das ist bei einem idempotenten Re-Lauf KEIN Fehler, sondern
+  # wird uebersprungen, damit die Schleife (und danach Ensure-Index) weiterlaeuft.
+  try {
+    switch ($Spec.Typ) {
+      'Choice' {
+        Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Choice `
+                     -Choices $Spec.Choices -Group $SpaltenGruppe -AddToDefaultView | Out-Null
+        if ($Spec.FillIn) { Set-PnPField -List $Liste -Identity $Spec.Name -Values @{ FillInChoice = $true } | Out-Null }
+      }
+      'Currency' { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Currency -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
+      'Note'     { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Note     -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
+      'Boolean'  { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Boolean  -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
+      'DateTime' {
+        Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type DateTime -Group $SpaltenGruppe -AddToDefaultView | Out-Null
+        # DisplayFormat 0 = nur Datum, 1 = Datum+Zeit
+        $fmt = if ($Spec.DateOnly) { 0 } else { 1 }
+        Set-PnPField -List $Liste -Identity $Spec.Name -Values @{ DisplayFormat = $fmt } | Out-Null
+      }
+      default    { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Text     -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
     }
-    'Currency' { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Currency -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
-    'Note'     { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Note     -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
-    'Boolean'  { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Boolean  -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
-    'DateTime' {
-      Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type DateTime -Group $SpaltenGruppe -AddToDefaultView | Out-Null
-      # DisplayFormat 0 = nur Datum, 1 = Datum+Zeit
-      $fmt = if ($Spec.DateOnly) { 0 } else { 1 }
-      Set-PnPField -List $Liste -Identity $Spec.Name -Values @{ DisplayFormat = $fmt } | Out-Null
+    Write-Host ("      + {0} ({1})" -f $Spec.Name, $Spec.Typ) -ForegroundColor Green
+  } catch {
+    if ($_.Exception.Message -match 'already exists|existiert bereits|bereits vorhanden') {
+      Write-Host ("      = {0} (bestand bereits, uebersprungen)" -f $Spec.Name) -ForegroundColor DarkGray
+    } else {
+      throw
     }
-    default    { Add-PnPField -List $Liste -DisplayName $Spec.Titel -InternalName $Spec.Name -Type Text     -Group $SpaltenGruppe -AddToDefaultView | Out-Null }
   }
-  Write-Host ("      + {0} ({1})" -f $Spec.Name, $Spec.Typ) -ForegroundColor Green
 }
 
 # Eine (Bibliotheks-)Spalte indizieren. Noetig, damit das Monitoring per
