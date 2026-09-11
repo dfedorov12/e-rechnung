@@ -91,6 +91,7 @@ app.http('intake', {
       bericht: null,
       pdfa: null,
       daten: null,
+      dateibasis: '',
       xml: null,
       lesbarPdfBase64: null,
     };
@@ -143,6 +144,11 @@ app.http('intake', {
     try {
       const d = parseInvoiceData(xml);
       res.daten = mapDaten(d);
+      // Kollisions-/dublettensicherer Dateiname-Baustein: <Nummer>_<StellerVat>.
+      // Zwei Lieferanten koennen dieselbe Rechnungsnummer vergeben -> erst mit der
+      // Aussteller-USt-IdNr. (BT-31) wird der Schluessel eindeutig. Existiert die
+      // Datei mit diesem Namen bereits in ERAR_<Werk>, ist es eine echte Dublette.
+      res.dateibasis = _dateibasis(res.daten);
       res.werkErkannt = detectWerkFromBuyer(res.daten);
       // Ohne Postfach-Hinweis: erkanntes Werk uebernehmen. Mit Hinweis: Hinweis
       // bleibt maessgeblich, aber Abweichung melden (moegliche Fehlleitung).
@@ -189,6 +195,25 @@ function mapDaten(d) {
     brutto:             Number(d.grossTotal || 0),
     waehrung:           d.waehrung          || 'EUR',
   };
+}
+
+/**
+ * Dublettensicherer Dateiname-Baustein: "<Nummer>_<Lieferantenkennung>".
+ * Lieferant = USt-IdNr. des Ausstellers (BT-31, weltweit eindeutig), sonst ein
+ * Namens-Slug. Der Lieferant steht BEWUSST HINTEN: eine USt-IdNr. beginnt mit
+ * Buchstaben, so kürzt die Monitoring-Datums-Strip-Regel (_\d{6,8}$) eine rein
+ * numerische Rechnungsnummer nicht faelschlich weg. Ergebnis ist zugleich der
+ * Dedup-Schluessel: gleiche Datei im ERAR_<Werk> = echte Dublette.
+ */
+function _dateibasis(d) {
+  if (!d) return '';
+  const clean = (s, max) => String(s || '')
+    .replace(/[\\/:*?"<>|#%]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/\s/g, '_').slice(0, max);
+  const nummer = clean(d.nummer, 40);
+  let steller = String(d.stellerVat || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (!steller) steller = clean(d.steller, 24).replace(/[^A-Za-z0-9_]/g, '');
+  return [nummer, steller].filter(Boolean).join('_');
 }
 
 function msg(e) { return e && e.message ? e.message : String(e); }

@@ -98,7 +98,7 @@ $Felder = @(
   @{ Name='Format';              Titel='Format';                     Typ='Choice';   FillIn=$true; Choices=@('XRechnung','ZUGFeRD','EDI','PDF','Sonstige') } # js/sharepoint.js
   @{ Name='Syntax';              Titel='Syntax';                     Typ='Choice';   FillIn=$true; Choices=@('CII','UBL') }
   @{ Name='Klassifizierung';     Titel='Klassifizierung (Eingang)';  Typ='Choice';   Choices=@('ZUGFeRD (PDF+XML)','XRechnung (XML)','PDF ohne E-Rechnung','EDI','Sonstige') } # /api/intake
-  @{ Name='Verarbeitungsstatus'; Titel='Verarbeitungsstatus';        Typ='Choice';   Choices=@('Eingegangen','Konvertiert','Validiert','Geprueft','Gebucht','Archiviert','Fehler') }
+  @{ Name='Verarbeitungsstatus'; Titel='Verarbeitungsstatus';        Typ='Choice';   Choices=@('Eingegangen','Konvertiert','Validiert','Geprueft','Gebucht','Archiviert','Dublette','Fehler') }
   @{ Name='Konformitaet';        Titel='Konformitaet';               Typ='Choice';   Choices=@('Gruen - KoSIT ok','Gelb - Warnungen','Rot - Fehler','Ungeprueft') }
   @{ Name='PDFAStatus';          Titel='PDF/A-3b (veraPDF)';         Typ='Choice';   Choices=@('PDF/A-3b ok','PDF/A Fehler','Ungeprueft','n/a (nur XML)') }
   @{ Name='ValidierungsMeldung'; Titel='Validierungsmeldung';        Typ='Note' }

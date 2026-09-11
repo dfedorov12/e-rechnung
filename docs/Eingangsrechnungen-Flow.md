@@ -71,7 +71,8 @@ fehlt es, wird das Werk aus dem Empfänger abgeleitet). Antwort = JSON:
 | `profilFallback` | gesetzt, wenn gegen **EN16931** statt XRechnung geprüft (Factur-X/ZUGFeRD BASIC/EXTENDED) |
 | `bericht` | **vollständiger KoSIT-Prüfbericht** (String) → archivieren |
 | `pdfa` | veraPDF-Ergebnis der PDF/A-Hülle (nur bei PDF-Eingang) |
-| `daten` | `nummer, datum, faelligkeit, steller, empfaenger, netto, mwst, brutto, waehrung, leitwegid, bestellnummer, lieferscheinnummer, …` |
+| `daten` | `nummer, datum, faelligkeit, steller, stellerVat, empfaenger, netto, mwst, brutto, waehrung, leitwegid, bestellnummer, lieferscheinnummer, …` |
+| `dateibasis` | **dublettensicherer Dateiname‑Baustein** `<Nummer>_<StellerVat>` (bereinigt). Als Dateiname verwenden → gleiche Nummer verschiedener Lieferanten kollidiert nicht; existiert die Datei schon = echte Dublette. |
 | `xml` | extrahierte (ZUGFeRD) bzw. empfangene E-Rechnungs-XML; `null` bei `pdf-ohne-xml` |
 | `lesbarPdfBase64` | **nur bei `xrechnung-xml`**: das aus der XML gerenderte, lesbare PDF/A (base64). Bei ZUGFeRD ist das Original-PDF bereits lesbar. |
 
@@ -110,19 +111,28 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       - Body = **Anlageninhalt**
       - **Kein** „Chunked"/`transferMode` (Azure Functions kann das nicht → sonst 400).
 
-   b. **Variablen** (Compose): `nr = coalesce(body('HTTP')?['daten']?['nummer'], <Anlagenname>)`.
+   b. **Dateibasis** (Compose): `basis = coalesce(body('HTTP')?['dateibasis'], <Anlagenname ohne Endung>)`.
+      Das ist **Dateiname und Dedup-Schlüssel** zugleich: `<Nummer>_<StellerVat>` (bereinigt).
+      Zwei Lieferanten mit derselben Nummer kollidieren dadurch nicht mehr.
 
-   c. **Original in `ERAR_<Werk>` ablegen** – *Datei erstellen*
+   c. **Dublettenprüfung** – *Dateimetadaten über Pfad abrufen* für
+      `ERAR_<Werk>/@{outputs('basis')}.<ext>` (Aktion → *Konfigurieren nach Ausführung*:
+      auch bei „ist fehlgeschlagen" fortsetzen; **404 = nicht vorhanden**, 200 = existiert
+      bereits = **echte Dublette**, weil der Name Nummer **und** Aussteller-USt-IdNr. enthält).
+
+   d. **Original in `ERAR_<Werk>` ablegen** – *Datei erstellen*
       - Ordnerpfad: `ERAR_WGC` (bzw. `concat('ERAR_', <werk>)` beim gemeinsamen Flow)
-      - Dateiname: `@{outputs('nr')}.pdf` / `.xml` (Anlagen-Endung übernehmen)
-      - Dateiinhalt: Anlageninhalt → merkt sich die **ItemId** für Schritt e.
+      - **Nicht-Dublette** (Schritt c = 404): Dateiname `@{outputs('basis')}.pdf` / `.xml`.
+      - **Dublette** (Schritt c = 200): Original **nicht** überschreiben, die neue Datei als
+        `@{outputs('basis')}_DUBLETTE_@{utcNow('yyyyMMddHHmmss')}.<ext>` ablegen.
+      - Dateiinhalt: Anlageninhalt → merkt sich die **ItemId** für Schritt f.
 
-   d. **Sidecars** in dieselbe `ERAR_<Werk>` (nur wenn vorhanden):
-      - **XML:** `body('HTTP')?['xml']` → `@{outputs('nr')}.xml`
-      - **Lesbares PDF:** `base64ToBinary(body('HTTP')?['lesbarPdfBase64'])` → `@{outputs('nr')}_lesbar.pdf`
-      - **KoSIT-Bericht:** `body('HTTP')?['bericht']` → `@{outputs('nr')}_KoSIT-Bericht.xml`
+   e. **Sidecars** in dieselbe `ERAR_<Werk>` (nur wenn vorhanden; Basis = derselbe Name wie in d):
+      - **XML:** `body('HTTP')?['xml']` → `@{outputs('basis')}.xml`
+      - **Lesbares PDF:** `base64ToBinary(body('HTTP')?['lesbarPdfBase64'])` → `@{outputs('basis')}_lesbar.pdf`
+      - **KoSIT-Bericht:** `body('HTTP')?['bericht']` → `@{outputs('basis')}_KoSIT-Bericht.xml`
 
-   e. **Dateieigenschaften aktualisieren** (am in c erstellten Element):
+   f. **Dateieigenschaften aktualisieren** (am in d erstellten Element):
       | Spalte | Wert |
       |--------|------|
       | `Title` | `body('HTTP')?['daten']?['nummer']` |
@@ -137,10 +147,11 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       | `Konformitaet` | `body('HTTP')?['konformLabel']` |
       | `ValidierungsMeldung` | `body('HTTP')?['hinweis']` (fertiger Klartext-Satz) — **nicht** `join(meldungen)`, das ergäbe „[object Object]". Alternativ `meldungenText` (alle Befunde). |
       | `PDFAStatus` | aus `pdfa.konform`: ok→`PDF/A-3b ok` · fehler→`PDF/A Fehler` · xml→`n/a (nur XML)` · sonst `Ungeprueft` |
-      | `KoSITBerichtUrl` / `LesbarPdfUrl` | WebUrl der Sidecars aus Schritt d |
-      | `Verarbeitungsstatus` | `if(equals(body('HTTP')?['konform'],'rot'),'Fehler','Validiert')` |
+      | `KoSITBerichtUrl` / `LesbarPdfUrl` | WebUrl der Sidecars aus Schritt e |
+      | `Verarbeitungsstatus` | **Dublette** (Schritt c = 200) → `Dublette`; sonst `if(equals(body('HTTP')?['konform'],'rot'),'Fehler','Validiert')` |
+      | `Fehlermeldung` (bei Dublette) | „Doppelerfassung: @{outputs('basis')} bereits vorhanden – bitte prüfen" |
 
-   f. **Fehlleitung prüfen** – Bedingung `body('HTTP')?['werkMismatch']` = `true`:
+   g. **Fehlleitung prüfen** – Bedingung `body('HTTP')?['werkMismatch']` = `true`:
       → `Fehlermeldung` = „Empfänger (@{body('HTTP')?['werkErkannt']}) ≠ Postfach-Werk
       – bitte Zuordnung prüfen" und ggf. `Verarbeitungsstatus = Fehler`. Die Datei
       bleibt im Werk, wird aber im Dashboard als Fehler sichtbar.
@@ -159,6 +170,28 @@ aus der Empfänger-Adresse ableitet. Ablauf:
 automatisch in eine XRechnung umgewandelt (zuverlässige Auto-Konvertierung beliebiger
 Lieferanten-Layouts ist nicht seriös leistbar). Bei Bedarf manuell in der E-Rechnung-App
 umwandeln. Eine automatische OCR-Konvertierung wäre ein eigener, größerer Ausbau.
+
+---
+
+## Dubletten & Nummernkollisionen
+
+Eine Rechnungsnummer ist **nur beim selben Aussteller** eindeutig — zwei Lieferanten
+können dieselbe Nummer vergeben. Der Schlüssel darf daher nicht die Nummer allein sein:
+
+- **Eindeutig = Nummer + Aussteller-USt-IdNr. (BT-31).** Genau das steckt in
+  `dateibasis` (`<Nummer>_<StellerVat>`), das die API fertig liefert. Als Dateiname
+  verwendet, ist es zugleich der Dedup-Schlüssel.
+- **Echte Dublette** = gleiche Nummer **und** gleicher Aussteller → dieselbe
+  `dateibasis` liegt schon in `ERAR_<Werk>`. Der Flow (Schritt c) erkennt das an der
+  Datei-Existenz: **Original bleibt unangetastet**, die Neuankunft wird als
+  Status **`Dublette`** + `Fehlermeldung` abgelegt und ist im Monitoring sichtbar
+  (Sachbearbeiter entscheidet). Nichts wird überschrieben, nichts geht verloren.
+- **Gleiche Nummer, verschiedene Lieferanten** ist **keine** Dublette: unterschiedliche
+  `StellerVat` → unterschiedliche `dateibasis` → zwei getrennte Dateien und zwei
+  getrennte Monitoring-Zeilen (kein Fehl-Merge mehr).
+
+> **Ausgang (AR) ist nicht betroffen:** dort ist der Aussteller immer das Werk selbst,
+> die Nummern sind pro Werk eindeutig und der Dateiname trägt zusätzlich das Datum.
 
 ---
 

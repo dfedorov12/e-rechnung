@@ -243,7 +243,8 @@ POST /api/intake?werk=<Kuerzel>  -> Body = PDF|XML, Antwort = {
        profilFallback,             // gesetzt, wenn gegen EN16931 statt XRechnung geprüft
        bericht,                    // vollständiger KoSIT-Report (archivieren)
        pdfa,                       // veraPDF (nur bei PDF)
-       daten,                      // nummer, datum, steller, empfaenger, betraege, …
+       daten,                      // nummer, datum, steller, stellerVat, empfaenger, betraege, …
+       dateibasis,                 // <Nummer>_<StellerVat> — kollisions-/dublettensicherer Dateiname
        xml,                        // extrahierte/empfangene E-Rechnungs-XML
        lesbarPdfBase64 }           // nur bei reiner XML: gerendertes PDF/A
 ```
@@ -253,6 +254,11 @@ Bei Eingang ist das Werk meist schon durch das **Postfach** bekannt → als
 dann nur als Gegenprobe (`werkMismatch`). Der komplette Flow (Postfach pro Werk →
 Prüfung → `ERAR_<Werk>`) steht in
 [`../docs/Eingangsrechnungen-Flow.md`](../docs/Eingangsrechnungen-Flow.md).
+
+**Dubletten:** Eine Rechnungsnummer ist nur beim selben Aussteller eindeutig. `dateibasis`
+= `<Nummer>_<StellerVat>` (Aussteller-USt-IdNr. BT-31) ist deshalb der eindeutige Schlüssel
+und zugleich der Dateiname — als Datei im `ERAR_<Werk>` wird „Datei existiert schon" zur
+echten Dublettenprüfung. Verschiedene Lieferanten mit gleicher Nummer kollidieren nicht.
 
 ## Qualifizierte USt-IdNr-Prüfung (`/api/vat`)
 
