@@ -203,6 +203,7 @@ getrennte Einträge sichtbar, statt sich zu ersetzen).
 
 - **`ERAR_<Werk>`**: geprüfte Eingangsrechnung mit Original, XML, lesbarem PDF und
   KoSIT-Bericht + gesetzten Metadaten. Das ist die Eingangsliste des Werks **und**
-  Teil des Monitorings (das Dashboard aggregiert alle `ERAR_/AR_`).
+  Teil des Monitorings (das Dashboard aggregiert alle `ERAR_/AR_`; Aufbau, KPIs,
+  Klartext-Hinweis und Dublettenerkennung: [`Rechnungsmonitoring.md`](Rechnungsmonitoring.md)).
 - **`Rechnungseingang`** (optional): nur, falls es eine werk-neutrale Sammel-Adresse
   gibt – dann greift die Käufer-Erkennung als Router. Sonst nicht nötig.
