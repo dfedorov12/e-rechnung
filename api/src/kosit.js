@@ -192,4 +192,4 @@ function _hinweisAusBefunden(konform, meldungenText, rejected) {
   return '';
 }
 
-module.exports = { validateXml, parseReport, KOSIT_DAEMON_URL };
+module.exports = { validateXml, parseReport, KOSIT_DAEMON_URL, istMinimalprofil: _minimalprofil };

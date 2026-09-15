@@ -31,7 +31,8 @@
  * authLevel "function" (per ?code=<KEY>, ohne M365) — wie /api/validate, /api/convert.
  */
 const { app } = require('@azure/functions');
-const { validateXml } = require('../kosit');
+const { validateXml, istMinimalprofil } = require('../kosit');
+const { validateMustang } = require('../mustang');
 const { extractInvoiceXml } = require('../pdfxml');
 const { validatePdfA } = require('../verapdf');
 const { convertXmlToPdf, parseInvoiceData } = require('../converter');
@@ -88,6 +89,7 @@ app.http('intake', {
       meldungen: [],
       meldungenText: '',
       hinweis: '',
+      pruefwerkzeug: '',
       bericht: null,
       pdfa: null,
       daten: null,
@@ -120,9 +122,14 @@ app.http('intake', {
 
     res.xml = xml;
 
-    // 4) KoSIT-Validierung inkl. vollstaendigem Bericht (Archiv/GoBD).
+    // 4) Validierung inkl. vollstaendigem Bericht (Archiv/GoBD).
+    //    ZUGFeRD/Factur-X -> Mustang (prueft das TATSAECHLICHE Profil, EXTENDED
+    //    inklusive; kein EN16931-Fehlalarm). Reine XRechnung-XML -> KoSIT.
+    const zugferd = res.klassifizierung === 'zugferd';
     try {
-      const v = await validateXml(xml, { withReport: true });
+      const v = zugferd
+        ? await validateMustang(buf, { withReport: true, minimalprofil: istMinimalprofil(xml) })
+        : await validateXml(xml, { withReport: true });
       res.konform = v.konform;
       res.konformLabel = v.konformLabel;
       res.accepted = v.accepted;
@@ -132,10 +139,11 @@ app.http('intake', {
       res.meldungenText = v.meldungenText || '';
       res.hinweis = v.hinweis || '';
       res.bericht = v.bericht || null;
+      res.pruefwerkzeug = zugferd ? 'Mustang (ZUGFeRD-Profil)' : 'KoSIT (XRechnung/EN16931)';
       if (v.berichtHtml) res.berichtHtml = v.berichtHtml;
       if (v.profilFallback) res.profilFallback = v.profilFallback;
     } catch (e) {
-      context.error('KoSIT-Validierung fehlgeschlagen:', e);
+      context.error('Validierung fehlgeschlagen:', e);
       res.konform = 'ungeprueft';
       res.validierungsFehler = msg(e);
     }

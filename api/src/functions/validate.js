@@ -13,10 +13,16 @@
  * "Konformitaet" (konformLabel) und "ValidierungsMeldung" schreiben.
  */
 const { app } = require('@azure/functions');
-const { validateXml, KOSIT_DAEMON_URL } = require('../kosit');
+const { validateXml, KOSIT_DAEMON_URL, istMinimalprofil } = require('../kosit');
+const { validateMustang } = require('../mustang');
 const { extractInvoiceXml } = require('../pdfxml');
 const { validatePdfA } = require('../verapdf');
 const { normalizeBody } = require('../httpbody');
+
+/** Factur-X/ZUGFeRD-Profilkennung in einer XML? Dann Mustang statt KoSIT. */
+function _istFacturxProfil(xml) {
+  return /urn:(?:factur-x\.eu|zugferd\.de|ferd-net\.de)/i.test(String(xml || ''));
+}
 
 app.http('validate', {
   methods: ['GET', 'POST'],
@@ -31,8 +37,10 @@ app.http('validate', {
           daemon: KOSIT_DAEMON_URL,
           usage: 'POST XML (XRechnung/CII/UBL) ODER ZUGFeRD/Factur-X-PDF (roh, base64 oder '
                + 'Power-Automate-Wrapper) -> { konform: gruen|gelb|rot, konformLabel, accepted, '
-               + 'errorCount, warningCount, meldungen[], meldungenText, quelle, pdfa? }. '
-               + 'Mit ?bericht=1 zusaetzlich { bericht, berichtHtml } (voller KoSIT-Pruefbericht).',
+               + 'errorCount, warningCount, meldungen[], meldungenText, hinweis, quelle, '
+               + 'pruefwerkzeug, pdfa? }. XRechnung-XML wird von KoSIT geprueft, '
+               + 'ZUGFeRD/Factur-X (PDF oder CII) von Mustang gegen das tatsaechliche Profil. '
+               + 'Mit ?bericht=1 zusaetzlich { bericht } (voller Pruefbericht des Werkzeugs).',
         },
       };
     }
@@ -66,8 +74,15 @@ app.http('validate', {
       String(q.get('bericht') || q.get('report') || q.get('withReport') || '').toLowerCase());
 
     try {
-      const result = await validateXml(xml, { withReport });
+      // ZUGFeRD/Factur-X (PDF oder CII-XML mit Factur-X-Profil) -> Mustang (prueft
+      // das tatsaechliche Profil, EXTENDED inklusive). Reine XRechnung-XML -> KoSIT.
+      const zugferd = isPdf || _istFacturxProfil(xml);
+      const result = zugferd
+        ? await validateMustang(isPdf ? buf : Buffer.from(xml, 'utf8'),
+                                { withReport, minimalprofil: istMinimalprofil(xml) })
+        : await validateXml(xml, { withReport });
       result.quelle = isPdf ? 'ZUGFeRD-PDF' : 'XML';
+      result.pruefwerkzeug = zugferd ? 'Mustang (ZUGFeRD-Profil)' : 'KoSIT (XRechnung/EN16931)';
       // Bei PDF zusaetzlich die PDF/A-3b-Huelle pruefen (veraPDF), sofern konfiguriert.
       if (isPdf) {
         try {
