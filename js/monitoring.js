@@ -169,6 +169,13 @@ function _monMap(it, f, lib) {
     // KoSIT-Meldungen: entweder der fertige Klartext-Hinweis (API-Feld "hinweis")
     // oder der rohe meldungenText mit BR-Codes — _monHinweis macht daraus einen Satz.
     meldung:  (f.ValidierungsMeldung || '').toString(),
+    // GoBD-Aufbewahrung: maßgeblich ist der TATSÄCHLICHE Purview-Aufbewahrungstag
+    // (_ComplianceTag, den Graph als OData__ComplianceTag liefert) — ein nicht-leerer
+    // Tag heißt: ein gesperrtes Aufbewahrungslabel liegt an. Fällt der Tag nicht durch
+    // (tenantabhängig), greift die vom Flow gespiegelte Boolean-Spalte GoBDArchiviert.
+    complianceTag: (f['OData__ComplianceTag'] || f._ComplianceTag || '').toString().trim(),
+    gobd:     (f.GoBDArchiviert === true || f.GoBDArchiviert === 1
+               || String(f.GoBDArchiviert).toLowerCase() === 'true'),
     url:      (it.webUrl || '').toString(),
   };
 }
@@ -201,6 +208,10 @@ function _monGroup(recs) {
       if (!primary[key]) { const s = arr.find(r => r[key]); if (s) primary[key] = s[key]; }
     }
     if (primary.brutto == null) { const s = arr.find(r => r.brutto != null); if (s) primary.brutto = s.brutto; }
+    // GoBD-archiviert, sobald IRGENDEINE Datei der Rechnung unter Aufbewahrung liegt
+    // (Tag) bzw. der Flow es gesetzt hat; Tag-Wert für den Tooltip merken.
+    primary.gobdArchiviert = arr.some(r => r.complianceTag || r.gobd);
+    primary.complianceTag = (arr.find(r => r.complianceTag) || {}).complianceTag || '';
     // "öffnen" muss immer eine Datei treffen: hat die Primärzeile keine URL,
     // die erste verfügbare Geschwisterdatei nehmen.
     if (!primary.url) { const s = arr.find(r => r.url); if (s) primary.url = s.url; }
@@ -281,6 +292,7 @@ function _monRenderKpis(rows) {
   const offen = rows.filter(r => r.status && !['Gebucht', 'Archiviert'].includes(r.status)).length;
   const fehler = rows.filter(r => r.status === 'Fehler' || /^Rot/i.test(r.konform) || r.fehler).length;
   const dubletten = rows.filter(r => r.dublette).length;
+  const gobd = rows.filter(r => r.gobdArchiviert).length;
   const summe = rows.reduce((s, r) => s + (r.brutto || 0), 0);
 
   const tiles = [
@@ -290,6 +302,8 @@ function _monRenderKpis(rows) {
     ['Offen (nicht gebucht)', offen, 'warn'],
     ['Fehler / rot', fehler, 'bad'],
     ['Dubletten', dubletten, dubletten ? 'bad' : ''],
+    // GoBD-Abdeckung: N/Gesamt. Lücke (nicht alle archiviert) = Warnung.
+    ['GoBD-archiviert', `${gobd} / ${total}`, (total && gobd < total) ? 'warn' : ''],
     ['Bruttosumme', summe.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }), 'sum'],
   ];
   document.getElementById('mon-kpis').innerHTML = tiles.map(([label, val, cls]) =>
@@ -310,6 +324,9 @@ function _monRenderTable(rows) {
       ? `<div class="mon-hint" title="${_esc(hinweis)}" style="font-size:11px;color:var(--gray-600,#6b7280);margin-top:3px;max-width:260px;line-height:1.3;">${_esc(hinweis)}</div>`
       : '');
     const stat = r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : '';
+    const gobdBadge = r.gobdArchiviert
+      ? `<div title="${_esc(r.complianceTag ? 'Aufbewahrung: ' + r.complianceTag : 'GoBD-Aufbewahrung gesetzt')}" style="display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:#0a6b2e;background:#e3f5e9;border-radius:3px;padding:1px 6px;">🔒 GoBD</div>`
+      : '';
     const extra = (r.dateien || [])
       .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`)
       .join(' · ');
@@ -328,7 +345,7 @@ function _monRenderTable(rows) {
       <td>${_esc(r.richtung === 'Eingang' ? r.steller : r.empf)}</td>
       <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
       <td>${_esc(r.format)}</td>
-      <td>${stat}</td>
+      <td>${stat}${gobdBadge}</td>
       <td>${konCell}</td>
       <td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>
       <td>${link}</td>

@@ -102,6 +102,20 @@ behauptet keine Revisionssicherheit, die nicht besteht.
 
 ---
 
+## Teil 3 – Sichtbarkeit im Monitoring
+
+Das Dashboard (`monitoring.html`) zeigt die Aufbewahrung jetzt an:
+- **KPI-Kachel „GoBD-archiviert: N/Gesamt"** — ist N < Gesamt, fehlt bei einigen
+  Rechnungen das Label (Warnfarbe).
+- **Badge „🔒 GoBD"** je Zeile (Tooltip = Labelname), wenn Aufbewahrung anliegt.
+
+Maßgeblich liest das Monitoring den **tatsächlichen** Aufbewahrungstag
+(`_ComplianceTag`, in Graph `OData__ComplianceTag`). Liefert der Tenant den Tag über
+Graph nicht mit, greift als Fallback die Boolean-Spalte `GoBDArchiviert` (Teil 2). Ist
+also die Kachel trotz gesetztem Label leer, entweder Teil 2 (Flow) aktivieren **oder**
+die Graph-Abfrage um `OData__ComplianceTag` erweitern (einmalig an einer echten Datei
+verifizieren, ob der Tag zurückkommt).
+
 ## Hinweise
 
 - **Fallback, falls `_ComplianceTag` nicht zurückkommt:** In „Dateieigenschaften
