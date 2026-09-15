@@ -43,51 +43,45 @@ function parseMustangReport(report, opts = {}) {
   const decode = t => t
     .replace(/<[^>]+>/g, ' ')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ').trim();
+  // Mustang-Meldungstext endet mit "… [ID FX-SCH-…] from /xslt/….xslt)" -> abschneiden.
+  const clean = t => decode(t)
+    .replace(/\s*\[ID\b[\s\S]*$/i, '')
+    .replace(/\s*from\s+\/xslt\/[\s\S]*$/i, '')
+    .trim();
 
   // Kein verwertbarer Report -> als Fehler behandeln (Aufrufer setzt validierungsFehler).
-  if (!/<validation|status\s*=|<error|<message|valid/i.test(s)) {
+  if (!/<validation|<summary|status\s*=|<error|<messages|valid/i.test(s)) {
     throw new Error('Mustang: kein verwertbarer Report (' + s.slice(0, 120) + ')');
   }
 
-  const meldungen = [];
+  const errTexts = [];
+  const warnTexts = [];
   let m;
-  // <error ...>Text</error>  (mit optionalem criterion=)
-  const errRe = /<error\b([^>]*)>([\s\S]*?)<\/error>/gi;
-  while ((m = errRe.exec(s))) {
-    const crit = (m[1].match(/criterion="([^"]*)"/i) || ['', ''])[1];
-    const text = ((crit ? crit + ': ' : '') + decode(m[2])).trim();
-    if (text) meldungen.push({ level: 'error', text: text.slice(0, 300) });
-  }
-  // Selbstschliessende <error criterion=... message=.../>
-  const errSelf = /<error\b([^>]*?)\/>/gi;
-  while ((m = errSelf.exec(s))) {
-    const a = m[1];
-    const crit = (a.match(/criterion="([^"]*)"/i) || ['', ''])[1];
-    const msg = (a.match(/message="([^"]*)"/i) || ['', ''])[1];
-    const text = ((crit ? crit + ': ' : '') + (msg || '')).trim();
-    if (text) meldungen.push({ level: 'error', text: text.slice(0, 300) });
-  }
-  // Warnungen/Hinweise
+  // Mustang: <error type=".." location=".." criterion="..grosser XPath..">Text</error>.
+  // Das criterion-Attribut ist die XPath-Regel (unbrauchbar fuer Anzeige) -> ignorieren,
+  // nur der Meldungstext (enthaelt [BR-…]/„Value of … is not allowed") wird genutzt.
+  const errRe = /<error\b[^>]*>([\s\S]*?)<\/error>/gi;
+  while ((m = errRe.exec(s))) { const t = clean(m[1]); if (t) errTexts.push(t); }
   const warnRe = /<(?:notice|warning)\b[^>]*>([\s\S]*?)<\/(?:notice|warning)>/gi;
-  while ((m = warnRe.exec(s))) {
-    const text = decode(m[1]);
-    if (text) meldungen.push({ level: 'warning', text: text.slice(0, 300) });
-  }
+  while ((m = warnRe.exec(s))) { const t = clean(m[1]); if (t) warnTexts.push(t); }
 
-  let errorCount = meldungen.filter(x => x.level === 'error').length;
-  const warningCount = meldungen.filter(x => x.level === 'warning').length;
-
-  // Gesamturteil: explizites status="invalid" ODER gezaehlte Fehler.
+  const errorCount = errTexts.length;      // echte Anzahl (Mustang listet je Position)
+  const warningCount = warnTexts.length;
   const invalid = /status\s*=\s*"?invalid/i.test(s) || errorCount > 0;
+
+  // Fuer Anzeige/Text identische Meldungen zusammenfassen (sonst 7x dieselbe Zeile).
+  const uniq = arr => Array.from(new Set(arr));
+  const meldungen = uniq(errTexts).map(t => ({ level: 'error', text: t.slice(0, 300) }))
+    .concat(uniq(warnTexts).map(t => ({ level: 'warning', text: t.slice(0, 300) })))
+    .slice(0, 50);
 
   let konform = invalid ? 'rot' : (warningCount ? 'gelb' : 'gruen');
   let hinweis = '';
   if (invalid) {
-    const first = meldungen.find(x => x.level === 'error');
-    hinweis = 'Profil-/Formatfehler (ZUGFeRD/Factur-X): '
-      + (first ? first.text : 'Dokument entspricht nicht dem deklarierten Profil.');
+    const first = uniq(errTexts)[0] || 'Dokument entspricht nicht dem deklarierten Profil.';
+    hinweis = 'Profil-/Formatfehler (ZUGFeRD/Factur-X): ' + first.slice(0, 240);
   }
 
   // MINIMUM/BASIC-WL: strukturell evtl. gueltig, aber KEINE vollstaendige E-Rechnung.
@@ -96,19 +90,19 @@ function parseMustangReport(report, opts = {}) {
     hinweis = 'Profil Factur-X/ZUGFeRD MINIMUM bzw. BASIC-WL — keine vollstaendige '
       + 'E-Rechnung (nur Buchungshilfe, Positionsdaten fehlen); nach §14 UStG nicht als '
       + 'E-Rechnung anerkannt.';
-    if (!errorCount) errorCount = 0; // Zaehler unveraendert; nur Einstufung/Hinweis
   }
 
+  // konformLabel-Strings MUESSEN zur SharePoint-Choice-Spalte "Konformitaet" passen
+  // (dieselben Werte wie beim KoSIT-Pfad); das Werkzeug steht separat in `werkzeug`.
   const label = { gruen: 'Gruen - KoSIT ok', gelb: 'Gelb - Warnungen', rot: 'Rot - Fehler' }[konform];
-  const top = meldungen.slice(0, 50);
   return {
     konform,
     konformLabel: label,
     accepted: konform !== 'rot',
     errorCount,
     warningCount,
-    meldungen: top,
-    meldungenText: top.map(x => (x.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + x.text).join(' | '),
+    meldungen,
+    meldungenText: meldungen.map(x => (x.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + x.text).join(' | '),
     hinweis,
     werkzeug: 'Mustang (ZUGFeRD-Profil)',
   };
