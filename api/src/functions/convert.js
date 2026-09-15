@@ -11,6 +11,8 @@
  */
 const { app } = require('@azure/functions');
 const { convertXmlToPdf, healthInfo } = require('../converter');
+const { normalizeBody } = require('../httpbody');
+const { extractInvoiceXml } = require('../pdfxml');
 
 app.http('convert', {
   methods: ['GET', 'POST'],
@@ -21,18 +23,36 @@ app.http('convert', {
       return { status: 200, jsonBody: healthInfo() };
     }
 
-    const raw = await request.text();
-    const trimmed = (raw || '').trimStart(); // trimStart() entfernt auch ein fuehrendes BOM (U+FEFF)
-    if (!trimmed) {
-      return problem(400, 'Leerer Request-Body. Bitte die E-Rechnungs-XML als Body senden.');
+    // Body robust normalisieren (rohe XML, base64, Power-Automate-{$content}-Wrapper
+    // ODER ein ZUGFeRD-PDF) — analog /api/intake und /api/validate.
+    const raw = Buffer.from(await request.arrayBuffer());
+    const norm = normalizeBody(raw);
+    if (!norm) {
+      return problem(400, 'Leerer/ungueltiger Body. Bitte die E-Rechnungs-XML senden '
+        + '(auch base64 / Power-Automate-Wrapper), oder ein ZUGFeRD-PDF.');
     }
+
+    let xml;
+    if (norm.isPdf) {
+      // ZUGFeRD/Factur-X: eingebettete XML herausziehen und daraus das lesbare PDF rendern.
+      try {
+        xml = await extractInvoiceXml(norm.buf);
+      } catch (err) {
+        return problem(400, 'ZUGFeRD-PDF ohne lesbare E-Rechnungs-XML: '
+          + (err && err.message ? err.message : String(err)));
+      }
+    } else {
+      xml = norm.buf.toString('utf8');
+    }
+
+    const trimmed = xml.replace(/^﻿/, '').trimStart(); // fuehrendes BOM entfernen
     if (!trimmed.startsWith('<')) {
       return problem(400, 'Der Body ist keine XML. Bitte die E-Rechnung als XML (CII oder UBL) senden.');
     }
 
     let result;
     try {
-      result = await convertXmlToPdf(raw);
+      result = await convertXmlToPdf(xml);
     } catch (err) {
       context.error('Konvertierung fehlgeschlagen:', err);
       return problem(400, 'Konvertierung fehlgeschlagen: ' + (err && err.message ? err.message : String(err)));
