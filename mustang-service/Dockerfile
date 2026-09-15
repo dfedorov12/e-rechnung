@@ -7,7 +7,10 @@
 # Build:  docker build -t erechnung-mustang .
 # Run:    docker run -p 8080:8080 erechnung-mustang
 # Test:   curl -X POST --data-binary @rechnung.pdf http://localhost:8080/
-FROM eclipse-temurin:8-jre
+#
+# Java 17: Mustangproject 2.x setzt >= Java 11 voraus (Java 8 -> UnsupportedClass-
+# VersionError). Der KoSIT-Dienst bleibt davon unberuehrt (laeuft weiter auf Java 8).
+FROM eclipse-temurin:17-jre
 
 ARG MUSTANG_VER=2.16.0
 WORKDIR /opt/mustang
