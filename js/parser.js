@@ -90,10 +90,10 @@ const _COMPANY_REGISTRY = {
     verkaeuferemail:    '',   // keine feste Sales-Adresse geliefert → Kontakt-Mail aus PDF-Text
     verkaeufervat:      'DE368990137',
     verkaeufersteuernr: '',   // USt-IdNr vorhanden; Steuernummer optional
-    // Master-Bankverbindung (Deutsche Bank). ACHTUNG: Das Beispiel-PDF druckt eine
-    // ABWEICHENDE Bank (Sparkasse Donnersberg, DE96…/MALADE51ROK). Durch die
-    // Factoring-Regel (extrahierte Fuß-IBAN hat Vorrang) würde auf solchen
-    // Rechnungen die gedruckte IBAN ins E-Rechnungs-BT-84 wandern — offene Rückfrage.
+    // Master-Bankverbindung (Deutsche Bank) — nur FALLBACK. Entschieden: die
+    // E-Rechnung SPIEGELT die auf der Rechnung gedruckte Bank (Factoring-Regel:
+    // extrahierte Fuß-IBAN hat Vorrang), z. B. Sparkasse Donnersberg. Diese
+    // Master-IBAN greift nur, wenn keine IBAN im PDF steht.
     iban:               'DE77820700000154699301',
     bic:                'DEUTDE8EXXX',
     handelsregister:    'Amtsgericht München',
