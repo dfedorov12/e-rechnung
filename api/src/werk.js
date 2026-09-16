@@ -18,14 +18,16 @@
 const WERK_MUSTER = [
   { werk: 'SHB', woerter: ['bösdorf', 'boesdorf', 'hartguss', 'shb'] },
   { werk: 'WGC', woerter: ['coswig', 'walzengießerei', 'walzengiesserei', 'walzen', 'wgc'] },
-  // { werk: 'EIS', woerter: [] },   // TODO Firmenname/Ort ergaenzen
-  // { werk: 'DSO', woerter: [] },
-  // { werk: 'LEG', woerter: [] },
-  // { werk: 'EWA', woerter: [] },
-  // { werk: 'HOL', woerter: [] },
-  // { werk: 'MEG', woerter: [] },
-  // { werk: 'SCH', woerter: [] },
-  // { werk: 'ZAI', woerter: [] },
+  { werk: 'ZAI', woerter: ['zaigler'] },   // Dihag Zaigler GmbH, Kulmbach
+  // Übrige Werke: Erkennungswoerter (Firmenname/Ort/Leitweg des EMPFAENGERS)
+  // ergaenzen, sobald bekannt. Leere Listen sind inert (kein Treffer).
+  { werk: 'EIS', woerter: [] },   // TODO
+  { werk: 'DSO', woerter: [] },   // TODO
+  { werk: 'LEG', woerter: [] },   // TODO
+  { werk: 'EWA', woerter: [] },   // TODO
+  { werk: 'HOL', woerter: [] },   // TODO
+  { werk: 'MEG', woerter: [] },   // TODO
+  { werk: 'SCH', woerter: [] },   // TODO
 ];
 
 /**

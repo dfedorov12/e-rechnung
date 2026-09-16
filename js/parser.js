@@ -15,6 +15,22 @@
    Registry-Daten überschreiben extrahierte Seller-Felder
    (kanonische Quelle für Adresse, USt-IdNr., Kontakt).
 ══════════════════════════════════════════════════════ */
+
+/**
+ * Leerer Registry-Eintrag (Gerüst) für ein noch nicht gepflegtes Werk.
+ * Inaktiv (_detect:null, _aktiv:false) → wird von _detectCompany übersprungen,
+ * bis Stammdaten gepflegt und _detect/_aktiv gesetzt sind.
+ */
+function _werkGeruest(werk) {
+  return {
+    verkaeufer: '', verkaeufstrasse: '', verkaeufplz: '', verkaeufstadt: '',
+    verkaeufland: 'DE', verkaeuftel: '', verkaeuferemail: '',
+    verkaeufervat: '', verkaeufersteuernr: '', iban: '', bic: '',
+    handelsregister: '', registernr: '', geschaeftsfuehrung: '',
+    _werk: werk, _detect: null, _aktiv: false,
+  };
+}
+
 const _COMPANY_REGISTRY = {
 
   WGC: {
@@ -59,6 +75,48 @@ const _COMPANY_REGISTRY = {
     _detect: /shb-guss|bösdorf|b.sdorf|stahl-?\s*und\s*hartguss|shb\s+stahl/i,
   },
 
+  // ── ZAI · Zaigler (DIHAG-Gruppe) ────────────────────────────────────────
+  // Ausgangsrechnungen aus dem ERP (combit List & Label). Format-Parser unten:
+  // _isZaiInvoice + extract*Zai. Aus dem PDF-TEXT lesbar sind nur Tel/E-Mail/
+  // IBAN/BIC — die regulatorischen Stammdaten stehen im Briefkopf (Grafik) und
+  // MÜSSEN hier gepflegt werden. TODO ausfüllen, dann ist ZAI vollständig:
+  ZAI: {
+    verkaeufer:         'Dihag Zaigler GmbH',
+    verkaeufstrasse:    'Gummistr. 28',
+    verkaeufplz:        '95326',
+    verkaeufstadt:      'Kulmbach',
+    verkaeufland:       'DE',
+    verkaeuftel:        '+49 9221 944-0',
+    verkaeuferemail:    '',   // keine feste Sales-Adresse geliefert → Kontakt-Mail aus PDF-Text
+    verkaeufervat:      'DE368990137',
+    verkaeufersteuernr: '',   // USt-IdNr vorhanden; Steuernummer optional
+    // Master-Bankverbindung (Deutsche Bank). ACHTUNG: Das Beispiel-PDF druckt eine
+    // ABWEICHENDE Bank (Sparkasse Donnersberg, DE96…/MALADE51ROK). Durch die
+    // Factoring-Regel (extrahierte Fuß-IBAN hat Vorrang) würde auf solchen
+    // Rechnungen die gedruckte IBAN ins E-Rechnungs-BT-84 wandern — offene Rückfrage.
+    iban:               'DE77820700000154699301',
+    bic:                'DEUTDE8EXXX',
+    handelsregister:    'Amtsgericht München',
+    registernr:         'HRB 291945',
+    geschaeftsfuehrung: 'Viktor Babushchak',
+    // detect: E-Mail-Domain/AGB-URL „dihag-zaigler.com" oder Firmenname im PDF
+    _detect: /dihag-zaigler|zaigler/i,
+    _aktiv: true,
+  },
+
+  // ── Gerüst der übrigen 7 Werke (Layouts unterschiedlich) ────────────────
+  // Inaktiv bis Stammdaten + je ein Beispiel-PDF vorliegen. Dann: Felder in
+  // _werkGeruest-Ausgabe ausfüllen bzw. Eintrag wie ZAI ausschreiben, _detect
+  // setzen, _aktiv:true — UND je Werk einen Format-Parser (_is<Werk>Invoice +
+  // extract*<Werk>) ergänzen und in extractInvoiceDataFromItems einhängen.
+  EIS: _werkGeruest('EIS'),
+  DSO: _werkGeruest('DSO'),
+  LEG: _werkGeruest('LEG'),
+  EWA: _werkGeruest('EWA'),
+  HOL: _werkGeruest('HOL'),
+  MEG: _werkGeruest('MEG'),
+  SCH: _werkGeruest('SCH'),
+
 };
 
 /**
@@ -67,8 +125,12 @@ const _COMPANY_REGISTRY = {
  */
 function _detectCompany(fullText) {
   for (const [, entry] of Object.entries(_COMPANY_REGISTRY)) {
+    // Skelett-/inaktive Werke überspringen (kein _detect oder _aktiv:false)
+    if (entry._aktiv === false || !entry._detect) continue;
     if (entry._detect.test(fullText)) {
-      const { _detect, ...data } = entry;   // _detect nicht ins Ergebnis
+      // Interne Felder (_detect, _aktiv, _werk, …) nicht ins Ergebnis
+      const data = {};
+      for (const [k, v] of Object.entries(entry)) if (!k.startsWith('_')) data[k] = v;
       return data;
     }
   }
@@ -120,6 +182,14 @@ function extractInvoiceDataFromItems(allItems) {
       ...extractBuyerGermanSHB(buyerBlock, fullText),
       positionen: extractLineItemsGermanSHB(fullText),
     };
+  // ZAI-Rechnung (Zaigler, combit-Layout: Beleg-Nr./Pos. Bezeichnung Menge …)
+  } else if (_isZaiInvoice(fullText)) {
+    result = {
+      ...extractMetadataZai(fullText),
+      ...extractSeller(footerText, fullText),   // Tel/E-Mail/IBAN/BIC aus dem Text
+      ...extractBuyerZai(buyerBlock, leftColumnText, fullText),
+      positionen: extractLineItemsZai(fullText),
+    };
   } else {
     result = {
       ...extractMetadata(rightText, fullText),
@@ -142,7 +212,12 @@ function extractInvoiceDataFromItems(allItems) {
   if (company) {
     const extractedIban = result.iban;
     const extractedBic  = result.bic;
-    Object.assign(result, company);
+    // Nur befüllte Registry-Felder überlagern — leere TODO-Platzhalter (z. B.
+    // noch nicht gepflegte Werke) dürfen die aus dem Text gelesenen Werte
+    // NICHT mit Leerstrings überschreiben.
+    for (const [k, v] of Object.entries(company)) {
+      if (v !== null && v !== undefined && v !== '') result[k] = v;
+    }
     if (extractedIban) result.iban = extractedIban;
     if (extractedBic)  result.bic  = extractedBic;
   }
@@ -168,6 +243,12 @@ function _isGermanSHBInvoice(text) {
   return /Rechnungs-Nr\.\s*:/i.test(text) &&
          /Nettowert\s*:/i.test(text) &&
          /(shb-guss|bösdorf|b.sdorf|Hartgusswerk)/i.test(text);
+}
+
+// ZAI/Zaigler (combit List & Label): verkäufer-verankert (dihag-zaigler-Domain
+// in Kontakt-Mail/AGB-URL) + charakteristisches "Beleg-Nr."-Label.
+function _isZaiInvoice(text) {
+  return /dihag-zaigler/i.test(text) && /Beleg-?Nr\.?\s*:/i.test(text);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -533,6 +614,118 @@ function extractLineItemsGermanSHB(fullText) {
   }
 
   return _validateAndFallback(items, _extractNetTotalGermanSHB(fullText), mwstDoc);
+}
+
+/* ══════════════════════════════════════════════════════
+   ZAI-RECHNUNG  (Zaigler, DIHAG-Gruppe)
+   combit-Layout: "Beleg-Nr."/"Beleg-Datum" + Positionstabelle
+   "Pos. Bezeichnung Menge Einheit Einzelpreis EUR Gesamtpreis EUR".
+   Verkäufer-Stammdaten liefert die Registry (ZAI); hier nur Metadaten,
+   Käufer (auslandsfähig via _parseBuyerWindow) und Positionen.
+══════════════════════════════════════════════════════ */
+
+function extractMetadataZai(fullText) {
+  const r = {};
+
+  // Rechnungsnummer: "Beleg-Nr.: 2026.001772" (der Punkt gehört zur ERP-Nummer)
+  const nrM = fullText.match(/Beleg-?Nr\.?\s*:?\s*([0-9][0-9.\-\/]{3,20})/i);
+  if (nrM) r.rechnungsnummer = nrM[1].trim();
+
+  // Rechnungsdatum: "Beleg-Datum: 16.09.2026"
+  const datM = fullText.match(/Beleg-?Datum\s*:?\s*(\d{2}\.\d{2}\.\d{4})/i);
+  if (datM) r.rechnungsdatum = _deDate(datM[1]);
+
+  // Leistungs-/Lieferdatum: "Lieferdatum: 16.09.2026"
+  const ldM = fullText.match(/Lieferdatum\s*:?\s*(\d{2}\.\d{2}\.\d{4})/i);
+  if (ldM) r.lieferdatum = _deDate(ldM[1]);
+
+  // Fälligkeit: "Zahlbar ohne Abzug bis zum 15.11.2026!"
+  const faellM = fullText.match(/bis\s+zum\s+(\d{2}\.\d{2}\.\d{4})/i);
+  if (faellM) r.faelligkeitsdatum = _deDate(faellM[1]);
+
+  // Ansprechpartner (Verkäuferkontakt, BT-41): "Ansprechpartner: Döring Gerhard"
+  const apM = fullText.match(/Ansprechpartner\s*:?\s*([A-ZÄÖÜ][A-Za-zäöüß.\-]+(?:\s+[A-ZÄÖÜ][A-Za-zäöüß.\-]+)?)/);
+  if (apM) r.verkaeufkontakt = apM[1].trim();
+
+  // Zahlungsbedingung → Notiz
+  const zbM = fullText.match(/Zahlungsbedingung\s*:?\s*"?([^"\n]{5,120})"?/i);
+  if (zbM) r.notiz = 'Zahlungsbedingung: ' + zbM[1].trim().replace(/\s+/g, ' ').replace(/!+$/, '');
+
+  return r;
+}
+
+function extractBuyerZai(buyerBlock, leftColumnText, fullText) {
+  // Auslandsfähiges Adressfenster nutzen (erkennt SAS/SARL, „FRANKREICH" → FR)
+  const r = _parseBuyerWindow((buyerBlock && buyerBlock.trim()) ? buyerBlock : (leftColumnText || ''));
+
+  // Käufer-USt-IdNr (BT-48): "Ihre Ust.ID: FR51530107341"
+  const vatM = fullText.match(/Ihre\s+Ust\.?-?\s*ID\.?\s*:?\s*([A-Z]{2}[\dA-Z]{6,14})/i);
+  if (vatM) r.kaeufervat = vatM[1].replace(/\s+/g, '');
+
+  return r;
+}
+
+function extractLineItemsZai(fullText) {
+  const items = [];
+  const lines = fullText.split('\n');
+
+  // Dokument-MwSt aus der Summenzeile ("… 15.452,50  0,00 %  0,00  15.452,50")
+  const mwstM   = fullText.match(/[\d.]+,\d{2}\s+(\d{1,2}(?:,\d+)?)\s*%\s+[\d.]+,\d{2}\s+[\d.]+,\d{2}/);
+  const mwstDoc = mwstM ? _parseDE(mwstM[1]) : 0;
+
+  // Positionszeile: PosNr  Artikel(mit Leerzeichen)  Menge  Einheit  Einzelpreis  Gesamtpreis
+  // Anker: Einheit-Schlüsselwort + zwei Dezimalbeträge am Zeilenende.
+  const itemRe = /^\s*(\d+)\s+(\S.*?)\s+(\d+(?:[.,]\d+)?)\s+(St[üu]ck|Stk|St|kg|to?|m|Std|h|l|Pausch\.?)\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})\s*$/i;
+
+  // Zeilen, die sicher keine Position/Beschreibung sind
+  const skipRe = /^(?:Nettobetrag|MwSt|Rechnungsbetrag|Zahlungsbedingung|Es\s+gelten|Die\s+AGB|Pos\.\s+Bezeichnung|Seite|Leistungstag|Lieferbedingung|Auf\s+die\s+Steuerschuldner|Unsere\s+Bankverbindung|Sparkasse|IBAN|BIC)/i;
+  // ERP-Detailzeilen unter der Position (keine Beschreibung)
+  const detailRe = /^(?:Bestellung|Best\.?\s*Nr|Komm\b|Auftrags?|Index\b|Document\s+ID|R.vision|Serialnummer|Lieferschein|Lieferdatum|\d)/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || skipRe.test(line)) continue;
+
+    const m = line.match(itemRe);
+    if (!m) continue;
+
+    const posnr   = _normPosNr(m[1]);
+    const artikel = m[2].trim().replace(/\s{2,}/g, ' ');
+    const menge   = _parseDE(m[3]) || 1;
+    const einheit = _unitCode(m[4]);
+    const gesamt  = _parseDE(m[6]);
+    const einzel  = menge > 0 ? gesamt / menge : _parseDE(m[5]);   // Gesamt/Menge → Summe exakt
+
+    // Beschreibung: erste sinnvolle Folgezeile (keine ERP-Detailzeile/Nummer)
+    let desc = '';
+    for (let j = i + 1; j <= i + 8 && j < lines.length; j++) {
+      const nl = lines[j].trim();
+      if (!nl) continue;
+      if (skipRe.test(nl) || detailRe.test(nl)) continue;
+      if (itemRe.test(nl)) break;                 // nächste Position
+      if (/^[-\d.,\s%]+$/.test(nl)) continue;     // reine Zahlenzeile
+      if (nl.length < 3) continue;
+      desc = nl;
+      break;
+    }
+
+    items.push({
+      posnr,
+      beschreibung: desc ? `${artikel} – ${desc}` : artikel,
+      menge,
+      einheit,
+      einzelpreis: einzel,
+      mwst: mwstDoc,
+    });
+  }
+
+  return _validateAndFallback(items, _extractNetTotalZai(fullText), mwstDoc);
+}
+
+/** Netto-Erwartungswert: erster Betrag der ZAI-Summenzeile (= Nettobetrag). */
+function _extractNetTotalZai(fullText) {
+  const m = fullText.match(/(-?[\d.]+,\d{2})\s+\d{1,2}(?:,\d+)?\s*%\s+-?[\d.]+,\d{2}\s+-?[\d.]+,\d{2}/);
+  return m ? _parseDE(m[1]) : null;
 }
 
 /* ══════════════════════════════════════════════════════
