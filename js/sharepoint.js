@@ -161,6 +161,7 @@ function _detectGesellschaft(verkaeufer) {
       v.includes('hartguss') || /\bshb\b/.test(v))   return 'SHB';
   if (v.includes('coswig')  || v.includes('walzen')  ||
       /\bwgc\b/.test(v))                             return 'WGC';
+  if (v.includes('zaigler') || /\bzai\b/.test(v))    return 'ZAI';
   return '';
 }
 

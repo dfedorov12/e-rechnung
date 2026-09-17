@@ -239,6 +239,7 @@ function fillFormFromExtracted(data) {
     'liefer-plz':          data.lieferPlz,
     'liefer-stadt':        data.lieferStadt,
     'liefer-land':         data.lieferLand,
+    'gesellschaft':        data.gesellschaft,   // erkanntes Werk vorwählen → Ablage in AR_<Werk>
     'steuerkategorie':     data.steuerkategorie,
     'befreiungsgrund':     data.befreiungsgrund,
     'rechnungsart':        data.rechnungsart,

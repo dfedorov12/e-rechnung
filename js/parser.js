@@ -124,13 +124,16 @@ const _COMPANY_REGISTRY = {
  * Gibt die Registry-Daten (ohne _detect) zurück oder null.
  */
 function _detectCompany(fullText) {
-  for (const [, entry] of Object.entries(_COMPANY_REGISTRY)) {
+  for (const [key, entry] of Object.entries(_COMPANY_REGISTRY)) {
     // Skelett-/inaktive Werke überspringen (kein _detect oder _aktiv:false)
     if (entry._aktiv === false || !entry._detect) continue;
     if (entry._detect.test(fullText)) {
       // Interne Felder (_detect, _aktiv, _werk, …) nicht ins Ergebnis
       const data = {};
       for (const [k, v] of Object.entries(entry)) if (!k.startsWith('_')) data[k] = v;
+      // Registry-Schlüssel = Werk-Kürzel (WGC/SHB/ZAI…) → als Gesellschaft mitgeben,
+      // damit der manuelle Konverter die Ausgangsrechnung ins richtige AR_<Werk> legt.
+      data.gesellschaft = key;
       return data;
     }
   }
