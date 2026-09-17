@@ -35,21 +35,35 @@ const WERK_MUSTER = [
  *                        mindestens empfaenger, empfaengerOrt, leitwegid.
  * @returns {string}      Werk-Kuerzel ('WGC'|'SHB'|...) oder '' wenn unklar.
  */
-function detectWerkFromBuyer(daten) {
-  const hay = [
-    daten && daten.empfaenger,
-    daten && daten.empfaengerOrt,
-    daten && daten.leitwegid,
-  ].filter(Boolean).join(' ').toLowerCase();
+function _matchWerk(hay) {
+  hay = String(hay || '').toLowerCase();
   if (!hay) return '';
-
   const trifft = w =>
     (w.length <= 3 ? new RegExp('\\b' + w + '\\b').test(hay) : hay.includes(w));
-
   for (const m of WERK_MUSTER) {
     if (m.woerter.some(trifft)) return m.werk;
   }
   return '';
 }
 
-module.exports = { detectWerkFromBuyer, WERK_MUSTER };
+function detectWerkFromBuyer(daten) {
+  return _matchWerk([
+    daten && daten.empfaenger,
+    daten && daten.empfaengerOrt,
+    daten && daten.leitwegid,
+  ].filter(Boolean).join(' '));
+}
+
+/**
+ * Werk am VERKAEUFER (Aussteller) erkennen — fuer die Richtungsbestimmung:
+ * ist eine DIHAG-Gesellschaft der Aussteller, ist es eine AUSGANGSrechnung.
+ * Nutzt dieselben Erkennungswoerter, angewandt auf Aussteller-Name/USt-IdNr.
+ */
+function detectWerkFromSeller(daten) {
+  return _matchWerk([
+    daten && daten.steller,
+    daten && daten.stellerVat,
+  ].filter(Boolean).join(' '));
+}
+
+module.exports = { detectWerkFromBuyer, detectWerkFromSeller, WERK_MUSTER };

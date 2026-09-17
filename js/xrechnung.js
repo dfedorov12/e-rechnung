@@ -274,6 +274,9 @@ function buildXML(data, profile = 'xrechnung') {
           <udt:DateTimeString format="102">${fmtDate(data.lieferdatum)}</udt:DateTimeString>
         </ram:OccurrenceDateTime>
       </ram:ActualDeliverySupplyChainEvent>` : ''}
+      ${data.lieferscheinnummer ? `<ram:DespatchAdviceReferencedDocument>
+        <ram:IssuerAssignedID>${esc(data.lieferscheinnummer)}</ram:IssuerAssignedID>
+      </ram:DespatchAdviceReferencedDocument>` : ''}
     </ram:ApplicableHeaderTradeDelivery>
 
     <ram:ApplicableHeaderTradeSettlement>

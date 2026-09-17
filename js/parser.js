@@ -89,7 +89,7 @@ const _COMPANY_REGISTRY = {
     verkaeuftel:        '+49 9221 944-0',
     verkaeuferemail:    '',   // keine feste Sales-Adresse geliefert → Kontakt-Mail aus PDF-Text
     verkaeufervat:      'DE368990137',
-    verkaeufersteuernr: '',   // USt-IdNr vorhanden; Steuernummer optional
+    verkaeufersteuernr: '208/124/40021',
     // Master-Bankverbindung (Deutsche Bank) — nur FALLBACK. Entschieden: die
     // E-Rechnung SPIEGELT die auf der Rechnung gedruckte Bank (Factoring-Regel:
     // extrahierte Fuß-IBAN hat Vorrang), z. B. Sparkasse Donnersberg. Diese
@@ -201,6 +201,9 @@ function extractInvoiceDataFromItems(allItems) {
 
   // Lieferanschrift (Shipping Address) — steht bei WGC/SHB am Rechnungsende
   Object.assign(result, _extractShipTo(fullText));
+
+  // Lieferschein-/Versandavis-Nummer (BT-16), falls noch nicht gesetzt
+  if (!result.lieferscheinnummer) Object.assign(result, _extractLieferschein(fullText));
 
   // Steuerkategorie für 0%-Positionen erkennen (UNTDID 5305: K/AE/G)
   Object.assign(result, _detectTaxCategory(fullText, result));
@@ -1363,6 +1366,16 @@ function _extractShipTo(fullText) {
 
   if ((r.lieferName || r.lieferStrasse) && !r.lieferLand) r.lieferLand = 'DE';
   return r;
+}
+
+/**
+ * Lieferschein-/Versandavis-Nummer (BT-16, Despatch advice reference).
+ * Deutsche Labels ("Lieferschein-Nr.: 2026.004785", "Lieferschein 12345") und
+ * englisch ("Delivery note 3240007"). Wert: erste Nummer nach dem Label.
+ */
+function _extractLieferschein(fullText) {
+  const m = fullText.match(/(?:Lieferschein(?:-?Nr\.?|nummer)?|Delivery\s+note)\s*[:.]?\s*([0-9][0-9.\-\/]{3,20})/i);
+  return m ? { lieferscheinnummer: m[1].replace(/[.\-\/]+$/, '').trim() } : {};
 }
 
 /* ══════════════════════════════════════════════════════

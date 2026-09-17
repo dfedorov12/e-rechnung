@@ -15,9 +15,12 @@
  *   {
  *     klassifizierung: 'zugferd' | 'xrechnung-xml' | 'pdf-ohne-xml',
  *     quelle:          'PDF' | 'XML',
- *     werk:            Postfach-Hinweis (?werk=) sonst aus Empfaenger erkannt,
- *     werkErkannt:     aus dem RechnungsEMPFÄNGER abgeleitet (Gegenprobe),
- *     werkMismatch:    true, wenn ?werk= != werkErkannt (moegliche Fehlleitung),
+ *     werk:            Ablage-Werk (Ausgang: aus Verkaeufer; Eingang: ?werk=/Empfaenger),
+ *     werkErkannt:     aus dem RechnungsEMPFÄNGER abgeleitet (Eingang-Gegenprobe),
+ *     werkAusVerkaeufer: aus dem AUSSTELLER abgeleitet (Ausgang-Erkennung),
+ *     richtung:        'Eingang' | 'Ausgang' (DIHAG-Gesellschaft = Aussteller -> Ausgang),
+ *     zielbibliothek:  'ERAR_<Werk>' (Eingang) | 'AR_<Werk>' (Ausgang) — fertig fuer den Flow,
+ *     werkMismatch:    true, wenn Eingang und ?werk= != werkErkannt (moegliche Fehlleitung),
  *     konform:         'gruen'|'gelb'|'rot'|'ungeprueft',
  *     konformLabel, accepted, errorCount, warningCount, meldungen[],
  *     bericht:         <roher KoSIT-Pruefbericht als String>  (Archiv/GoBD),
@@ -36,7 +39,7 @@ const { validateMustang } = require('../mustang');
 const { extractInvoiceXml } = require('../pdfxml');
 const { validatePdfA } = require('../verapdf');
 const { convertXmlToPdf, parseInvoiceData } = require('../converter');
-const { detectWerkFromBuyer } = require('../werk');
+const { detectWerkFromBuyer, detectWerkFromSeller } = require('../werk');
 const { normalizeBody } = require('../httpbody');
 
 app.http('intake', {
@@ -50,8 +53,9 @@ app.http('intake', {
         jsonBody: {
           service: 'E-Rechnung Eingangsstufe (Klassifizierung + Validierung + Werk)',
           usage: 'POST ZUGFeRD-PDF | XRechnung-XML | normales PDF (optional ?werk=<Kuerzel> '
-               + 'aus dem Postfach) -> JSON { klassifizierung, werk, werkErkannt, werkMismatch, '
-               + 'konform, bericht, pdfa, daten, xml, lesbarPdfBase64 }',
+               + 'aus dem Postfach) -> JSON { klassifizierung, richtung, zielbibliothek, werk, '
+               + 'werkErkannt, werkAusVerkaeufer, werkMismatch, konform, bericht, pdfa, daten, '
+               + 'xml, lesbarPdfBase64 }',
         },
       };
     }
@@ -80,7 +84,10 @@ app.http('intake', {
       quelle: isPdf ? 'PDF' : 'XML',
       werk: werkHinweis,
       werkErkannt: '',
+      werkAusVerkaeufer: '',
       werkMismatch: false,
+      richtung: '',
+      zielbibliothek: '',
       konform: 'ungeprueft',
       konformLabel: 'Ungeprueft',
       accepted: null,
@@ -115,8 +122,12 @@ app.http('intake', {
     }
 
     // 3) Reine PDF ohne E-Rechnung: kein XML -> nur archivieren + kennzeichnen.
+    //    Ohne strukturierte Daten ist die Richtung nicht sicher bestimmbar; ein
+    //    reines Scan-PDF ist praktisch immer ein Eingang -> Default Eingang.
     if (!xml) {
       res.konformLabel = 'Ungeprueft (kein E-Rechnungs-XML)';
+      res.richtung = 'Eingang';
+      res.zielbibliothek = werkHinweis ? `ERAR_${werkHinweis}` : '';
       return { status: 200, jsonBody: res };
     }
 
@@ -157,11 +168,27 @@ app.http('intake', {
       // Aussteller-USt-IdNr. (BT-31) wird der Schluessel eindeutig. Existiert die
       // Datei mit diesem Namen bereits in ERAR_<Werk>, ist es eine echte Dublette.
       res.dateibasis = _dateibasis(res.daten);
-      res.werkErkannt = detectWerkFromBuyer(res.daten);
-      // Ohne Postfach-Hinweis: erkanntes Werk uebernehmen. Mit Hinweis: Hinweis
-      // bleibt maessgeblich, aber Abweichung melden (moegliche Fehlleitung).
-      if (!werkHinweis) res.werk = res.werkErkannt;
-      res.werkMismatch = !!(werkHinweis && res.werkErkannt && werkHinweis !== res.werkErkannt);
+      res.werkErkannt = detectWerkFromBuyer(res.daten);         // kaeuferbasiert (Eingang)
+      res.werkAusVerkaeufer = detectWerkFromSeller(res.daten);  // ausstellerbasiert (Ausgang)
+
+      // Richtung: ist eine DIHAG-Gesellschaft der VERKAEUFER -> Ausgangsrechnung,
+      // sonst Eingang. So landet eine WGC-Ausgangsrechnung, die im Eingangs-
+      // Postfach ankommt, nicht mehr faelschlich in ERAR_<Werk>.
+      res.richtung = res.werkAusVerkaeufer ? 'Ausgang' : 'Eingang';
+
+      // Ablage-Werk + fertige Zielbibliothek (AR_<Werk> = Ausgang | ERAR_<Werk> =
+      // Eingang) — der Flow schreibt damit ohne eigene Logik in die richtige Bibliothek.
+      const werkAblage = res.richtung === 'Ausgang'
+        ? (res.werkAusVerkaeufer || werkHinweis)
+        : (werkHinweis || res.werkErkannt);
+      if (werkAblage) res.werk = werkAblage;
+      res.zielbibliothek = werkAblage
+        ? `${res.richtung === 'Ausgang' ? 'AR' : 'ERAR'}_${werkAblage}`
+        : '';
+
+      // Gegenprobe nur fuer Eingang sinnvoll (Postfach-Werk vs. Empfaenger-Werk).
+      res.werkMismatch = !!(res.richtung === 'Eingang' && werkHinweis
+        && res.werkErkannt && werkHinweis !== res.werkErkannt);
     } catch (e) {
       res.datenFehler = msg(e);
     }
