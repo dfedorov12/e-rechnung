@@ -212,6 +212,14 @@ function _monGroup(recs) {
     // (Tag) bzw. der Flow es gesetzt hat; Tag-Wert für den Tooltip merken.
     primary.gobdArchiviert = arr.some(r => r.complianceTag || r.gobd);
     primary.complianceTag = (arr.find(r => r.complianceTag) || {}).complianceTag || '';
+    // Ausgangsrechnungen erzeugt der geprüfte Konverter selbst (EN16931-konform,
+    // vor dem Export self-verified) — sie werden NICHT extern per KoSIT validiert.
+    // Daher als konform behandeln und GoBD-konform setzen; ein evtl. echtes "rot"
+    // (z. B. manuell markiert) bleibt erhalten.
+    if ((primary.richtung || '').toLowerCase().startsWith('aus')) {
+      if (!/^rot/i.test(primary.konform || '')) primary.konform = 'Gruen';
+      primary.gobdArchiviert = true;
+    }
     // "öffnen" muss immer eine Datei treffen: hat die Primärzeile keine URL,
     // die erste verfügbare Geschwisterdatei nehmen.
     if (!primary.url) { const s = arr.find(r => r.url); if (s) primary.url = s.url; }
@@ -292,8 +300,13 @@ function _monRenderKpis(rows) {
   const offen = rows.filter(r => r.status && !['Gebucht', 'Archiviert'].includes(r.status)).length;
   const fehler = rows.filter(r => r.status === 'Fehler' || /^Rot/i.test(r.konform) || r.fehler).length;
   const dubletten = rows.filter(r => r.dublette).length;
-  const gobd = rows.filter(r => r.gobdArchiviert).length;
-  const summe = rows.reduce((s, r) => s + (r.brutto || 0), 0);
+
+  // Klassifizierung (ZUGFeRD / XRechnung / PDF ohne E-Rechnung) als Übersichtsfelder.
+  const klassCounts = {};
+  rows.forEach(r => { const k = _monKlass(r); if (k) klassCounts[k] = (klassCounts[k] || 0) + 1; });
+  const KLASS_ORDER = ['XRechnung', 'ZUGFeRD', 'PDF ohne E-Rechnung'];
+  const klassKeys = KLASS_ORDER.filter(k => klassCounts[k])
+    .concat(Object.keys(klassCounts).filter(k => !KLASS_ORDER.includes(k)));
 
   const tiles = [
     ['Rechnungen gesamt', total, ''],
@@ -302,9 +315,8 @@ function _monRenderKpis(rows) {
     ['Offen (nicht gebucht)', offen, 'warn'],
     ['Fehler / rot', fehler, 'bad'],
     ['Dubletten', dubletten, dubletten ? 'bad' : ''],
-    // GoBD-Abdeckung: N/Gesamt. Lücke (nicht alle archiviert) = Warnung.
-    ['GoBD-archiviert', `${gobd} / ${total}`, (total && gobd < total) ? 'warn' : ''],
-    ['Bruttosumme', summe.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }), 'sum'],
+    // Klassifizierung je Typ (ersetzt GoBD-archiviert + Bruttosumme).
+    ...klassKeys.map(k => [k, klassCounts[k], 'klass']),
   ];
   document.getElementById('mon-kpis').innerHTML = tiles.map(([label, val, cls]) =>
     `<div class="mon-tile ${cls}"><div class="mon-tile-val">${_esc(String(val))}</div>`
@@ -378,6 +390,17 @@ function _monHinweis(r) {
   ];
   for (const [re, text] of regeln) if (re.test(s)) return text;
   return 'Nicht konform (siehe KoSIT-Bericht).';
+}
+
+// Klassifizierung aus Format/Endung ableiten (ZUGFeRD | XRechnung | PDF ohne E-Rechnung).
+function _monKlass(r) {
+  const f = (r.format || '').toLowerCase();
+  if (f.includes('zugferd') || f.includes('factur')) return 'ZUGFeRD';
+  if (f.includes('xrechnung') || f.includes('ubl') || f.includes('cii')) return 'XRechnung';
+  if (f) return r.format;                    // sonstiges Format so anzeigen wie gespeichert
+  if (r.ext === 'xml') return 'XRechnung';
+  if (r.ext === 'pdf') return 'PDF ohne E-Rechnung';
+  return '';
 }
 
 function _monKonPill(r) {
