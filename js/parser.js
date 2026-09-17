@@ -141,6 +141,19 @@ function _detectCompany(fullText) {
 }
 
 /**
+ * Aktive Werk-Kürzel aus der Registry (WGC/SHB/ZAI…) — Skelette/inaktive Werke
+ * (kein _detect oder _aktiv:false) ausgeschlossen. Einzige Quelle für das
+ * Gesellschaft-Dropdown, damit neue Werke automatisch erscheinen, sobald ihr
+ * Registry-Eintrag gepflegt und _aktiv ist.
+ */
+function activeWerke() {
+  return Object.keys(_COMPANY_REGISTRY).filter(k => {
+    const e = _COMPANY_REGISTRY[k];
+    return e && e._aktiv !== false && e._detect;
+  });
+}
+
+/**
  * Bequemer Einstieg: sammelt Text-Items aus dem PDF (PDF.js-Textebene)
  * und extrahiert daraus die Rechnungsdaten.
  */

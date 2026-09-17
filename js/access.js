@@ -10,18 +10,22 @@ const ACCESS_CONFIG_DEFAULT = {
   wgc: ['fedorov@dihag.com'],
   /** SHB – Stahl- und Hartgusswerk Bösdorf GmbH */
   shb: ['fedorov@dihag.com'],
+  /** ZAI – Dihag Zaigler GmbH */
+  zai: ['fedorov@dihag.com'],
 };
 
 /* Vollständige Firmenbezeichnungen */
 const GESELLSCHAFT_NAMES = {
   wgc: 'Walzengießerei Coswig GmbH',
   shb: 'Stahl- und Hartgusswerk Bösdorf GmbH',
+  zai: 'Dihag Zaigler GmbH',
 };
 
 /* Kurz-Labels für Badges & Tabs */
 const GESELLSCHAFT_LABELS = {
   wgc: 'WGC',
   shb: 'SHB',
+  zai: 'ZAI',
 };
 
 /* Admin-UPNs – dürfen die Einstellungen-Seite sehen */

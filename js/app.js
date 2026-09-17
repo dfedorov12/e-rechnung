@@ -53,10 +53,13 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupGesellschaftSelector() {
   const sel = document.getElementById('gesellschaft');
   if (!sel) return;
-  // Beide DIHAG-Werke IMMER anbieten. Frueher wurde nur nach der Ansichts-
-  // Zugriffsconfig befuellt -> war ein Nutzer nur WGC zugeordnet, fehlte SHB
-  // im Dropdown und SHB-Rechnungen wurden faelschlich als WGC in AR_WGC abgelegt.
-  const werke = ['WGC', 'SHB'];
+  // Alle AKTIVEN DIHAG-Werke IMMER anbieten (Quelle: Registry in parser.js).
+  // Frueher fest ['WGC','SHB'] -> neue Werke (z. B. ZAI) fehlten im Dropdown und
+  // ihre Ausgangsrechnungen wurden faelschlich als WGC in AR_WGC abgelegt. Nicht
+  // nach Ansichts-Zugriffsconfig filtern (sonst fehlt ein Werk und Rechnungen
+  // landen im falschen AR_<Werk>).
+  const werke = (typeof activeWerke === 'function' && activeWerke().length)
+    ? activeWerke() : ['WGC', 'SHB'];
   sel.innerHTML = werke.map(g => {
     const label = (typeof GESELLSCHAFT_LABELS !== 'undefined' && GESELLSCHAFT_LABELS[g.toLowerCase()]) || g;
     return `<option value="${g}">${label}</option>`;
