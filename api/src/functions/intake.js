@@ -26,6 +26,9 @@
  *     bericht:         <roher KoSIT-Pruefbericht als String>  (Archiv/GoBD),
  *     berichtHtml?:    <HTML-Darstellung, falls eingebettet>,
  *     pdfa:            { konform, ... } | null  (veraPDF, nur bei PDF-Eingang),
+ *     pdfXmlAbgleich:  { status: 'ok'|'abweichung'|'nicht-pruefbar', hinweis } | null (nur ZUGFeRD:
+ *                      Sichtbild gegen eingebettete XML — abweichender Betrag/Nummer = Warnung),
+ *     auslandOhneLeitweg: true, wenn XRechnung an Auslandskunde ohne Leitweg (Prozesshinweis),
  *     daten:           { nummer, datum, steller, empfaenger, netto, ... } | null,
  *     xml:             <extrahierte/empfangene E-Rechnungs-XML> | null,
  *     lesbarPdfBase64: <XML -> gerendertes PDF/A, base64> | null,
@@ -41,6 +44,7 @@ const { validatePdfA } = require('../verapdf');
 const { convertXmlToPdf, parseInvoiceData } = require('../converter');
 const { detectWerkFromBuyer, detectWerkFromSeller } = require('../werk');
 const { normalizeBody } = require('../httpbody');
+const { pdfXmlAbgleich } = require('../pdfabgleich');
 
 app.http('intake', {
   methods: ['GET', 'POST'],
@@ -101,6 +105,8 @@ app.http('intake', {
       pdfa: null,
       daten: null,
       dateibasis: '',
+      pdfXmlAbgleich: null,
+      auslandOhneLeitweg: false,
       xml: null,
       lesbarPdfBase64: null,
     };
@@ -189,8 +195,43 @@ app.http('intake', {
       // Gegenprobe nur fuer Eingang sinnvoll (Postfach-Werk vs. Empfaenger-Werk).
       res.werkMismatch = !!(res.richtung === 'Eingang' && werkHinweis
         && res.werkErkannt && werkHinweis !== res.werkErkannt);
+
+      // Auslandskunde als XRechnung ohne Leitweg -> EN16931/ZUGFeRD (Factur-X)
+      // waere passender. Reiner Prozesshinweis (keine Schema-Abwertung): eine
+      // XRechnung an einen auslaendischen Empfaenger ohne Leitweg ist unpraktisch.
+      const istXRechnung = /xrechnung/i.test(xml);
+      const land = String(res.daten.empfaengerLand
+        || (res.daten.empfaengerVat || '').slice(0, 2) || '').toUpperCase();
+      if (istXRechnung && land && land !== 'DE' && !res.daten.leitwegid) {
+        res.auslandOhneLeitweg = true;
+        res.hinweis = [res.hinweis,
+          `Auslandskunde (${land}) ohne Leitweg als XRechnung — EN16931/ZUGFeRD (Factur-X) waere passender.`]
+          .filter(Boolean).join(' | ');
+      }
     } catch (e) {
       res.datenFehler = msg(e);
+    }
+
+    // PDF↔XML-Abgleich (nur ZUGFeRD): Sichtbild gegen eingebettete XML pruefen —
+    // faengt einen abweichenden Betrag/Nummer ab, den keine Schema-Pruefung sieht.
+    if (res.klassifizierung === 'zugferd') {
+      try {
+        const ab = await pdfXmlAbgleich(buf, res.daten || {});
+        res.pdfXmlAbgleich = ab;
+        if (ab.status === 'abweichung') {
+          // Nicht-schema-erkennbare Abweichung -> Warnung (gelb), sofern nicht schon rot.
+          if (res.konform !== 'rot') {
+            res.konform = 'gelb';
+            res.konformLabel = 'Gelb - Warnungen';
+            res.accepted = true;
+          }
+          res.hinweis = [res.hinweis, ab.hinweis].filter(Boolean).join(' | ');
+        } else if (ab.status === 'nicht-pruefbar' && ab.hinweis) {
+          res.hinweis = [res.hinweis, ab.hinweis].filter(Boolean).join(' | ');
+        }
+      } catch (e) {
+        res.pdfXmlAbgleich = { status: 'nicht-pruefbar', pruefbar: false, fehler: msg(e), hinweis: '' };
+      }
     }
 
     // 6) Reines XML -> lesbares PDF/A rendern ("konvertiertes PDF").
@@ -221,6 +262,7 @@ function mapDaten(d) {
     empfaenger:         d.kaeufer           || '',
     empfaengerVat:      d.kaeufervat        || '',
     empfaengerOrt:      d.kaeuferstadt      || '',
+    empfaengerLand:     d.kaeuferland       || '',
     leitwegid:          d.leitwegid         || '',
     bestellnummer:      d.bestellnummer     || '',
     lieferscheinnummer: d.lieferscheinnummer|| '',
