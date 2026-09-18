@@ -677,18 +677,9 @@ async function exportInvoice(format) {
     return;
   }
 
-  // Prozesshinweis: XRechnung an einen Auslandskunden ohne Leitweg ist unüblich —
-  // ZUGFeRD/Factur-X (EN16931) ist dafür das passende Format. Nur nachfragen, nicht
-  // hart blocken (der Nutzer kann bewusst XRechnung wollen).
-  if (format === 'xrechnung') {
-    const land = (data.kaeuferland || '').toUpperCase();
-    if (land && land !== 'DE' && !data.leitwegid) {
-      const weiter = confirm(
-        `Auslandskunde (${land}) ohne Leitweg-ID: XRechnung ist dafür unüblich — `
-        + `ZUGFeRD/Factur-X (EN16931) wäre passender.\n\nTrotzdem als XRechnung exportieren?`);
-      if (!weiter) { showToast('Export abgebrochen — für Auslandskunden ZUGFeRD wählen.', 'error'); return; }
-    }
-  }
+  // (Punkt 7 der UStAE/GoBD-Einordnung: Auslandskreditor ohne Leitweg als XRechnung
+  //  ist zulässig — konkludente Zustimmung, keine Rückfrage nötig. Daher KEIN
+  //  Sonder-Check hier.)
 
   // #2/#3/#4: Plausibilitäts- und PDF↔XML-Prüfung vor dem Erstellen
   const totals = calcTotals(data.positionen);

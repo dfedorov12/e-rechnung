@@ -139,6 +139,29 @@ und Unversehrtheit allein (§ 14 Abs. 3 UStG).
 - **Zu bestätigen (organisatorisch):** Kollisionsfreiheit der ERP‑Belegnummernkreise
   über die gemeinsam genutzten Gesellschaften.
 
+### 5.4 Format‑ und Konformitätsprüfung — Regelwerk (UStAE/GoBD)
+
+Grundsatz (UStAE 14.4 Abs. 3; GoBD‑Leitfaden Kap. 9): **Beleg im umsatzsteuerlichen
+Sinne ist die XML; der PDF‑Bildteil ist Visualisierung.** Es wird stets aus der XML
+gebucht. Der Prüfschritt setzt die WP/StB‑Einordnung wie folgt um (Intake‑API,
+`api/src/`; Antwortfelder in Klammern):
+
+| # | Fall | Behandlung | Systemumsetzung |
+|---|------|-----------|-----------------|
+| 1 | **PDF/A‑3 fehlt** | **Keine Ablehnung.** Als *sonstige Rechnung* werten, inhaltlich prüfen, **unter Vorbehalt buchen**, Berichtigung anfordern (UStAE 14.1 Abs. 2; 15.2a Abs. 7). | `formatMangel=true`, `buchung='unter_vorbehalt'`, `kreditorAktion={art:'berichtigung'}`; PDF/A ist **kein** Konformitäts‑K.o. mehr (`mustang.js`: `pdfaMangel` separat). |
+| 2 | **Keine eingebettete XML** | **Keine Ablehnung.** Gleich wie 1 (15.2a Abs. 1a). | `klassifizierung='pdf-ohne-xml'`, `formatMangel=true`, `kreditorAktion`. |
+| 3 | **Profil MINIMUM/BASIC‑WL** | **Harter Stopp** — keine E‑Rechnung (14.1 Abs. 14). Automatische Zurückweisung mit Standardtext, kein Ermessen. | `konform='rot'`, `zurueckweisung={grund,text}`, `buchung='zurueckgewiesen'`. |
+| 4 | **Bild ≠ XML** | **Keine Ablehnung**, aus XML buchen. Automatische Rückfrage **nur bei materieller** Abweichung (Steuerbetrag/Belegidentität), **nicht bei Rundung** (14c.1 Abs. 4a). | `pdfabgleich.js` (pdf‑parse): Steuerbetrag/Brutto/Nummer, Rundungstoleranz 0,02 €; `rueckfrageLieferant=true` nur bei `materiell`. |
+| 5 | **Leitweg‑ID/elektr. Adresse (BT‑10, R010/R020, R001)** | Umsatzsteuerlich **kein Prüfgrund** (Rn. 35a) — aus dem Format‑Check heraus. B2G separat nach ERechV. | `kosit.js`: diese Regeln zählen nicht ins Rot‑Verdikt (`formaleHinweise`). |
+| 6 | **Reverse‑Charge / innergem. Lieferung / steuerfrei (§4 Nr. 1–7)** | **Zwingend manuelle Prüfung (Vier‑Augen)**, keine Automatikbuchung (Rn. 35a; GoBD Kap. 4/5). Standard‑Inland 19/7 % bleibt Automatik. | `steuerkategorie` AE/K/G/E/O → `manuellePruefung=true`, `buchung='manuell'`. |
+| 7 | **Auslandskreditor ohne Leitweg als XRechnung** | **Annehmen**, keine Rückfrage (14.1 Abs. 6 Satz 3; konkludente Zustimmung Abs. 7). | Kein Sonderprozess (früherer Check entfernt). |
+| 8 | **PDF‑Neugenerierung bei PDF/A‑3‑Fehler** | Original (auch defekt) **immer zusätzlich** archivieren, **nie ersetzen**; Ersatz‑PDF unter gleichem Index als *technisch konvertiert* (GoBD Rz. 131/135); kein Löschen vor Ablauf der Aufbewahrungsfrist. | `konvertiertesPdf=true`; Ersatz‑PDF aus XML (`convertXmlToPdf`); Original bleibt im Flow erhalten. |
+
+**Zu 8 (Konvertierung — Protokollpflicht):** Beim technisch konvertierten Ersatz‑PDF
+werden dokumentiert: übernommene XML‑Felder (vollständiger CII/UBL‑Datensatz), der
+**Zeitstempel** des Konvertierungsvorgangs sowie **eingesetzte Software/Version**
+(Konverter, Git‑Commit). Das defekte Original wird unverändert mitarchiviert.
+
 ---
 
 ## 6. Abdeckung der Memo‑Punkte (PwC 10.09.2026)
@@ -160,3 +183,4 @@ und Unversehrtheit allein (§ 14 Abs. 3 UStG).
 | Version | Datum | Autor | Änderung |
 |---------|-------|-------|----------|
 | 0.1 | 2026‑09‑15 | DIHAG IT | Erstentwurf, aus System abgeleitet; zur WP/StB‑Abnahme |
+| 0.2 | 2026‑09‑18 | DIHAG IT | Abschnitt 5.4 (Format-/Konformitätsregelwerk nach UStAE/GoBD, 8 Punkte) ergänzt; Prüfschritt-Logik entsprechend umgesetzt |

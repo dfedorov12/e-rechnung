@@ -138,30 +138,52 @@ function parseReport(reportXml, httpRejected) {
     }
   }
 
-  const errorCount   = meldungen.filter(x => x.level === 'error').length;
+  // Punkt 5: BT-10/Leitweg (BR-DE-15) + elektronische Adresse (R010/R020) +
+  // BusinessProcess (R001) sind umsatzsteuerlich KEIN Pruefgrund (UStAE Rn. 35a)
+  // -> aus dem Rot-Verdikt nehmen. B2G nach ERechV wird separat geprueft.
+  const NICHT_UST = /PEPPOL-EN16931-R0(01|10|20)\b|\bBR-DE-15\b/i;
+  const fehler     = meldungen.filter(x => x.level === 'error');
+  const materielle = fehler.filter(x => !NICHT_UST.test(x.text));
+  const formale    = fehler.filter(x =>  NICHT_UST.test(x.text));
   const warningCount = meldungen.filter(x => x.level === 'warning').length;
+  const errorCount   = materielle.length;   // nur materielle Fehler zaehlen fuers Verdikt
+
+  // Eine Ablehnung OHNE greifbaren Befund (z. B. Dokumenttyp unbekannt) bleibt rot;
+  // sind alle extrahierten Fehler rein formal, ist es KEIN Ablehnungsgrund mehr.
+  const rejectMateriell = rejected && fehler.length === 0;
 
   let konform;
-  if (rejected || errorCount) konform = 'rot';
-  else if (warningCount)      konform = 'gelb';
-  else                        konform = 'gruen';
+  if (materielle.length || rejectMateriell) konform = 'rot';
+  else if (warningCount)                    konform = 'gelb';
+  else                                      konform = 'gruen';
 
   const label = { gruen: 'Gruen - KoSIT ok', gelb: 'Gelb - Warnungen', rot: 'Rot - Fehler' }[konform];
 
-  const top = meldungen.slice(0, 50);
-  const meldungenText = top.map(m => (m.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + m.text).join(' | ');
+  // Anzeige/Text nur aus materiellen Fehlern + Warnungen (formale Leitweg-Regeln raus).
+  const relevante = meldungen.filter(x => x.level === 'warning' || !NICHT_UST.test(x.text)).slice(0, 50);
+  const meldungenText = relevante.map(m => (m.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + m.text).join(' | ');
+  const formaleHinweise = formale.map(f => f.text).slice(0, 20);
+
+  let hinweis = _hinweisAusBefunden(konform, meldungenText, rejectMateriell);
+  if (!materielle.length && !rejectMateriell && formale.length) {
+    hinweis = [hinweis, 'Nur formale XRechnung-Regeln verletzt (Leitweg/elektronische Adresse) — '
+      + 'umsatzsteuerlich kein Pruefgrund; ggf. separat als B2G (ERechV) pruefen.']
+      .filter(Boolean).join(' ');
+  }
+
   return {
     konform,                    // 'gruen' | 'gelb' | 'rot'
     konformLabel: label,        // passend zur SharePoint-Choice-Spalte "Konformitaet"
     accepted: konform !== 'rot',
     errorCount,
     warningCount,
-    meldungen: top,
-    // Fertig zusammengesetzter Text fuer die SharePoint-Spalte (Power Automate braucht
-    // dann kein Select/join ueber die Objekt-Liste). Leer, wenn keine Befunde.
+    meldungen: relevante,
+    // Formale/Leitweg-Regeln (kein Ablehnungsgrund; fuer etwaige B2G-Sonderpruefung).
+    formaleHinweise,
+    // Fertig zusammengesetzter Text fuer die SharePoint-Spalte. Leer, wenn keine Befunde.
     meldungenText,
     // Ein-Satz-Klartext, warum die Rechnung nicht konform ist (siehe _hinweisAusBefunden).
-    hinweis: _hinweisAusBefunden(konform, meldungenText, rejected),
+    hinweis,
   };
 }
 

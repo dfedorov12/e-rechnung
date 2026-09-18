@@ -2,24 +2,27 @@
 /**
  * Sichtbild ↔ eingebettete XML abgleichen (ZUGFeRD/Factur-X)
  * =========================================================
- * ZUGFeRD verlangt, dass das visuell lesbare PDF und die eingebettete XML
- * DIESELBE Rechnung zeigen. Ein abweichender Betrag/Nummer im Bild ist ein
- * Betrugs- oder Fehlerindikator, den KEINE Schema-/Schematron-Prüfung findet
- * (KoSIT/Mustang sehen nur die XML, nicht das gedruckte Bild).
+ * Umsatzsteuerlich ist die XML der Beleg, der PDF-Bildteil nur Visualisierung
+ * (UStAE 14.4 Abs. 3; GoBD-Leitfaden Kap. 9). Es wird daher NICHT abgelehnt und
+ * IMMER aus der XML gebucht. Eine automatische Rueckfrage an den Lieferanten
+ * erfolgt NUR bei MATERIELLEN Abweichungen — solchen, die den Steuerbetrag oder
+ * die Belegidentitaet veraendern — nicht bei Rundungs-/Darstellungsdifferenzen
+ * (vgl. UStAE 14c.1 Abs. 4a).
  *
- * Wir extrahieren den PDF-Text (pdf-parse) und prüfen, ob die XML-Kernwerte
- * (Rechnungsnummer + Bruttobetrag) im Sichtbild vorkommen. BEWUSST KONSERVATIV:
- * ohne verlässlich lesbaren Text (Scan/reines Glyph-Subset ohne ToUnicode) ->
- * Status "nicht-pruefbar" statt Fehlalarm. Eine echte Abweichung meldet der
- * Aufrufer als Warnung (gelb) mit Klartext-Hinweis, nicht als harte Ablehnung.
+ * Wir extrahieren den PDF-Text (pdf-parse), lesen die dort gedruckten Betraege
+ * und vergleichen sie mit den XML-Werten (Steuerbetrag, Bruttobetrag) mit einer
+ * Rundungstoleranz. Konservativ: ohne verlaesslich lesbaren Text/Betrag -> Status
+ * "nicht-pruefbar" statt Fehlalarm.
  */
 const pdfParse = require('pdf-parse');
 
+const TOLERANZ = 0.02;   // Cent-Rundung tolerieren (keine materielle Abweichung)
+
 /**
  * @param {Buffer} pdfBuf  Das ZUGFeRD/Factur-X-PDF (Sichtbild + eingebettete XML).
- * @param {object} daten   Geparste XML-Kopfdaten (mapDaten): nummer, brutto, …
+ * @param {object} daten   Geparste XML-Kopfdaten (mapDaten): nummer, mwst, brutto, …
  * @returns {Promise<{status:'ok'|'abweichung'|'nicht-pruefbar', pruefbar:boolean,
- *                     nummerOk?:boolean, betragOk?:boolean, hinweis:string, fehler?:string}>}
+ *                     materiell:boolean, hinweis:string, fehler?:string}>}
  */
 async function pdfXmlAbgleich(pdfBuf, daten) {
   daten = daten || {};
@@ -29,56 +32,85 @@ async function pdfXmlAbgleich(pdfBuf, daten) {
     const r = await pdfParse(pdfBuf);
     text = String(r.text || '');
   } catch (e) {
-    return { status: 'nicht-pruefbar', pruefbar: false, hinweis: '', fehler: e && e.message ? e.message : String(e) };
+    return { status: 'nicht-pruefbar', pruefbar: false, materiell: false, hinweis: '',
+             fehler: e && e.message ? e.message : String(e) };
   }
 
   const flat = text.replace(/\s+/g, ' ');
   const alnum = (flat.match(/[A-Za-z0-9]/g) || []).length;
-  // Zu wenig lesbarer Text (Scan/Bild oder Glyph-Subset ohne ToUnicode) -> nicht bewertbar.
   if (alnum < 120) {
     return {
-      status: 'nicht-pruefbar', pruefbar: false,
+      status: 'nicht-pruefbar', pruefbar: false, materiell: false,
       hinweis: 'Sichtprüfung PDF↔XML nicht möglich (PDF ohne extrahierbaren Text — evtl. Scan). '
-             + 'Übereinstimmung von Betrag/Nummer bitte manuell prüfen.',
+             + 'Übereinstimmung von Steuerbetrag/Belegnummer bitte manuell prüfen.',
     };
   }
 
-  // Normalisierung: Leerzeichen + Tausenderpunkte/NBSP raus, kleinschreiben.
-  const norm = s => String(s == null ? '' : s).replace(/[\s. ]/g, '').toLowerCase();
-  const flatN = norm(flat);
-
-  // Rechnungsnummer im Sichtbild?
-  const nr = String(daten.nummer || daten.rechnungsnummer || '').trim();
-  const nummerOk = !nr || flat.includes(nr) || flatN.includes(norm(nr));
-
-  // Bruttobetrag im Sichtbild? (verschiedene Schreibweisen tolerieren)
-  const g = Number(daten.brutto != null ? daten.brutto : daten.grossTotal);
-  let betragOk = true, betragGeprueft = false;
-  if (Number.isFinite(g) && g > 0) {
-    betragGeprueft = true;
-    const fmts = [
-      g.toLocaleString('de-DE', { minimumFractionDigits: 2 }),   // 15.452,50
-      g.toFixed(2).replace('.', ','),                            // 15452,50
-      g.toLocaleString('en-US', { minimumFractionDigits: 2 }),   // 15,452.50
-      g.toFixed(2),                                              // 15452.50
-    ];
-    betragOk = fmts.some(x => flat.includes(x)) || fmts.some(x => flatN.includes(norm(x)));
+  const amounts = _amounts(flat);
+  // Keine lesbaren Betraege -> Betragsvergleich nicht moeglich.
+  if (!amounts.size) {
+    return {
+      status: 'nicht-pruefbar', pruefbar: false, materiell: false,
+      hinweis: 'Sichtprüfung PDF↔XML nicht möglich (keine lesbaren Beträge im Bild). '
+             + 'Steuerbetrag bitte manuell abgleichen.',
+    };
   }
+  const near = target => {
+    for (const a of amounts) if (Math.abs(a - target) <= TOLERANZ) return true;
+    return false;
+  };
+  const eur = v => v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 
   const abw = [];
+
+  // Belegidentitaet: Rechnungsnummer (unterschiedliche Nummer = anderer Beleg, materiell).
+  const nr = String(daten.nummer || daten.rechnungsnummer || '').trim();
+  const nummerOk = !nr || nr.length < 5
+    || flat.includes(nr) || flat.replace(/[\s.]/g, '').toLowerCase().includes(nr.replace(/[\s.]/g, '').toLowerCase());
   if (!nummerOk) abw.push(`Rechnungsnummer „${nr}" steht nicht im Sichtbild`);
-  if (betragGeprueft && !betragOk) {
-    abw.push(`Bruttobetrag ${g.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} steht nicht im Sichtbild`);
+
+  // Steuerbetrag (MATERIELL): muss im Bild stehen (Rundung toleriert).
+  const vat = Number(daten.mwst != null ? daten.mwst : daten.vatTotal);
+  if (Number.isFinite(vat) && vat > 0 && !near(vat)) {
+    abw.push(`Steuerbetrag ${eur(vat)} steht nicht im Sichtbild`);
+  }
+
+  // Bruttobetrag (MATERIELL, sofern nicht nur Rundung): muss im Bild stehen.
+  const gross = Number(daten.brutto != null ? daten.brutto : daten.grossTotal);
+  if (Number.isFinite(gross) && gross > 0 && !near(gross)) {
+    abw.push(`Bruttobetrag ${eur(gross)} steht nicht im Sichtbild`);
   }
 
   if (abw.length) {
     return {
-      status: 'abweichung', pruefbar: true, nummerOk, betragOk,
-      hinweis: 'Sichtbild ↔ XML weichen ab: ' + abw.join('; ')
-             + '. ZUGFeRD verlangt Übereinstimmung — bitte manuell prüfen (Betrugs-/Fehlerverdacht).',
+      status: 'abweichung', pruefbar: true, materiell: true,
+      hinweis: 'Materielle Abweichung Sichtbild ↔ XML: ' + abw.join('; ')
+             + '. Gebucht wird aus der XML (bindend); automatische Rückfrage an den Lieferanten.',
     };
   }
-  return { status: 'ok', pruefbar: true, nummerOk: true, betragOk: true, hinweis: '' };
+  return { status: 'ok', pruefbar: true, materiell: false, hinweis: '' };
+}
+
+/** Alle gedruckten Geldbetraege aus dem Text als Zahlenmenge (auf 2 NK gerundet). */
+function _amounts(text) {
+  const set = new Set();
+  const re = /-?\d{1,3}(?:[.\s]\d{3})+[.,]\d{2}|-?\d+[.,]\d{2}/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const v = _num(m[0]);
+    if (v != null) set.add(Math.round(v * 100) / 100);
+  }
+  return set;
+}
+
+/** Betragsstring -> Zahl. Letztes ,/. = Dezimaltrenner; Rest = Tausendertrenner. */
+function _num(t) {
+  t = String(t).replace(/\s/g, '');
+  const lc = t.lastIndexOf(','), ld = t.lastIndexOf('.');
+  const dec = lc > ld ? ',' : '.';
+  const s = dec === ',' ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  const v = parseFloat(s);
+  return Number.isFinite(v) ? v : null;
 }
 
 module.exports = { pdfXmlAbgleich };

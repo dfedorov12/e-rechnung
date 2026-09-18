@@ -13,6 +13,13 @@
  */
 const MUSTANG_URL = process.env.MUSTANG_URL || 'http://localhost:8090/';
 
+// Standardtext fuer die automatische Zurueckweisung von MINIMUM/BASIC-WL (Punkt 3).
+const TEXT_ZURUECKWEISUNG_MINIMAL =
+  'Ihre Rechnung wurde im ZUGFeRD/Factur-X-Profil MINIMUM bzw. BASIC-WL uebermittelt. '
+  + 'Diese Profile gelten nach §14 UStG nicht als elektronische Rechnung (keine vollstaendigen '
+  + 'Positionsdaten). Bitte uebermitteln Sie eine E-Rechnung im Profil EN16931 (COMFORT) oder '
+  + 'hoeher bzw. als XRechnung.';
+
 /**
  * @param {Buffer} buf  ZUGFeRD/Factur-X-PDF oder CII-XML (roh).
  * @param {{ withReport?: boolean, minimalprofil?: boolean }} [opts]
@@ -56,20 +63,26 @@ function parseMustangReport(report, opts = {}) {
     throw new Error('Mustang: kein verwertbarer Report (' + s.slice(0, 120) + ')');
   }
 
+  // Verdikt NUR aus dem <xml>-Teil ableiten. Der <pdf>-Teil (PDF/A-3-Huelle) ist
+  // umsatzsteuerlich KEIN Ablehnungsgrund (UStAE 14.1 Abs. 2: fehlendes PDF/A-3 ->
+  // "sonstige Rechnung", Berichtigung anfordern) und wird separat als pdfaMangel
+  // gemeldet, statt in die Konformitaet zu zaehlen.
+  const xmlSec = (s.match(/<xml\b[\s\S]*?<\/xml>/i) || [s])[0];
+  const pdfSec = (s.match(/<pdf\b[\s\S]*?<\/pdf>/i) || [''])[0];
+  const pdfaMangel = /not a pdf\/a|iscompliant=false|status\s*=\s*"?invalid/i.test(pdfSec);
+
   const errTexts = [];
   const warnTexts = [];
   let m;
-  // Mustang: <error type=".." location=".." criterion="..grosser XPath..">Text</error>.
-  // Das criterion-Attribut ist die XPath-Regel (unbrauchbar fuer Anzeige) -> ignorieren,
-  // nur der Meldungstext (enthaelt [BR-…]/„Value of … is not allowed") wird genutzt.
+  // <error …>Text</error> — nur der Meldungstext; das criterion-XPath-Attribut ignorieren.
   const errRe = /<error\b[^>]*>([\s\S]*?)<\/error>/gi;
-  while ((m = errRe.exec(s))) { const t = clean(m[1]); if (t) errTexts.push(t); }
+  while ((m = errRe.exec(xmlSec))) { const t = clean(m[1]); if (t) errTexts.push(t); }
   const warnRe = /<(?:notice|warning)\b[^>]*>([\s\S]*?)<\/(?:notice|warning)>/gi;
-  while ((m = warnRe.exec(s))) { const t = clean(m[1]); if (t) warnTexts.push(t); }
+  while ((m = warnRe.exec(xmlSec))) { const t = clean(m[1]); if (t) warnTexts.push(t); }
 
   const errorCount = errTexts.length;      // echte Anzahl (Mustang listet je Position)
   const warningCount = warnTexts.length;
-  const invalid = /status\s*=\s*"?invalid/i.test(s) || errorCount > 0;
+  const invalid = /status\s*=\s*"?invalid/i.test(xmlSec) || errorCount > 0;
 
   // Fuer Anzeige/Text identische Meldungen zusammenfassen (sonst 7x dieselbe Zeile).
   const uniq = arr => Array.from(new Set(arr));
@@ -79,17 +92,19 @@ function parseMustangReport(report, opts = {}) {
 
   let konform = invalid ? 'rot' : (warningCount ? 'gelb' : 'gruen');
   let hinweis = '';
+  let zurueckweisung = null;
   if (invalid) {
     const first = uniq(errTexts)[0] || 'Dokument entspricht nicht dem deklarierten Profil.';
     hinweis = 'Profil-/Formatfehler (ZUGFeRD/Factur-X): ' + first.slice(0, 240);
   }
 
-  // MINIMUM/BASIC-WL: strukturell evtl. gueltig, aber KEINE vollstaendige E-Rechnung.
+  // MINIMUM/BASIC-WL sind KEINE E-Rechnung (UStAE 14.1 Abs. 14) -> HARTER STOPP:
+  // automatische Zurueckweisung mit Standardtext, kein Ermessen im Pruefschritt.
   if (opts.minimalprofil) {
-    if (konform === 'gruen') konform = 'gelb';
-    hinweis = 'Profil Factur-X/ZUGFeRD MINIMUM bzw. BASIC-WL — keine vollstaendige '
-      + 'E-Rechnung (nur Buchungshilfe, Positionsdaten fehlen); nach §14 UStG nicht als '
-      + 'E-Rechnung anerkannt.';
+    konform = 'rot';
+    hinweis = 'Profil Factur-X/ZUGFeRD MINIMUM bzw. BASIC-WL — keine E-Rechnung nach '
+      + '§14 UStG (UStAE 14.1 Abs. 14). Automatische Zurueckweisung.';
+    zurueckweisung = { grund: 'MINIMUM/BASIC-WL', text: TEXT_ZURUECKWEISUNG_MINIMAL };
   }
 
   // konformLabel-Strings MUESSEN zur SharePoint-Choice-Spalte "Konformitaet" passen
@@ -104,6 +119,8 @@ function parseMustangReport(report, opts = {}) {
     meldungen,
     meldungenText: meldungen.map(x => (x.level === 'error' ? 'Fehler' : 'Warnung') + ': ' + x.text).join(' | '),
     hinweis,
+    pdfaMangel,               // PDF/A-3-Huelle fehlerhaft (separat; kein Konformitaets-K.o.)
+    zurueckweisung,           // {grund,text} bei hartem Stopp (MINIMUM/BASIC-WL), sonst null
     werkzeug: 'Mustang (ZUGFeRD-Profil)',
   };
 }

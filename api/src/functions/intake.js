@@ -26,10 +26,17 @@
  *     bericht:         <roher KoSIT-Pruefbericht als String>  (Archiv/GoBD),
  *     berichtHtml?:    <HTML-Darstellung, falls eingebettet>,
  *     pdfa:            { konform, ... } | null  (veraPDF, nur bei PDF-Eingang),
- *     pdfXmlAbgleich:  { status: 'ok'|'abweichung'|'nicht-pruefbar', hinweis } | null (nur ZUGFeRD:
- *                      Sichtbild gegen eingebettete XML — abweichender Betrag/Nummer = Warnung),
- *     auslandOhneLeitweg: true, wenn XRechnung an Auslandskunde ohne Leitweg (Prozesshinweis),
- *     daten:           { nummer, datum, steller, empfaenger, netto, ... } | null,
+ *     pdfXmlAbgleich:  { status: 'ok'|'abweichung'|'nicht-pruefbar', materiell, hinweis } | null
+ *                      (nur ZUGFeRD; XML bindend -> nur MATERIELLE Abweichung = Rueckfrage),
+ *     buchung:         'automatik' | 'unter_vorbehalt' | 'manuell' | 'zurueckgewiesen',
+ *     formatMangel:    true, wenn PDF/A-3 fehlt bzw. keine XML (sonstige Rechnung, P1/P2),
+ *     manuellePruefung:true + manuellePruefungGrund bei Reverse-Charge/innergem./steuerfrei (P6),
+ *     rueckfrageLieferant: true bei materieller PDF↔XML-Abweichung (P4),
+ *     zurueckweisung:  { grund, text } | null (harter Stopp MINIMUM/BASIC-WL, P3),
+ *     kreditorAktion:  { art:'berichtigung'|'zurueckweisung', grund, text } | null,
+ *     konvertiertesPdf:true, wenn ein technisch konvertiertes Ersatz-PDF erzeugt wurde (P8),
+ *     formaleHinweise: [ … ] (Leitweg/elektr. Adresse — kein USt-Pruefgrund, P5),
+ *     daten:           { nummer, datum, steller, empfaenger, netto, steuerkategorie, ... } | null,
  *     xml:             <extrahierte/empfangene E-Rechnungs-XML> | null,
  *     lesbarPdfBase64: <XML -> gerendertes PDF/A, base64> | null,
  *   }
@@ -45,6 +52,15 @@ const { convertXmlToPdf, parseInvoiceData } = require('../converter');
 const { detectWerkFromBuyer, detectWerkFromSeller } = require('../werk');
 const { normalizeBody } = require('../httpbody');
 const { pdfXmlAbgleich } = require('../pdfabgleich');
+
+// Standardtext fuer die Berichtigungs-Aufforderung an den Kreditor (Punkte 1/2:
+// fehlendes PDF/A-3 bzw. fehlende eingebettete XML -> "sonstige Rechnung", nicht
+// ablehnen, unter Vorbehalt buchen, Berichtigung anfordern).
+const TEXT_BERICHTIGUNG_FORMAT =
+  'Ihre Rechnung erfuellt nicht das gesetzliche E-Rechnungs-Format (PDF/A-3 fehlerhaft '
+  + 'bzw. keine eingebettete XML). Wir verarbeiten sie als sonstige Rechnung unter '
+  + 'Vorbehalt; bitte uebermitteln Sie eine korrigierte E-Rechnung (XRechnung oder '
+  + 'ZUGFeRD/Factur-X, Profil EN16931 oder hoeher).';
 
 app.http('intake', {
   methods: ['GET', 'POST'],
@@ -105,8 +121,16 @@ app.http('intake', {
       pdfa: null,
       daten: null,
       dateibasis: '',
+      // Buchungs-/Prozesssteuerung (UStAE/GoBD):
+      buchung: 'automatik',        // 'automatik' | 'unter_vorbehalt' | 'manuell' | 'zurueckgewiesen'
+      formatMangel: false,         // PDF/A-3 fehlt bzw. keine XML -> sonstige Rechnung (P1/P2)
+      manuellePruefung: false,     // Reverse-Charge/innergem./steuerfrei -> Vier-Augen (P6)
+      manuellePruefungGrund: '',
+      rueckfrageLieferant: false,  // materielle PDF↔XML-Abweichung (P4)
+      kreditorAktion: null,        // { art:'berichtigung'|'zurueckweisung', grund, text }
+      zurueckweisung: null,        // harter Stopp MINIMUM/BASIC-WL (P3)
+      konvertiertesPdf: false,     // technisch konvertiertes Ersatz-PDF erzeugt (P8)
       pdfXmlAbgleich: null,
-      auslandOhneLeitweg: false,
       xml: null,
       lesbarPdfBase64: null,
     };
@@ -127,11 +151,16 @@ app.http('intake', {
       catch (e) { res.pdfa = { konform: 'ungeprueft', error: msg(e) }; }
     }
 
-    // 3) Reine PDF ohne E-Rechnung: kein XML -> nur archivieren + kennzeichnen.
-    //    Ohne strukturierte Daten ist die Richtung nicht sicher bestimmbar; ein
-    //    reines Scan-PDF ist praktisch immer ein Eingang -> Default Eingang.
+    // 3) Reine PDF ohne E-Rechnung: KEIN Ablehnungsgrund (Punkt 2). Als "sonstige
+    //    Rechnung" werten, unter Vorbehalt buchen, Berichtigung anfordern. Ohne
+    //    strukturierte Daten ist die Richtung nicht sicher bestimmbar -> Eingang.
     if (!xml) {
-      res.konformLabel = 'Ungeprueft (kein E-Rechnungs-XML)';
+      res.konformLabel = 'Sonstige Rechnung (keine E-Rechnung)';
+      res.formatMangel = true;
+      res.buchung = 'unter_vorbehalt';
+      res.kreditorAktion = { art: 'berichtigung', grund: 'keine-xml', text: TEXT_BERICHTIGUNG_FORMAT };
+      res.hinweis = 'Keine eingebettete E-Rechnungs-XML — als sonstige Rechnung unter '
+        + 'Vorbehalt gebucht, Berichtigung angefordert (UStAE 14.1 Abs. 2 / 15.2a Abs. 1a).';
       res.richtung = 'Eingang';
       res.zielbibliothek = werkHinweis ? `ERAR_${werkHinweis}` : '';
       return { status: 200, jsonBody: res };
@@ -159,6 +188,25 @@ app.http('intake', {
       res.pruefwerkzeug = zugferd ? 'Mustang (ZUGFeRD-Profil)' : 'KoSIT (XRechnung/EN16931)';
       if (v.berichtHtml) res.berichtHtml = v.berichtHtml;
       if (v.profilFallback) res.profilFallback = v.profilFallback;
+      if (v.formaleHinweise && v.formaleHinweise.length) res.formaleHinweise = v.formaleHinweise;
+
+      // Punkt 3: MINIMUM/BASIC-WL = harter Stopp -> automatische Zurueckweisung.
+      if (v.zurueckweisung) {
+        res.zurueckweisung = v.zurueckweisung;
+        res.kreditorAktion = { art: 'zurueckweisung', grund: v.zurueckweisung.grund, text: v.zurueckweisung.text };
+        res.buchung = 'zurueckgewiesen';
+      }
+      // Punkt 1: PDF/A-3 fehlt -> KEIN Ablehnungsgrund. Sonstige Rechnung, unter
+      // Vorbehalt buchen, Berichtigung anfordern (konform bleibt das XML-Urteil).
+      if (v.pdfaMangel && !res.zurueckweisung) {
+        res.formatMangel = true;
+        if (res.buchung === 'automatik') res.buchung = 'unter_vorbehalt';
+        res.kreditorAktion = res.kreditorAktion
+          || { art: 'berichtigung', grund: 'kein-pdfa3', text: TEXT_BERICHTIGUNG_FORMAT };
+        res.hinweis = [res.hinweis,
+          'PDF/A-3 fehlt — als sonstige Rechnung unter Vorbehalt gebucht, Berichtigung angefordert.']
+          .filter(Boolean).join(' | ');
+      }
     } catch (e) {
       context.error('Validierung fehlgeschlagen:', e);
       res.konform = 'ungeprueft';
@@ -196,49 +244,57 @@ app.http('intake', {
       res.werkMismatch = !!(res.richtung === 'Eingang' && werkHinweis
         && res.werkErkannt && werkHinweis !== res.werkErkannt);
 
-      // Auslandskunde als XRechnung ohne Leitweg -> EN16931/ZUGFeRD (Factur-X)
-      // waere passender. Reiner Prozesshinweis (keine Schema-Abwertung): eine
-      // XRechnung an einen auslaendischen Empfaenger ohne Leitweg ist unpraktisch.
-      const istXRechnung = /xrechnung/i.test(xml);
-      const land = String(res.daten.empfaengerLand
-        || (res.daten.empfaengerVat || '').slice(0, 2) || '').toUpperCase();
-      if (istXRechnung && land && land !== 'DE' && !res.daten.leitwegid) {
-        res.auslandOhneLeitweg = true;
-        res.hinweis = [res.hinweis,
-          `Auslandskunde (${land}) ohne Leitweg als XRechnung — EN16931/ZUGFeRD (Factur-X) waere passender.`]
+      // Punkt 6: Reverse-Charge / innergemeinschaftliche Lieferung / steuerfrei
+      // (§4 Nr. 1-7) -> ZWINGEND manuelle Pruefung (Vier-Augen), keine Automatik-
+      // buchung (Vorsteuerrisiko, GoBD-Kontrollverfahren). Standard-Inlandsumsatz
+      // (S = 19/7 %) und "ohne USt-Ausweis" (Z) bleiben in der Automatik.
+      const kat = String(res.daten.steuerkategorie || '').toUpperCase();
+      if (['AE', 'K', 'G', 'E', 'O'].includes(kat)) {
+        res.manuellePruefung = true;
+        if (res.buchung !== 'zurueckgewiesen') res.buchung = 'manuell';
+        res.manuellePruefungGrund = {
+          AE: 'Reverse-Charge (§13b UStG)',
+          K:  'Innergemeinschaftliche Lieferung',
+          G:  'Ausfuhrlieferung (Drittland)',
+          E:  'Steuerbefreit (§4 UStG)',
+          O:  'Nicht steuerbar',
+        }[kat] || 'Steuerbefreiung/Sonderfall';
+        res.hinweis = [res.hinweis, `${res.manuellePruefungGrund} — manuelle Pruefung (Vier-Augen) erforderlich.`]
           .filter(Boolean).join(' | ');
       }
     } catch (e) {
       res.datenFehler = msg(e);
     }
 
-    // PDF↔XML-Abgleich (nur ZUGFeRD): Sichtbild gegen eingebettete XML pruefen —
-    // faengt einen abweichenden Betrag/Nummer ab, den keine Schema-Pruefung sieht.
+    // Punkt 4: PDF↔XML-Abgleich (nur ZUGFeRD). Die XML ist umsatzsteuerlich bindend
+    // (UStAE 14.4 Abs. 3) -> NICHT abwerten, immer aus der XML buchen. Nur bei
+    // MATERIELLER Abweichung (Steuerbetrag/Belegidentitaet, rundungstolerant)
+    // automatische Rueckfrage an den Lieferanten anstossen.
     if (res.klassifizierung === 'zugferd') {
       try {
         const ab = await pdfXmlAbgleich(buf, res.daten || {});
         res.pdfXmlAbgleich = ab;
-        if (ab.status === 'abweichung') {
-          // Nicht-schema-erkennbare Abweichung -> Warnung (gelb), sofern nicht schon rot.
-          if (res.konform !== 'rot') {
-            res.konform = 'gelb';
-            res.konformLabel = 'Gelb - Warnungen';
-            res.accepted = true;
-          }
+        if (ab.status === 'abweichung' && ab.materiell) {
+          res.rueckfrageLieferant = true;
           res.hinweis = [res.hinweis, ab.hinweis].filter(Boolean).join(' | ');
         } else if (ab.status === 'nicht-pruefbar' && ab.hinweis) {
           res.hinweis = [res.hinweis, ab.hinweis].filter(Boolean).join(' | ');
         }
       } catch (e) {
-        res.pdfXmlAbgleich = { status: 'nicht-pruefbar', pruefbar: false, fehler: msg(e), hinweis: '' };
+        res.pdfXmlAbgleich = { status: 'nicht-pruefbar', pruefbar: false, materiell: false, fehler: msg(e), hinweis: '' };
       }
     }
 
-    // 6) Reines XML -> lesbares PDF/A rendern ("konvertiertes PDF").
-    if (res.klassifizierung === 'xrechnung-xml') {
+    // 6) Lesbares/technisch konvertiertes PDF/A rendern (Punkt 8):
+    //    - reine XRechnung-XML: immer (es gibt kein lesbares Original)
+    //    - ZUGFeRD mit PDF/A-3-Mangel: Ersatz-PDF aus der XML erzeugen. Das Original
+    //      bleibt ZUSAETZLICH erhalten (der Flow ersetzt es NICHT); das Ersatz-PDF
+    //      wird als "technisch konvertiert" gekennzeichnet (GoBD Rz. 135).
+    if (res.klassifizierung === 'xrechnung-xml' || res.formatMangel) {
       try {
         const { pdf } = await convertXmlToPdf(xml);
         res.lesbarPdfBase64 = Buffer.from(pdf).toString('base64');
+        res.konvertiertesPdf = true;
       } catch (e) {
         res.renderFehler = msg(e);
       }
@@ -271,6 +327,7 @@ function mapDaten(d) {
     mwst:               Number(d.vatTotal   || 0),
     brutto:             Number(d.grossTotal || 0),
     waehrung:           d.waehrung          || 'EUR',
+    steuerkategorie:    d.steuerkategorie   || '',   // UNTDID 5305 (S/Z/AE/K/G/E/O) -> Punkt 6
   };
 }
 
