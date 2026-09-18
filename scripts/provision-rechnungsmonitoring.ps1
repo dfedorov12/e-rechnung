@@ -106,6 +106,15 @@ $Felder = @(
   @{ Name='Eingangszeitpunkt';   Titel='Eingang am';                 Typ='DateTime' }
   @{ Name='Konvertiertam';       Titel='Konvertiert am';             Typ='DateTime' }
 
+  # -- Pruefschritt / Buchungssteuerung (UStAE/GoBD-Regelwerk, /api/intake) --
+  @{ Name='Buchung';             Titel='Buchung';                    Typ='Choice';   Choices=@('Automatik','Unter Vorbehalt','Manuell','Zurueckgewiesen') } # intake buchung (P1-3/6)
+  @{ Name='Formatmangel';        Titel='Formatmangel (sonstige Rechnung)'; Typ='Boolean' } # PDF/A-3 fehlt / keine XML (P1/P2)
+  @{ Name='ManuellePruefung';    Titel='Manuelle Pruefung (Vier-Augen)';   Typ='Boolean' } # Reverse-Charge/innergem./steuerfrei (P6)
+  @{ Name='ManuellePruefungGrund'; Titel='Grund manuelle Pruefung';  Typ='Text' }
+  @{ Name='Rueckfrage';          Titel='Rueckfrage Lieferant (Bild<>XML)'; Typ='Boolean' } # materielle Abweichung (P4)
+  @{ Name='KonvertiertesPdf';    Titel='Technisch konvertiertes PDF';      Typ='Boolean' } # P8
+  @{ Name='KreditorAktion';      Titel='Kreditor-Aktion';            Typ='Choice';   FillIn=$true; Choices=@('Berichtigung angefordert','Zurueckgewiesen','-') }
+
   # -- Pruefpfad / GoBD (interne Namen exakt wie js/sharepoint.js) --
   @{ Name='Pruefstatus';         Titel='Pruefstatus';                Typ='Text' }   # js/sharepoint.js
   @{ Name='ManuelleAenderungen'; Titel='Manuelle Aenderungen';       Typ='Note' }   # js/sharepoint.js

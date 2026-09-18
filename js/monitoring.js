@@ -176,8 +176,21 @@ function _monMap(it, f, lib) {
     complianceTag: (f['OData__ComplianceTag'] || f._ComplianceTag || '').toString().trim(),
     gobd:     (f.GoBDArchiviert === true || f.GoBDArchiviert === 1
                || String(f.GoBDArchiviert).toLowerCase() === 'true'),
+    // Prüfschritt-/Buchungssteuerung (UStAE/GoBD; /api/intake -> Flow -> SharePoint):
+    buchung:               (f.Buchung || '').toString(),
+    formatmangel:          _monBool(f.Formatmangel),
+    manuellePruefung:      _monBool(f.ManuellePruefung),
+    manuellePruefungGrund: (f.ManuellePruefungGrund || '').toString(),
+    rueckfrage:            _monBool(f.Rueckfrage),
+    konvertiert:           _monBool(f.KonvertiertesPdf),
+    kreditorAktion:        (f.KreditorAktion || '').toString(),
     url:      (it.webUrl || '').toString(),
   };
+}
+
+/** Robust auf Boolean lesen (SharePoint liefert true/1/"true"/"1"). */
+function _monBool(v) {
+  return v === true || v === 1 || String(v).toLowerCase() === 'true' || String(v) === '1';
 }
 
 /* ── Zusammenfassen: XML + PDF + KoSIT-Bericht einer Rechnung = 1 Zeile ── */
@@ -212,6 +225,14 @@ function _monGroup(recs) {
     // (Tag) bzw. der Flow es gesetzt hat; Tag-Wert für den Tooltip merken.
     primary.gobdArchiviert = arr.some(r => r.complianceTag || r.gobd);
     primary.complianceTag = (arr.find(r => r.complianceTag) || {}).complianceTag || '';
+    // Prüfschritt-Flags: gesetzt, sobald IRGENDEINE Datei der Rechnung sie trägt.
+    primary.formatmangel     = arr.some(r => r.formatmangel);
+    primary.manuellePruefung = arr.some(r => r.manuellePruefung);
+    primary.rueckfrage       = arr.some(r => r.rueckfrage);
+    primary.konvertiert      = arr.some(r => r.konvertiert);
+    for (const k of ['buchung', 'manuellePruefungGrund', 'kreditorAktion']) {
+      if (!primary[k]) { const s = arr.find(r => r[k]); if (s) primary[k] = s[k]; }
+    }
     // Ausgangsrechnungen erzeugt der geprüfte Konverter selbst (EN16931-konform,
     // vor dem Export self-verified) — sie werden NICHT extern per KoSIT validiert.
     // Daher als konform behandeln und GoBD-konform setzen; ein evtl. echtes "rot"
@@ -300,6 +321,10 @@ function _monRenderKpis(rows) {
   const offen = rows.filter(r => r.status && !['Gebucht', 'Archiviert'].includes(r.status)).length;
   const fehler = rows.filter(r => r.status === 'Fehler' || /^Rot/i.test(r.konform) || r.fehler).length;
   const dubletten = rows.filter(r => r.dublette).length;
+  // Prüfschritt-Warteschlangen (UStAE/GoBD): manuelle Prüfung, Rückfrage, Zurückweisung.
+  const manuell    = rows.filter(r => r.manuellePruefung || /manuell/i.test(r.buchung || '')).length;
+  const rueckfrage = rows.filter(r => r.rueckfrage).length;
+  const zurueck    = rows.filter(r => /zur(?:ü|ue)ckgew/i.test(r.buchung || '')).length;
 
   // Klassifizierung (ZUGFeRD / XRechnung / PDF ohne E-Rechnung) als Übersichtsfelder.
   const klassCounts = {};
@@ -315,6 +340,10 @@ function _monRenderKpis(rows) {
     ['Offen (nicht gebucht)', offen, 'warn'],
     ['Fehler / rot', fehler, 'bad'],
     ['Dubletten', dubletten, dubletten ? 'bad' : ''],
+    // Prüfschritt-Warteschlangen (UStAE/GoBD-Regelwerk).
+    ['Manuelle Prüfung', manuell, manuell ? 'warn' : ''],
+    ['Zur Rückfrage', rueckfrage, rueckfrage ? 'bad' : ''],
+    ['Zurückgewiesen', zurueck, zurueck ? 'bad' : ''],
     // Klassifizierung je Typ (ersetzt GoBD-archiviert + Bruttosumme).
     ...klassKeys.map(k => [k, klassCounts[k], 'klass']),
   ];
@@ -339,6 +368,16 @@ function _monRenderTable(rows) {
     const gobdBadge = r.gobdArchiviert
       ? `<div title="${_esc(r.complianceTag ? 'Aufbewahrung: ' + r.complianceTag : 'GoBD-Aufbewahrung gesetzt')}" style="display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:#0a6b2e;background:#e3f5e9;border-radius:3px;padding:1px 6px;">🔒 GoBD</div>`
       : '';
+    // Buchungssteuerung + Prüfschritt-Flags (UStAE/GoBD).
+    const _flags = [];
+    if (r.formatmangel)     _flags.push(['Formatmangel', '#8a5a00', '#fff3d6']);
+    if (r.manuellePruefung) _flags.push([r.manuellePruefungGrund ? 'Manuell · ' + r.manuellePruefungGrund : 'Manuell', '#8a3b00', '#ffe6cc']);
+    if (r.rueckfrage)       _flags.push(['Rückfrage', '#b40000', '#ffe0e0']);
+    if (r.konvertiert)      _flags.push(['techn. konvertiert', '#334155', '#e2e8f0']);
+    const _flagBadges = _flags.map(([t, c, bg]) =>
+      `<div title="${_esc(t)}" style="display:inline-block;margin:3px 3px 0 0;font-size:11px;font-weight:600;color:${c};background:${bg};border-radius:3px;padding:1px 6px;">${_esc(t.length > 28 ? t.slice(0, 26) + '…' : t)}</div>`).join('');
+    const buchungCell = (r.buchung ? `<span class="pill pill-status">${_esc(r.buchung)}</span>` : '')
+      + (_flagBadges ? `<div>${_flagBadges}</div>` : '') || '–';
     const extra = (r.dateien || [])
       .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`)
       .join(' · ');
@@ -359,6 +398,7 @@ function _monRenderTable(rows) {
       <td>${_esc(r.format)}</td>
       <td>${_esc(_monKlass(r))}</td>
       <td>${stat}${gobdBadge}</td>
+      <td>${buchungCell}</td>
       <td>${konCell}</td>
       <td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>
       <td>${link}</td>
@@ -366,7 +406,7 @@ function _monRenderTable(rows) {
   }).join('');
 
   document.getElementById('mon-tbody').innerHTML = body
-    || `<tr><td colspan="12" style="text-align:center;color:var(--gray-500);padding:24px;">Keine Treffer.</td></tr>`;
+    || `<tr><td colspan="13" style="text-align:center;color:var(--gray-500);padding:24px;">Keine Treffer.</td></tr>`;
   document.getElementById('mon-count').textContent = `${rows.length} angezeigt`;
 }
 
