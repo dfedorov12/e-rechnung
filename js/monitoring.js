@@ -357,6 +357,7 @@ function _monRenderTable(rows) {
       <td>${_esc(r.richtung === 'Eingang' ? r.steller : r.empf)}</td>
       <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
       <td>${_esc(r.format)}</td>
+      <td>${_esc(_monKlass(r))}</td>
       <td>${stat}${gobdBadge}</td>
       <td>${konCell}</td>
       <td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>
@@ -365,7 +366,7 @@ function _monRenderTable(rows) {
   }).join('');
 
   document.getElementById('mon-tbody').innerHTML = body
-    || `<tr><td colspan="11" style="text-align:center;color:var(--gray-500);padding:24px;">Keine Treffer.</td></tr>`;
+    || `<tr><td colspan="12" style="text-align:center;color:var(--gray-500);padding:24px;">Keine Treffer.</td></tr>`;
   document.getElementById('mon-count').textContent = `${rows.length} angezeigt`;
 }
 
