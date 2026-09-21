@@ -111,7 +111,7 @@ $Felder = @(
   @{ Name='Formatmangel';        Titel='Formatmangel (sonstige Rechnung)'; Typ='Boolean' } # PDF/A-3 fehlt / keine XML (P1/P2)
   @{ Name='ManuellePruefung';    Titel='Manuelle Pruefung (Vier-Augen)';   Typ='Boolean' } # Reverse-Charge/innergem./steuerfrei (P6)
   @{ Name='ManuellePruefungGrund'; Titel='Grund manuelle Pruefung';  Typ='Text' }
-  @{ Name='Rueckfrage';          Titel='Rueckfrage Lieferant (Bild<>XML)'; Typ='Boolean' } # materielle Abweichung (P4)
+  @{ Name='Rueckfrage';          Titel='Rueckfrage Lieferant (Bild vs. XML)'; Typ='Boolean' } # materielle Abweichung (P4)
   @{ Name='KonvertiertesPdf';    Titel='Technisch konvertiertes PDF';      Typ='Boolean' } # P8
   @{ Name='KreditorAktion';      Titel='Kreditor-Aktion';            Typ='Choice';   FillIn=$true; Choices=@('Berichtigung angefordert','Zurueckgewiesen','-') }
 
