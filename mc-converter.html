@@ -82,11 +82,11 @@
 
   <!-- Upload Zone -->
   <div class="upload-zone" id="upload-zone">
-    <input type="file" id="xml-input" accept=".xml,text/xml,application/xml">
+    <input type="file" id="xml-input">
     <div class="upload-placeholder">
       <span class="upload-icon">📤</span>
-      <h3>pain.001.003.03-Datei hier ablegen oder klicken</h3>
-      <p>SEPA-Überweisung aus MultiCash / DK-Format</p>
+      <h3>pain.001-Zahldatei hier ablegen oder klicken</h3>
+      <p>SEPA-Überweisung aus MultiCash / DK-Format (pain.001.003.03, 001.001.03 … — auch ohne Dateiendung)</p>
       <button class="btn-upload" type="button">Datei auswählen</button>
     </div>
     <div class="file-info">
@@ -219,7 +219,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ── Datei einlesen ── */
 async function handleFile(file) {
-  if (!/\.xml$/i.test(file.name)) { showToast('Bitte eine XML-Datei auswählen.', 'error'); return; }
+  // Keine Endungspruefung: MultiCash-/DK-Exporte haben oft keine oder eine
+  // fremde Endung. Ob es wirklich eine pain.001 ist, entscheidet der Inhalt
+  // (convertPain001 wirft sonst eine klare Meldung).
   _fileBase = file.name.replace(/\.xml$/i, '');
   showLoading(true, 'Datei wird gelesen…');
   try {
