@@ -50,6 +50,19 @@
   const _cents = s => { const n = Math.round(parseFloat(String(s).replace(',', '.')) * 100); return isNaN(n) ? 0 : n; };
   const _euro  = c => (c / 100).toFixed(2);
 
+  /* ── Preflight-Helfer: IBAN-Pruefziffer (ISO 13616 Mod-97), BIC, SEPA-Zeichen ── */
+  function _ibanValid(iban) {
+    const s = String(iban || '').replace(/\s+/g, '').toUpperCase();
+    if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{8,30}$/.test(s)) return false;
+    const r = s.slice(4) + s.slice(0, 4);
+    const num = r.replace(/[A-Z]/g, c => (c.charCodeAt(0) - 55).toString());
+    let rem = 0;
+    for (let i = 0; i < num.length; i++) rem = (rem * 10 + (num.charCodeAt(i) - 48)) % 97;
+    return rem === 1;
+  }
+  const _bicOk = b => /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(String(b || '').toUpperCase());
+  const _badSepa = s => [...new Set(String(s || '').match(/[^A-Za-z0-9/?:().,'+ -]/g) || [])];
+
   /* ── SEPA-Zeichensatz: Umlaute/Akzente umschreiben, Rest auf den erlaubten
         Zeichenvorrat begrenzen  a-z A-Z 0-9 / - ? : ( ) . , ' +  und Leerzeichen ── */
   const _TRANS = {
@@ -125,7 +138,6 @@
     const pmtInfs = _children(cti, 'PmtInf');
     if (!pmtInfs.length) throw new Error('Keine <PmtInf> (Zahlungssammler) in der Datei.');
 
-    const today = new Date(); today.setHours(0, 0, 0, 0);
     const txns = [];                       // fuer die Vorschau-Tabelle
     let grpNb = 0, grpSum = 0;             // Kopf-Summen ueber ALLE PmtInf
     const pmtBlocks = [];
@@ -144,10 +156,6 @@
 
       if (!debtorFirst) { debtorFirst = dbtrNm; debtorIbanFirst = dbtrIban; execFirst = execDate; }
       if (!dbtrBic) warnings.push(`Auftraggeber "${dbtrNm || pmtInfId}" ohne BIC — im Ziel als NOTPROVIDED gesetzt (IBAN-only, bei SEPA zulaessig).`);
-      if (execDate && /^\d{4}-\d{2}-\d{2}$/.test(execDate)) {
-        const d = new Date(execDate + 'T00:00:00');
-        if (d < today) warnings.push(`Ausfuehrungsdatum ${execDate} liegt in der Vergangenheit — die Bank setzt es i. d. R. auf den naechsten Bankarbeitstag.`);
-      }
 
       const txInfs = _children(pmt, 'CdtTrfTxInf');
       let pmtNb = 0, pmtSum = 0;
@@ -164,7 +172,6 @@
         const cdtrBic  = _deepTxt(_child(tx, 'CdtrAgt'), ['FinInstnId', 'BIC']) || _deepTxt(_child(tx, 'CdtrAgt'), ['FinInstnId', 'BICFI']);
         let   ustrd    = _txt(_child(tx, 'RmtInf'), 'Ustrd');
 
-        if (ccy.toUpperCase() !== 'EUR') warnings.push(`Zahlung an "${cdtrNm}" in ${ccy} — SEPA-Ueberweisungen sind EUR; bitte pruefen.`);
         if (!cdtrBic) warnings.push(`Empfaenger "${cdtrNm}" ohne BIC — im Ziel als NOTPROVIDED gesetzt (IBAN-only).`);
 
         ustrd = clean(ustrd);
@@ -274,10 +281,82 @@
       pmtInfCount: pmtInfs.length,
     };
 
-    return { xml: out.join('\n'), stats, warnings, txns };
+    const xml = out.join('\n');
+    return { xml, stats, warnings, txns, preflight: preflightPain009(xml) };
+  }
+
+  /**
+   * SEPA-Preflight auf die FERTIGE pain.001.001.09 — prueft genau die Dinge, an
+   * denen eine Bank eine Datei ablehnt. Strenger als eine reine XSD-Pruefung
+   * (die weder IBAN-Pruefziffer noch "CtrlSum == Summe der Posten" kontrolliert).
+   * @returns {{errors:string[], notes:string[], nbOfTxs:number, ctrlSum:string}}
+   */
+  function preflightPain009(xmlText) {
+    const errors = [], notes = [];
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    const root = doc.documentElement;
+    if (!root || !/pain\.001\.001\.09/.test(root.namespaceURI || '')) errors.push('Namespace ist nicht pain.001.001.09.');
+
+    const cti = _child(root, 'CstmrCdtTrfInitn');
+    const grp = _child(cti, 'GrpHdr');
+    if (!_txt(grp, 'MsgId')) errors.push('GrpHdr/MsgId fehlt.');
+    if (!_txt(grp, 'CreDtTm')) errors.push('GrpHdr/CreDtTm fehlt.');
+    const grpNb = parseInt(_txt(grp, 'NbOfTxs'), 10);
+    const grpSum = _cents(_txt(grp, 'CtrlSum'));
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let totalNb = 0, totalSum = 0, idx = 0;
+
+    for (const pmt of _children(cti, 'PmtInf')) {
+      const pid = _txt(pmt, 'PmtInfId');
+      const exec = _deepTxt(pmt, ['ReqdExctnDt', 'Dt']) || _txt(pmt, 'ReqdExctnDt');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(exec)) errors.push(`PmtInf ${pid}: ReqdExctnDt/Dt fehlt oder ungueltig.`);
+      else if (new Date(exec + 'T00:00:00') < today) notes.push(`Ausfuehrungsdatum ${exec} liegt in der Vergangenheit — die Bank bucht i. d. R. am naechsten Bankarbeitstag.`);
+      const dIban = _deepTxt(pmt, ['DbtrAcct', 'Id', 'IBAN']);
+      if (!_ibanValid(dIban)) errors.push(`PmtInf ${pid}: Auftraggeber-IBAN ungueltig (${dIban}).`);
+      const dBic = _deepTxt(pmt, ['DbtrAgt', 'FinInstnId', 'BICFI']);
+      if (dBic && !_bicOk(dBic)) errors.push(`PmtInf ${pid}: Auftraggeber-BIC ungueltig (${dBic}).`);
+
+      let pNb = 0, pSum = 0;
+      for (const tx of _children(pmt, 'CdtTrfTxInf')) {
+        idx++;
+        const nm = _txt(_child(tx, 'Cdtr'), 'Nm');
+        const iban = _deepTxt(tx, ['CdtrAcct', 'Id', 'IBAN']);
+        const bic = _deepTxt(tx, ['CdtrAgt', 'FinInstnId', 'BICFI']);
+        const amtEl = _child(_child(tx, 'Amt'), 'InstdAmt');
+        const amt = amtEl ? amtEl.textContent.trim() : '';
+        const ccy = amtEl ? (amtEl.getAttribute('Ccy') || '') : '';
+        const e2e = _txt(_child(tx, 'PmtId'), 'EndToEndId');
+        const ustrd = _txt(_child(tx, 'RmtInf'), 'Ustrd');
+        const who = `#${idx} ${nm}`;
+
+        if (!_ibanValid(iban)) errors.push(`${who}: Empfaenger-IBAN Pruefziffer falsch (${iban}).`);
+        if (bic && !_bicOk(bic)) errors.push(`${who}: BIC-Format ungueltig (${bic}).`);
+        if (!/^\d+\.\d{2}$/.test(amt)) errors.push(`${who}: Betrag nicht im Format 0.00 (${amt}).`);
+        else if (_cents(amt) <= 0) errors.push(`${who}: Betrag <= 0.`);
+        if (ccy.toUpperCase() !== 'EUR') errors.push(`${who}: Waehrung != EUR (${ccy}).`);
+        if (nm.length > 70) errors.push(`${who}: Empfaengername > 70 Zeichen.`);
+        if (ustrd.length > 140) errors.push(`${who}: Verwendungszweck > 140 Zeichen.`);
+        if (e2e.length > 35) errors.push(`${who}: EndToEndId > 35 Zeichen.`);
+        const bc = [..._badSepa(nm), ..._badSepa(ustrd)];
+        if (bc.length) errors.push(`${who}: unerlaubte SEPA-Zeichen: ${[...new Set(bc)].join(' ')}`);
+
+        pNb++; pSum += _cents(amt);
+      }
+      const hNb = parseInt(_txt(pmt, 'NbOfTxs'), 10);
+      const hSum = _cents(_txt(pmt, 'CtrlSum'));
+      if (hNb !== pNb) errors.push(`PmtInf ${pid}: NbOfTxs (${hNb}) != Posten (${pNb}).`);
+      if (hSum !== pSum) errors.push(`PmtInf ${pid}: CtrlSum (${_euro(hSum)}) != Summe der Posten (${_euro(pSum)}).`);
+      totalNb += pNb; totalSum += pSum;
+    }
+    if (!isNaN(grpNb) && grpNb !== totalNb) errors.push(`GrpHdr/NbOfTxs (${grpNb}) != Posten gesamt (${totalNb}).`);
+    if (grpSum !== totalSum) errors.push(`GrpHdr/CtrlSum (${_euro(grpSum)}) != Gesamtsumme (${_euro(totalSum)}).`);
+
+    return { errors, notes, nbOfTxs: totalNb, ctrlSum: _euro(totalSum) };
   }
 
   global.convertPain001 = convertPain001;
+  global.preflightPain009 = preflightPain009;
   global._sepaClean = _sepa;   // fuer Tests
 
 })(typeof window !== 'undefined' ? window : globalThis);
