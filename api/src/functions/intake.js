@@ -137,8 +137,10 @@ app.http('intake', {
 
     // 1) Klassifizieren + XML gewinnen
     let xml = null;
+    let embeddedUnsupported = false;   // eingebettete XML vorhanden, aber Fremdformat (openTRANS/BMEcat)
     if (isPdf) {
-      try { xml = await extractInvoiceXml(buf); } catch { xml = null; }
+      try { xml = await extractInvoiceXml(buf); }
+      catch (e) { xml = null; if (e && e.code === 'EMBEDDED_NOT_EINVOICE') embeddedUnsupported = true; }
       res.klassifizierung = xml ? 'zugferd' : 'pdf-ohne-xml';
     } else {
       xml = buf.toString('utf8');
@@ -158,9 +160,17 @@ app.http('intake', {
       res.konformLabel = 'Sonstige Rechnung (keine E-Rechnung)';
       res.formatMangel = true;
       res.buchung = 'unter_vorbehalt';
-      res.kreditorAktion = { art: 'berichtigung', grund: 'keine-xml', text: TEXT_BERICHTIGUNG_FORMAT };
-      res.hinweis = 'Keine eingebettete E-Rechnungs-XML — als sonstige Rechnung unter '
-        + 'Vorbehalt gebucht, Berichtigung angefordert (UStAE 14.1 Abs. 2 / 15.2a Abs. 1a).';
+      res.kreditorAktion = {
+        art: 'berichtigung',
+        grund: embeddedUnsupported ? 'fremdformat-xml' : 'keine-xml',
+        text: TEXT_BERICHTIGUNG_FORMAT,
+      };
+      res.hinweis = embeddedUnsupported
+        ? 'Eingebettete XML ist kein EN16931-Format (z. B. openTRANS/BMEcat), keine ZUGFeRD/Factur-X-'
+          + 'Rechnung — als sonstige Rechnung unter Vorbehalt gebucht, Berichtigung (echte E-Rechnung) '
+          + 'angefordert (UStAE 14.1 Abs. 2 / 15.2a Abs. 1a).'
+        : 'Keine eingebettete E-Rechnungs-XML — als sonstige Rechnung unter '
+          + 'Vorbehalt gebucht, Berichtigung angefordert (UStAE 14.1 Abs. 2 / 15.2a Abs. 1a).';
       res.richtung = 'Eingang';
       res.zielbibliothek = werkHinweis ? `ERAR_${werkHinweis}` : '';
       return { status: 200, jsonBody: res };

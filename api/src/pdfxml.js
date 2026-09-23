@@ -22,17 +22,54 @@ async function extractInvoiceXml(pdfBytes) {
     throw new Error('Keine eingebettete Datei gefunden (kein ZUGFeRD/Factur-X-PDF?).');
   }
 
-  // Bevorzugt bekannte E-Rechnungs-Anhänge, sonst irgendeine .xml, sonst die erste.
-  const pick =
-    specs.find(s => /(factur-x|zugferd|xrechnung|cii|order-x|invoice)\.xml$/i.test(s.name)) ||
-    specs.find(s => /\.xml$/i.test(s.name)) ||
-    specs[0];
+  // Kandidaten in sinnvoller Reihenfolge pruefen: bekannte Namen zuerst, dann jede .xml.
+  const ordered = [
+    ...specs.filter(s => /(factur-x|zugferd|xrechnung|cii|ubl|order-x|invoice)\.xml$/i.test(s.name)),
+    ...specs.filter(s => /\.xml$/i.test(s.name)),
+    ...specs,
+  ];
 
-  const bytes = _decodeStream(pick.stream);
-  const text = Buffer.from(bytes).toString('utf8').replace(/^﻿/, '');
-  if (!text.trimStart().startsWith('<')) {
-    throw new Error(`Eingebettete Datei "${pick.name}" ist keine XML.`);
+  // WICHTIG: Nur eine echte EN16931-E-Rechnung (CII = ZUGFeRD/Factur-X, oder UBL)
+  // gilt als E-Rechnung. Andere eingebettete XML (z. B. openTRANS/BMEcat, ein
+  // beliebiger Beleg-Anhang) ist KEINE ZUGFeRD-Rechnung -> wird nicht als solche
+  // ausgegeben, damit die PDF sauber als "sonstige Rechnung" (pdf-ohne-xml) laeuft,
+  // statt faelschlich durch die ZUGFeRD-Pruefung mit Profilfehler rot zu werden.
+  const seen = new Set();
+  let fallback = null;
+  for (const s of ordered) {
+    if (seen.has(s.stream)) continue;
+    seen.add(s.stream);
+    const text = _streamText(s.stream);
+    if (!text || !text.trimStart().startsWith('<')) continue;
+    if (detectEInvoiceSyntax(text)) return text;          // echte E-Rechnung
+    if (!fallback) fallback = { name: s.name, text };
   }
+  if (fallback) {
+    const err = new Error(`Eingebettete Datei "${fallback.name}" ist kein EN16931-Format `
+      + '(z. B. openTRANS/BMEcat) — keine ZUGFeRD/Factur-X-E-Rechnung.');
+    err.code = 'EMBEDDED_NOT_EINVOICE';
+    throw err;
+  }
+  throw new Error('Eingebettete Datei ist keine XML.');
+}
+
+/**
+ * Erkennt, ob ein XML-Text eine EN16931-E-Rechnung ist.
+ * @returns {'CII'|'UBL'|null}  CII = ZUGFeRD/Factur-X/XRechnung-CII, UBL = XRechnung-UBL
+ */
+function detectEInvoiceSyntax(text) {
+  if (!text) return null;
+  const head = text.slice(0, 4000);
+  if (/CrossIndustryInvoice|CrossIndustryDocument|uncefact:data:standard:CrossIndustry/i.test(head)) return 'CII';
+  if (/oasis:names:specification:ubl:schema:xsd:(Invoice|CreditNote)-2/i.test(head)) return 'UBL';
+  return null;
+}
+
+/** Stream dekodieren + als UTF-8 lesen (BOM entfernen). */
+function _streamText(stream) {
+  const bytes = _decodeStream(stream);
+  let text = Buffer.from(bytes).toString('utf8');
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM
   return text;
 }
 
@@ -95,4 +132,4 @@ function _decodeStream(stream) {
   }
 }
 
-module.exports = { extractInvoiceXml };
+module.exports = { extractInvoiceXml, detectEInvoiceSyntax };
