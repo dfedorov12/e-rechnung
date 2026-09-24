@@ -3,44 +3,145 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prozess | E-Rechnung | DIHAG</title>
+  <title>Prozesse | E-Rechnung | DIHAG</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="js/vendor/bpmn/diagram-js.css">
+  <link rel="stylesheet" href="js/vendor/bpmn/bpmn-js.css">
   <style>
-    .proc-lead { color: var(--gray-600); font-size: 14px; line-height: 1.55; }
-    .proc-steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
-    .proc-step { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid var(--gray-100); }
-    .proc-step:first-child { border-top: 0; }
-    .proc-num { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--primary-light);
-                color: var(--primary-dark); font-weight: 700; font-size: 13px;
-                display: flex; align-items: center; justify-content: center; }
-    .proc-step h4 { margin: 4px 0 3px; font-size: 14.5px; color: var(--gray-800); }
-    .proc-step p { margin: 0; font-size: 13px; color: var(--gray-600); line-height: 1.5; }
-    .proc-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 720px) { .proc-two { grid-template-columns: 1fr; } }
-    .chk { list-style: none; margin: 0; padding: 0; }
-    .chk li { position: relative; padding: 5px 0 5px 26px; font-size: 13px; color: var(--gray-700); line-height: 1.5; }
-    .chk li::before { content: "✓"; position: absolute; left: 0; top: 5px; color: var(--secondary); font-weight: 700; }
-    .chk li strong { color: var(--gray-800); }
-    .proc-callout { border-left: 3px solid var(--warning); background: #fff8ec;
-                    padding: 12px 14px; border-radius: 6px; font-size: 13px; color: var(--gray-700); line-height: 1.55; }
-    .proc-callout strong { color: var(--gray-900); }
-    .status-list { list-style: none; margin: 0; padding: 0; }
-    .status-list li { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; font-size: 13px; color: var(--gray-700); line-height: 1.5; }
-    .status-dot { flex: 0 0 auto; margin-top: 5px; width: 9px; height: 9px; border-radius: 50%; }
-    .dot-live { background: var(--secondary); }
-    .dot-plan { background: var(--warning); }
-    .proc-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px;
-                background: var(--gray-100); color: var(--gray-600); margin-left: 6px; }
-    .proc-details { margin-top: 16px; border: 1px solid var(--gray-200); border-radius: 8px; background: #fff; overflow: hidden; }
-    .proc-details > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14px; color: var(--gray-800);
-                              list-style: none; display: flex; align-items: center; gap: 8px; }
-    .proc-details > summary::-webkit-details-marker { display: none; }
-    .proc-details > summary::before { content: "\25B8"; color: var(--primary); transition: transform .15s; }
-    .proc-details[open] > summary::before { transform: rotate(90deg); }
-    .proc-details .pd-body { padding: 0 16px 14px; font-size: 13px; color: var(--gray-600); line-height: 1.55; }
-    .proc-details ol { margin: 8px 0 0; padding-left: 20px; }
-    .proc-details li { margin: 3px 0; }
+    /* Farben identisch zu scripts/bpmn/generate-bpmn.js */
+    :root {
+      --a-extern-f:#E9ECF0; --a-extern-s:#5B6472;
+      --a-auto-f:#D8E8F8;   --a-auto-s:#17509E;
+      --a-api-f:#E6DDF7;    --a-api-s:#5B3FA8;
+      --a-archiv-f:#D2EEE8; --a-archiv-s:#0F766E;
+      --a-mensch-f:#FFE3C8; --a-mensch-s:#C2410C;
+      --a-app-f:#DCE5F2;    --a-app-s:#1A2644;
+      --a-erp-f:#E6E6E4;    --a-erp-s:#424241;
+      --t-ok-f:#DDF3E4; --t-ok-s:#1E7B3A;
+      --t-warn-f:#FFF1CC; --t-warn-s:#A65F00;
+      --t-err-f:#FDE2E1; --t-err-s:#B42318;
+      --t-gate-f:#FFF8DB; --t-gate-s:#8A6100;
+      --t-plan-f:#F1F1F3; --t-plan-s:#8A8F98;
+    }
+    .proc-lead { color: var(--gray-600); font-size: 14px; line-height: 1.6; margin: 0; }
+
+    /* Chips für Beteiligte und Ergebnisse */
+    .chip { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; line-height:1;
+            padding:5px 9px; border-radius:999px; border:1.5px solid; white-space:nowrap; }
+    .a-extern { background:var(--a-extern-f); border-color:var(--a-extern-s); color:var(--a-extern-s); }
+    .a-auto   { background:var(--a-auto-f);   border-color:var(--a-auto-s);   color:var(--a-auto-s); }
+    .a-api    { background:var(--a-api-f);    border-color:var(--a-api-s);    color:var(--a-api-s); }
+    .a-archiv { background:var(--a-archiv-f); border-color:var(--a-archiv-s); color:var(--a-archiv-s); }
+    .a-mensch { background:var(--a-mensch-f); border-color:var(--a-mensch-s); color:var(--a-mensch-s); }
+    .a-app    { background:var(--a-app-f);    border-color:var(--a-app-s);    color:var(--a-app-s); }
+    .a-erp    { background:var(--a-erp-f);    border-color:var(--a-erp-s);    color:var(--a-erp-s); }
+    .t-ok   { background:var(--t-ok-f);   border-color:var(--t-ok-s);   color:var(--t-ok-s); }
+    .t-warn { background:var(--t-warn-f); border-color:var(--t-warn-s); color:var(--t-warn-s); }
+    .t-err  { background:var(--t-err-f);  border-color:var(--t-err-s);  color:var(--t-err-s); }
+    .t-gate { background:var(--t-gate-f); border-color:var(--t-gate-s); color:var(--t-gate-s); }
+    .t-plan { background:var(--t-plan-f); border-color:var(--t-plan-s); color:var(--t-plan-s); }
+    .t-man  { background:var(--a-mensch-f); border-color:var(--a-mensch-s); color:var(--a-mensch-s); }
+
+    /* Prozesslandkarte */
+    .pmap { display:grid; gap:12px; margin-top:14px; }
+    .pmap-row { display:grid; grid-template-columns: 1fr auto 2.2fr auto 1fr; align-items:center; gap:10px;
+                background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:12px 14px;
+                cursor:pointer; text-align:left; font:inherit; transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+    .pmap-row:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(26,38,68,.10); border-color:var(--primary); }
+    .pmap-ext { display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center; font-size:12px; color:var(--gray-600); }
+    .pmap-ext b { font-size:22px; line-height:1; }
+    .pmap-arrow { color:var(--gray-400); font-size:20px; }
+    .pmap-core { border-radius:10px; padding:10px 14px; border:2px solid; }
+    .pmap-core h4 { margin:0 0 3px; font-size:15px; }
+    .pmap-core p { margin:0; font-size:12.5px; line-height:1.45; }
+    .pmap-core.in  { background:var(--a-auto-f);   border-color:var(--a-auto-s);   color:#0f3a73; }
+    .pmap-core.out { background:var(--a-app-f);    border-color:var(--a-app-s);    color:var(--a-app-s); }
+    .pmap-core.pay { background:var(--a-mensch-f); border-color:var(--a-mensch-s); color:#8a2d07; }
+    .pmap-base { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--a-archiv-f);
+                 border:2px dashed var(--a-archiv-s); color:var(--a-archiv-s); border-radius:10px; padding:10px 14px; font-size:13px; }
+    @media (max-width: 760px) {
+      .pmap-row { grid-template-columns: 1fr; }
+      .pmap-arrow { transform:rotate(90deg); justify-self:center; }
+    }
+
+    /* Legende */
+    .legend { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+    @media (max-width: 860px) { .legend { grid-template-columns: 1fr; } }
+    .legend h4 { margin:0 0 8px; font-size:13px; color:var(--gray-700); text-transform:uppercase; letter-spacing:.04em; }
+    .legend-chips { display:flex; flex-wrap:wrap; gap:7px; }
+    .sym-list { display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap:6px 14px; }
+    .sym { display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--gray-700); }
+    .sym svg { flex:0 0 34px; height:26px; }
+
+    /* Reiter */
+    .ptabs { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 0; border-bottom:2px solid var(--gray-200); }
+    .ptab { border:0; background:transparent; font:inherit; font-size:14px; font-weight:600; color:var(--gray-600);
+            padding:11px 16px; border-radius:10px 10px 0 0; cursor:pointer; margin-bottom:-2px; border-bottom:3px solid transparent; }
+    .ptab:hover { color:var(--gray-900); background:var(--gray-50); }
+    .ptab.active { color:var(--primary-dark,#0f3a6e); background:#fff; border-bottom-color:var(--primary); }
+    .ppanel { background:#fff; border:1px solid var(--gray-200); border-top:0; border-radius:0 0 12px 12px; padding:18px; margin-bottom:22px; }
+
+    /* Diagramm */
+    .bpmn-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:12px; }
+    .bpmn-head h2 { margin:0 0 4px; font-size:19px; }
+    .bpmn-views { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 10px; }
+    .bpmn-views span { font-size:12px; color:var(--gray-500); margin-right:2px; }
+    .bpmn-views button { font:inherit; font-size:12.5px; font-weight:600; padding:6px 11px; border-radius:999px; cursor:pointer;
+                         border:1.5px solid var(--gray-300); background:#fff; color:var(--gray-700); }
+    .bpmn-views button:hover { border-color:var(--primary); color:var(--primary); }
+    .bpmn-views button.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .bpmn-actions { display:flex; flex-wrap:wrap; gap:6px; }
+    .bpmn-actions button, .bpmn-actions a { font:inherit; font-size:12.5px; font-weight:600; padding:7px 11px; border-radius:8px;
+                         border:1px solid var(--gray-300); background:var(--gray-50); color:var(--gray-700); cursor:pointer; text-decoration:none; white-space:nowrap; }
+    .bpmn-actions button:hover, .bpmn-actions a:hover { background:#fff; border-color:var(--primary); color:var(--primary); }
+    .bpmn-actions .dl { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .bpmn-actions .dl:hover { background:var(--primary-dark,#0f3a6e); color:#fff; }
+    .bpmn-box { position:relative; height:620px; border:1px solid var(--gray-200); border-radius:12px; overflow:hidden;
+                background: radial-gradient(circle, #e7ecf3 1px, transparent 1px) 0 0 / 22px 22px, #fbfcfe; }
+    .bpmn-box:fullscreen { height:100vh; border-radius:0; }
+    .bpmn-canvas { position:absolute; inset:0; }
+    .bpmn-hint { position:absolute; left:12px; bottom:10px; font-size:11.5px; color:var(--gray-500); background:rgba(255,255,255,.9);
+                 padding:4px 9px; border-radius:6px; pointer-events:none; }
+    .bpmn-error { padding:30px; color:var(--danger); font-size:14px; }
+    .bjs-breadcrumbs { top:10px !important; left:12px !important; }
+
+    /* Schritte */
+    .steps-wrap { display:grid; grid-template-columns: 1.35fr 1fr; gap:18px; margin-top:18px; }
+    @media (max-width: 980px) { .steps-wrap { grid-template-columns: 1fr; } }
+    .steps { list-style:none; margin:0; padding:0; counter-reset:s; }
+    .steps li { position:relative; padding:10px 0 10px 42px; border-top:1px solid var(--gray-100); font-size:13.5px; color:var(--gray-700); line-height:1.55; }
+    .steps li:first-child { border-top:0; }
+    .steps li::before { counter-increment:s; content:counter(s); position:absolute; left:0; top:10px; width:28px; height:28px; border-radius:50%;
+                        background:var(--primary); color:#fff; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; }
+    .steps .chip { margin-right:6px; vertical-align:1px; }
+    .box-title { margin:0 0 10px; font-size:14px; color:var(--gray-800); }
+    .side-box { background:var(--gray-50); border:1px solid var(--gray-200); border-radius:12px; padding:14px 16px; }
+    .rules { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .rules td { padding:8px 6px; border-top:1px solid var(--gray-200); vertical-align:top; color:var(--gray-700); line-height:1.45; }
+    .rules tr:first-child td { border-top:0; }
+    .rules td:first-child { white-space:nowrap; width:1%; }
+    .note { margin-top:12px; font-size:12.5px; color:var(--gray-600); line-height:1.5; }
+
+    /* Rahmen, Stand */
+    .proc-two { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 760px) { .proc-two { grid-template-columns: 1fr; } }
+    .chk { list-style:none; margin:0; padding:0; }
+    .chk li { position:relative; padding:5px 0 5px 26px; font-size:13px; color:var(--gray-700); line-height:1.5; }
+    .chk li::before { content:"✓"; position:absolute; left:0; top:5px; color:var(--secondary); font-weight:700; }
+    .status-list { list-style:none; margin:0; padding:0; }
+    .status-list li { display:flex; align-items:flex-start; gap:9px; padding:5px 0; font-size:13px; color:var(--gray-700); line-height:1.5; }
+    .status-dot { flex:0 0 auto; margin-top:5px; width:9px; height:9px; border-radius:50%; }
+    .dot-live { background:var(--t-ok-s); }
+    .dot-plan { background:var(--t-plan-s); }
+    .law { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; }
+    .law div { border-radius:10px; padding:11px 13px; font-size:12.5px; line-height:1.5; border:1.5px solid; }
+    .law b { display:block; font-size:13.5px; margin-bottom:2px; }
+    .dl-list { display:grid; gap:8px; }
+    .dl-list a { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--gray-200); border-radius:10px;
+                 text-decoration:none; color:var(--gray-800); font-size:13.5px; background:#fff; }
+    .dl-list a:hover { border-color:var(--primary); color:var(--primary); }
+    .dl-list small { color:var(--gray-500); margin-left:auto; font-size:12px; }
   </style>
 </head>
 <body class="auth-guard">
@@ -71,105 +172,255 @@
   <div class="hero">
     <div class="hero-icon">🧭</div>
     <div>
-      <h1>So läuft die E-Rechnung</h1>
-      <p>Aus WGC-/SHB-Rechnungen (PDF) werden EN-16931-konforme E-Rechnungen
-         (XRechnung 3.0 / ZUGFeRD 2.4). Diese Seite beschreibt den Ablauf, die
-         eingebauten Prüfungen und den aktuellen Stand.</p>
+      <h1>So laufen Rechnungen und Zahlungen bei DIHAG</h1>
+      <p>Drei Prozesse, farbig als BPMN dargestellt: der Rechnungseingang aus den Werks-Postfächern,
+         der Rechnungsausgang mit dem Konverter und der Zahlungsausgang mit dem MC-Converter.
+         Jede Farbe steht für einen Beteiligten, jede Raute für eine Entscheidung. Unterprozesse
+         klappst du per Klick auf.</p>
       <div class="hero-badges">
+        <span class="badge">BPMN 2.0</span>
         <span class="badge">XRechnung 3.0</span>
         <span class="badge">ZUGFeRD 2.4</span>
         <span class="badge">EN 16931</span>
-        <span class="badge">WGC · SHB</span>
+        <span class="badge">ISO 20022</span>
       </div>
     </div>
   </div>
 
-  <!-- Einordnung -->
+  <!-- Prozesslandkarte -->
   <div class="card">
     <div class="card-header">
-      <span class="card-icon">🎯</span>
-      <h3>Wozu das Tool dient</h3>
+      <span class="card-icon">🗺️</span>
+      <h3>Prozesslandkarte</h3>
     </div>
     <div class="card-body">
-      <p class="proc-lead">
-        Das Tool ist eine <strong>Brücke für den händischen Rest</strong>: für Rechnungen,
-        die manuell geschrieben werden oder aus Systemen ohne native E-Rechnung stammen.
-        Der <strong>Standardprozess ab 2027</strong> bleibt die direkte Erzeugung im jeweiligen
-        ERP, bei der PDF und XML aus einer Quelle entstehen und kein manueller Eingriff nötig ist.
-      </p>
-      <div class="proc-callout" style="margin-top:12px;">
-        <strong>Rechtlicher Rahmen:</strong> Bei ZUGFeRD (PDF + XML) ist der <strong>strukturierte
-        XML-Teil maßgeblich</strong> (BMF-Schreiben 15.10.2024) — weicht das sichtbare PDF davon ab,
-        gilt das XML. Fristen: seit 01.01.2025 Pflicht zum <em>Empfang</em>, ab 01.01.2027 zur
-        <em>Ausstellung</em> (Umsatz &gt; 800.000 €), ab 01.01.2028 für alle.
+      <p class="proc-lead">Ein Klick auf eine Zeile öffnet das passende Diagramm weiter unten.</p>
+      <div class="pmap">
+        <button type="button" class="pmap-row" data-go="eingang">
+          <span class="pmap-ext"><b>🚚</b>Lieferant</span>
+          <span class="pmap-arrow">➜</span>
+          <span class="pmap-core in"><h4>📥 Rechnungseingang</h4><p>Postfach je Werk, automatische Prüfung, Ablage in ERAR_&lt;Werk&gt;, Buchungsweg für die Buchhaltung</p></span>
+          <span class="pmap-arrow">➜</span>
+          <span class="pmap-ext"><b>📒</b>Kreditorenbuchhaltung</span>
+        </button>
+        <button type="button" class="pmap-row" data-go="ausgang">
+          <span class="pmap-ext"><b>🧾</b>Vertrieb / ERP</span>
+          <span class="pmap-arrow">➜</span>
+          <span class="pmap-core out"><h4>📤 Rechnungsausgang</h4><p>PDF in den Konverter, Daten prüfen, ZUGFeRD oder XRechnung erzeugen, Ablage in AR_&lt;Werk&gt;</p></span>
+          <span class="pmap-arrow">➜</span>
+          <span class="pmap-ext"><b>🏢</b>Kunde</span>
+        </button>
+        <button type="button" class="pmap-row" data-go="zahlung">
+          <span class="pmap-ext"><b>💶</b>Zahllauf (ERP / MultiCash)</span>
+          <span class="pmap-arrow">➜</span>
+          <span class="pmap-core pay"><h4>🏦 Zahlungsausgang</h4><p>SEPA-Datei auf pain.001.001.09 umstellen, Preflight, Freigabe im Vier-Augen-Prinzip</p></span>
+          <span class="pmap-arrow">➜</span>
+          <span class="pmap-ext"><b>🏛️</b>Hausbank</span>
+        </button>
+        <div class="pmap-base">🗄️ <strong>Überall dabei:</strong> SharePoint-Ablage je Werk, GoBD-Aufbewahrung und das
+          <a href="monitoring.html">Monitoring</a> mit Filtern, Dubletten und Fälligkeiten.</div>
       </div>
     </div>
   </div>
 
-  <!-- Ablauf -->
+  <!-- Legende -->
   <div class="card">
     <div class="card-header">
-      <span class="card-icon">🔄</span>
-      <h3>Der Ablauf — Ausgangsrechnung erstellen</h3>
+      <span class="card-icon">🎨</span>
+      <h3>So liest du die Diagramme</h3>
+    </div>
+    <div class="card-body legend">
+      <div>
+        <h4>Wer macht was (Farbe der Bahn)</h4>
+        <div class="legend-chips">
+          <span class="chip a-auto">Postfach &amp; Power Automate</span>
+          <span class="chip a-api">Prüfdienst (Azure)</span>
+          <span class="chip a-archiv">SharePoint &amp; Monitoring</span>
+          <span class="chip a-mensch">Menschen: Buchhaltung, Vertrieb, Treasury</span>
+          <span class="chip a-app">Browser-Apps</span>
+          <span class="chip a-erp">ERP, MultiCash, Versand</span>
+          <span class="chip a-extern">Extern: Lieferant, Kunde, Bank</span>
+        </div>
+        <h4 style="margin-top:14px;">Was ist das Ergebnis</h4>
+        <div class="legend-chips">
+          <span class="chip t-ok">Start und gutes Ende</span>
+          <span class="chip t-gate">Entscheidung</span>
+          <span class="chip t-warn">Vorbehalt, Prüfung, Hinweis</span>
+          <span class="chip t-err">Fehler, Zurückweisung</span>
+          <span class="chip t-plan">geplant oder außerhalb dieses Tools</span>
+        </div>
+      </div>
+      <div>
+        <h4>Symbole</h4>
+        <div class="sym-list">
+          <div class="sym"><svg viewBox="0 0 34 26"><circle cx="17" cy="13" r="10" fill="#DDF3E4" stroke="#1E7B3A" stroke-width="1.5"/></svg>Start</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><circle cx="17" cy="13" r="10" fill="#DDF3E4" stroke="#1E7B3A" stroke-width="4"/></svg>Ende</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><circle cx="17" cy="13" r="10" fill="#DDF3E4" stroke="#1E7B3A" stroke-width="1.5"/><rect x="11.5" y="9" width="11" height="8" fill="none" stroke="#1E7B3A" stroke-width="1.2"/><path d="M11.5 9 L17 13.5 L22.5 9" fill="none" stroke="#1E7B3A" stroke-width="1.2"/></svg>Start durch Nachricht (Mail)</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#D8E8F8" stroke="#17509E" stroke-width="1.5"/><circle cx="9" cy="9" r="3" fill="none" stroke="#17509E" stroke-width="1.2"/></svg>Automatischer Schritt (Zahnrad)</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#FFE3C8" stroke="#C2410C" stroke-width="1.5"/><circle cx="9" cy="8" r="2.2" fill="none" stroke="#C2410C" stroke-width="1.2"/><path d="M5.5 14 Q9 10 12.5 14" fill="none" stroke="#C2410C" stroke-width="1.2"/></svg>Schritt einer Person (Männchen)</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#D8E8F8" stroke="#17509E" stroke-width="1.5"/><rect x="5.5" y="6" width="8" height="6" fill="#17509E"/></svg>Nachricht senden (Brief)</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><path d="M17 2 L28 13 L17 24 L6 13 Z" fill="#FFF8DB" stroke="#8A6100" stroke-width="1.5"/><path d="M13 9 L21 17 M21 9 L13 17" stroke="#8A6100" stroke-width="1.8"/></svg>Entscheidung: genau ein Weg</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><path d="M17 2 L28 13 L17 24 L6 13 Z" fill="#FFF8DB" stroke="#8A6100" stroke-width="1.5"/><circle cx="17" cy="13" r="4.5" fill="none" stroke="#8A6100" stroke-width="1.8"/></svg>Entscheidung: ein oder mehrere Wege</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><path d="M17 2 L28 13 L17 24 L6 13 Z" fill="#FFF8DB" stroke="#8A6100" stroke-width="1.5"/><path d="M17 8 V18 M12 13 H22" stroke="#8A6100" stroke-width="1.8"/></svg>Alle Wege gleichzeitig</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#E6DDF7" stroke="#5B3FA8" stroke-width="1.5"/><rect x="13" y="15" width="8" height="7" fill="#fff" stroke="#5B3FA8" stroke-width="1"/><path d="M17 16.5 V20.5 M15 18.5 H19" stroke="#5B3FA8" stroke-width="1.1"/></svg>Unterprozess: Pfeil unten rechts klicken</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><rect x="2" y="3" width="30" height="20" rx="4" fill="none" stroke="#17509E" stroke-width="1.4" stroke-dasharray="4 3"/></svg>Gruppe, z. B. „je Anhang“</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><path d="M3 13 H28" stroke="#374151" stroke-width="1.3" stroke-dasharray="4 3"/><circle cx="4" cy="13" r="2.5" fill="#fff" stroke="#374151"/><path d="M26 9 L31 13 L26 17 Z" fill="#fff" stroke="#374151"/></svg>Nachricht zwischen Beteiligten</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prozesse -->
+  <div id="prozesse">
+    <div class="ptabs" role="tablist">
+      <button type="button" class="ptab" data-tab="eingang" role="tab">📥 Rechnungseingang</button>
+      <button type="button" class="ptab" data-tab="ausgang" role="tab">📤 Rechnungsausgang</button>
+      <button type="button" class="ptab" data-tab="zahlung" role="tab">🏦 Zahlungsausgang</button>
+    </div>
+
+    <!-- Eingang -->
+    <section class="ppanel" id="panel-eingang" hidden>
+      <div class="bpmn-head">
+        <div>
+          <h2>📥 Rechnungseingang</h2>
+          <p class="proc-lead">Lieferanten schicken Rechnungen an das Postfach ihres Werks. Ein Power-Automate-Flow
+            gibt jeden PDF- oder XML-Anhang an den Prüfdienst, legt das Ergebnis GoBD-sicher in SharePoint ab
+            und sagt der Buchhaltung, wie gebucht wird.</p>
+        </div>
+        <div class="bpmn-actions" data-actions="eingang"></div>
+      </div>
+      <div class="bpmn-views" id="views-eingang"></div>
+      <div class="bpmn-box" id="box-eingang">
+        <div class="bpmn-canvas" id="canvas-eingang"></div>
+        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Pfeil an einem Unterprozess klappt ihn auf</div>
+      </div>
+      <div class="steps-wrap">
+        <div>
+          <h4 class="box-title">Schritt für Schritt</h4>
+          <ol class="steps">
+            <li><span class="chip a-extern">Lieferant</span>schickt die Rechnung an das Rechnungspostfach seines Werks, zum Beispiel er-zaigler@dihag.com. Damit steht das Werk schon fest.</li>
+            <li><span class="chip a-auto">Power Automate</span>schaut sich jede neue Mail an. Kommt sie vom eigenen Postfach, ist es eine Archiv-Mail. Sie wird nur in den Unterordner „Verarbeitet“ gelegt (Schleifenschutz). Alle anderen Mails laufen weiter, und zwar für jeden PDF- und XML-Anhang einzeln.</li>
+            <li><span class="chip a-api">Prüfdienst</span>erkennt die Art (ZUGFeRD, XRechnung oder sonstige Rechnung), prüft mit Mustang oder KoSIT, liest die Kopfdaten und wendet das 8-Punkte-Regelwerk an. Heraus kommen der Buchungsweg, Prüf-Flags, ein Prüfbericht und bei Bedarf ein lesbares PDF.</li>
+            <li><span class="chip a-archiv">SharePoint</span>bekommt das Original in ERAR_&lt;Werk&gt;. Der Dateiname aus Rechnungsnummer und USt-IdNr verhindert, dass sich zwei Lieferanten gegenseitig überschreiben. Daneben liegen lesbares PDF, Prüfbericht und XML, alle Metadaten sind gesetzt.</li>
+            <li><span class="chip a-auto">Power Automate</span>meldet rote Ergebnisse oder ein falsches Werk an die Werks-Adresse aus den Einstellungen und schickt die lesbare Fassung als Archiv-Mail ins eigene Postfach.</li>
+            <li><span class="chip a-mensch">Buchhaltung</span>arbeitet nach dem Buchungsweg aus der Tabelle rechts. Berichtigung, Rückfrage oder Zurückweisung gehen per Kreditor-Mail an den Lieferanten.</li>
+            <li><span class="chip a-archiv">Monitoring</span>zeigt alles auf einen Blick: Kennzahlen, Schnellfilter, Dubletten und überfällige Rechnungen.</li>
+          </ol>
+        </div>
+        <div class="side-box">
+          <h4 class="box-title">Was bedeutet der Buchungsweg?</h4>
+          <table class="rules">
+            <tr><td><span class="chip t-ok">Automatik</span></td><td>Echte E-Rechnung, konform, normaler Inlandsumsatz. Direkt aus der XML buchen.</td></tr>
+            <tr><td><span class="chip t-man">Manuell</span></td><td>Reverse-Charge, innergemeinschaftlich, Ausfuhr, steuerfrei oder nicht steuerbar (AE, K, G, E, O). Erst Vier-Augen-Prüfung, dann buchen.</td></tr>
+            <tr><td><span class="chip t-warn">Unter Vorbehalt</span></td><td>PDF ohne E-Rechnung, fremde XML wie openTRANS oder PDF/A-3 fehlt. Als sonstige Rechnung buchen und Berichtigung anfordern.</td></tr>
+            <tr><td><span class="chip t-err">Zurückgewiesen</span></td><td>Profil MINIMUM oder BASIC-WL. Das ist keine E-Rechnung, also nicht buchen und zurückweisen.</td></tr>
+            <tr><td><span class="chip t-warn">Rückfrage</span></td><td>Das sichtbare PDF weicht bei Steuer, Betrag oder Nummer von der XML ab. Gebucht wird aus der XML, der Lieferant bekommt eine Rückfrage.</td></tr>
+            <tr><td><span class="chip t-plan">Nur Hinweis</span></td><td>Rein formale Fehler, etwa eine fehlende Leitweg-ID. Kein Abwerten, nur ein Vermerk im Monitoring.</td></tr>
+          </table>
+          <p class="note">Das Regelwerk folgt der steuerlichen Einordnung nach UStAE und GoBD. Details stehen in der Verfahrensdokumentation.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ausgang -->
+    <section class="ppanel" id="panel-ausgang" hidden>
+      <div class="bpmn-head">
+        <div>
+          <h2>📤 Rechnungsausgang</h2>
+          <p class="proc-lead">Ausgangsrechnungen entstehen im ERP als PDF. SAP-Werke senden über EDIzone, alle anderen
+            machen daraus im Konverter eine E-Rechnung. Das Tool prüft vor und nach dem Erzeugen und legt alles
+            mit Prüfpfad ab.</p>
+        </div>
+        <div class="bpmn-actions" data-actions="ausgang"></div>
+      </div>
+      <div class="bpmn-views" id="views-ausgang"></div>
+      <div class="bpmn-box" id="box-ausgang">
+        <div class="bpmn-canvas" id="canvas-ausgang"></div>
+        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Pfeil an einem Unterprozess klappt ihn auf</div>
+      </div>
+      <div class="steps-wrap">
+        <div>
+          <h4 class="box-title">Schritt für Schritt</h4>
+          <ol class="steps">
+            <li><span class="chip a-erp">Versand</span>bucht den Warenausgang.</li>
+            <li><span class="chip a-mensch">Vertrieb</span>legt die Faktura im ERP an und erzeugt das PDF. SAP-Werke senden über EDIzone, das ist ein eigener Prozess.</li>
+            <li><span class="chip a-app">Konverter</span>bekommt das PDF. Er erkennt Werk und Layout (WGC, SHB, ZAI), liest die Felder aus, bei Scans per Texterkennung, und sperrt die Verkäufer-Stammdaten.</li>
+            <li><span class="chip a-mensch">Vertrieb</span>prüft und ergänzt die Daten. Bei Kunden im EU-Ausland läuft eine qualifizierte USt-IdNr-Prüfung beim BZSt. Dann das Format wählen: ZUGFeRD als Standard, XRechnung für öffentliche Auftraggeber.</li>
+            <li><span class="chip a-app">Konverter</span>prüft vor dem Erzeugen Pflichtfelder, IBAN, Summen und den Abgleich mit dem Original. Danach liest er die XML zurück und vergleicht sie (Selbstprüfung). Bei einem Fehler geht es zurück zur Korrektur.</li>
+            <li><span class="chip a-archiv">SharePoint</span>bekommt E-Rechnung, lesbares PDF und Prüfpfad (Hash, Änderungen, Prüfer) in AR_&lt;Werk&gt;.</li>
+            <li><span class="chip a-mensch">Vertrieb</span>erstellt den Mail-Entwurf direkt im Tool und schickt die Rechnung an den Kunden.</li>
+          </ol>
+        </div>
+        <div class="side-box">
+          <h4 class="box-title">Worauf das Tool achtet</h4>
+          <table class="rules">
+            <tr><td><span class="chip t-err">Stopp</span></td><td>IBAN-Prüfziffer falsch, Gesamtbetrag nicht plausibel, Netto plus MwSt ergibt nicht Brutto.</td></tr>
+            <tr><td><span class="chip t-warn">Warnung</span></td><td>Werte fehlen im Original-PDF oder die USt-IdNr sieht ungewöhnlich aus. Du entscheidest: fortfahren oder abbrechen.</td></tr>
+            <tr><td><span class="chip t-err">Selbstprüfung</span></td><td>Weicht die erzeugte XML von der Anzeige ab, entsteht keine Datei.</td></tr>
+            <tr><td><span class="chip t-ok">Standard</span></td><td>Das PDF wird aus den Rechnungsdaten erzeugt. So sind PDF und XML garantiert gleich und PDF/A-3b-konform.</td></tr>
+          </table>
+          <p class="note">Die Konformität des Generators prüfen KoSIT, veraPDF und Mustang bei jeder Änderung automatisch.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Zahlung -->
+    <section class="ppanel" id="panel-zahlung" hidden>
+      <div class="bpmn-head">
+        <div>
+          <h2>🏦 Zahlungsausgang (MC-Converter)</h2>
+          <p class="proc-lead">MultiCash und ältere ERP-Exporte liefern SEPA-Dateien im alten Format. Der MC-Converter
+            stellt sie auf das von den Banken verlangte pain.001.001.09 um und prüft sie vor dem Upload.</p>
+        </div>
+        <div class="bpmn-actions" data-actions="zahlung"></div>
+      </div>
+      <div class="bpmn-views" id="views-zahlung"></div>
+      <div class="bpmn-box" id="box-zahlung">
+        <div class="bpmn-canvas" id="canvas-zahlung"></div>
+        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Pfeil an einem Unterprozess klappt ihn auf</div>
+      </div>
+      <div class="steps-wrap">
+        <div>
+          <h4 class="box-title">Schritt für Schritt</h4>
+          <ol class="steps">
+            <li><span class="chip a-erp">ERP / MultiCash</span>Zahlungsvorschlag erstellen, freigeben und die SEPA-Datei exportieren (pain.001.003.03 oder 001.001.03).</li>
+            <li><span class="chip a-app">MC-Converter</span>Datei laden, die Endung ist egal. Das Tool stellt auf pain.001.001.09 um: Datum als &lt;Dt&gt;, BIC als &lt;BICFI&gt;, Sammelbuchung, Adressen raus, Summen neu berechnet, Zeichensatz bereinigt.</li>
+            <li><span class="chip a-app">MC-Converter</span>SEPA-Preflight: IBAN-Prüfziffern, BIC, Summen, Zeichensatz, Feldlängen und Datum. Grün heißt bankfertig.</li>
+            <li><span class="chip a-mensch">Treasury</span>Bei Rot die Ursache im ERP korrigieren und neu exportieren. Bei Grün die Datei im Banking-Portal oder per EBICS hochladen und im Vier-Augen-Prinzip freigeben.</li>
+            <li><span class="chip a-extern">Hausbank</span>führt die Überweisungen aus.</li>
+          </ol>
+        </div>
+        <div class="side-box">
+          <h4 class="box-title">Gut zu wissen</h4>
+          <table class="rules">
+            <tr><td><span class="chip t-ok">Lokal</span></td><td>Alles läuft im Browser. Die Zahldatei verlässt den Rechner nicht.</td></tr>
+            <tr><td><span class="chip t-ok">Grün</span></td><td>Alle IBANs rechnerisch gültig, Summen stimmen, Zeichensatz sauber.</td></tr>
+            <tr><td><span class="chip t-err">Rot</span></td><td>Nicht hochladen. Die Liste zeigt den betroffenen Posten.</td></tr>
+            <tr><td><span class="chip t-warn">Hinweis</span></td><td>Ein Datum in der Vergangenheit ist erlaubt. Die Bank bucht am nächsten Bankarbeitstag.</td></tr>
+          </table>
+          <p class="note">Zum Tool: <a href="mc-converter.html">MC-Converter öffnen</a>.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Rechtlicher Rahmen -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">⚖️</span>
+      <h3>Rechtlicher Rahmen</h3>
     </div>
     <div class="card-body">
-      <ol class="proc-steps">
-        <li class="proc-step">
-          <span class="proc-num">1</span>
-          <div>
-            <h4>PDF hochladen</h4>
-            <p>Die Rechnung als PDF in den Konverter ziehen. Die Vorschau erscheint rechts.</p>
-          </div>
-        </li>
-        <li class="proc-step">
-          <span class="proc-num">2</span>
-          <div>
-            <h4>Automatische Erkennung</h4>
-            <p>Die Rechnungsdaten werden aus der Textebene ausgelesen. Bei gescannten PDFs
-               ohne Textebene springt automatisch die Texterkennung (OCR) ein.</p>
-          </div>
-        </li>
-        <li class="proc-step">
-          <span class="proc-num">3</span>
-          <div>
-            <h4>Daten prüfen &amp; ergänzen</h4>
-            <p>Erkannte Felder kontrollieren und Pflichtangaben vervollständigen. Die
-               Verkäufer-Stammdaten (Name, IBAN, USt-IdNr., Register) sind dabei
-               <strong>gesperrt</strong> — Entsperren nur bewusst und protokolliert.</p>
-          </div>
-        </li>
-        <li class="proc-step">
-          <span class="proc-num">4</span>
-          <div>
-            <h4>Automatische Prüfungen</h4>
-            <p>Vor dem Export: IBAN-Prüfziffer, USt-IdNr.-Format, Summenkonsistenz, Abgleich
-               der Schlüsselwerte gegen das Original-PDF und Selbstverifikation des erzeugten XML.</p>
-          </div>
-        </li>
-        <li class="proc-step">
-          <span class="proc-num">5</span>
-          <div>
-            <h4>Exportieren</h4>
-            <p><strong>XRechnung</strong> (reines XML), <strong>ZUGFeRD</strong> (PDF mit
-               eingebettetem XML) oder direkt <strong>als Mail</strong>. Standardmäßig wird das PDF
-               aus den Rechnungsdaten erzeugt — PDF und XML sind dann garantiert identisch und
-               PDF/A-3b-konform. (Abschaltbar, um ein hochgeladenes Original-PDF einzubetten.)</p>
-          </div>
-        </li>
-        <li class="proc-step">
-          <span class="proc-num">6</span>
-          <div>
-            <h4>Ablage &amp; Prüfpfad</h4>
-            <p>Der Export wird in SharePoint abgelegt und im Verlauf gespeichert — inklusive
-               Prüfpfad (Quell-PDF-Hash, manuelle Änderungen, Prüfer).</p>
-          </div>
-        </li>
-      </ol>
+      <div class="law">
+        <div class="t-ok"><b>Empfang</b>Seit 01.01.2025 muss jedes Unternehmen E-Rechnungen empfangen können.</div>
+        <div class="t-warn"><b>Ausstellung</b>Bis 31.12.2026 sind sonstige Rechnungen noch erlaubt. Bis 31.12.2027 gilt das für Unternehmen mit höchstens 800.000 € Vorjahresumsatz. Ab 01.01.2028 nur noch E-Rechnungen.</div>
+        <div class="a-auto"><b>ZUGFeRD</b>Die XML ist maßgeblich (BMF-Schreiben vom 15.10.2024). Weicht das sichtbare PDF ab, gilt die XML.</div>
+        <div class="a-archiv"><b>Aufbewahrung</b>Rechnungen sind Buchungsbelege und werden GoBD-konform 8 Jahre aufbewahrt, unveränderbar über ein Purview-Label.</div>
+      </div>
     </div>
   </div>
 
   <div class="proc-two">
-    <!-- Sicherheiten -->
     <div class="card">
       <div class="card-header">
         <span class="card-icon">🛡️</span>
@@ -177,82 +428,52 @@
       </div>
       <div class="card-body">
         <ul class="chk">
-          <li><strong>Gesperrte Stammdaten</strong> — Verkäufer-Kernfelder schreibgeschützt.</li>
-          <li><strong>IBAN-Prüfziffer</strong> (mod-97) &amp; USt-IdNr.-Format (EU/CH).</li>
-          <li><strong>Summensperre</strong> — Netto + MwSt = Brutto, Gesamt &gt; 0.</li>
-          <li><strong>PDF ↔ XML-Abgleich</strong> — Schlüsselwerte im Original-PDF gesucht.</li>
-          <li><strong>Selbstverifikation</strong> — XML zurückgelesen und gegen die Anzeige geprüft.</li>
-          <li><strong>PDF aus Daten</strong> — Option für garantierte PDF/XML-Gleichheit.</li>
-          <li><strong>Prüfpfad</strong> — Hash, Änderungs-Diff und Prüfer je Export.</li>
+          <li><strong>Gesperrte Stammdaten</strong>, Entsperren wird protokolliert.</li>
+          <li><strong>IBAN-Prüfziffer</strong>, USt-IdNr-Format und Summensperre.</li>
+          <li><strong>Abgleich mit dem Original</strong> und Selbstprüfung der XML.</li>
+          <li><strong>Eingangsprüfung</strong> mit Mustang und KoSIT, Prüfbericht als Nachweis.</li>
+          <li><strong>Dublettenschutz</strong> über Dateiname aus Nummer und USt-IdNr.</li>
+          <li><strong>Prüfpfad</strong> je Export: Hash, Änderungen, Prüfer.</li>
+          <li><strong>Kein CDN</strong>, alle Bibliotheken liegen lokal.</li>
         </ul>
       </div>
     </div>
-
-    <!-- Eingehende + Zugriff -->
     <div class="card">
       <div class="card-header">
-        <span class="card-icon">📥</span>
-        <h3>Eingang, Zugriff &amp; Verlauf</h3>
+        <span class="card-icon">📌</span>
+        <h3>Aktueller Stand</h3>
       </div>
       <div class="card-body">
-        <ul class="chk">
-          <li><strong>XML → PDF</strong> — empfangene E-Rechnungen (XRechnung/ZUGFeRD-XML,
-              CII oder UBL) in ein lesbares PDF umwandeln.</li>
-          <li><strong>Zugriffssteuerung</strong> — Nutzer sehen nur ihre Gesellschaft
-              (WGC und/oder SHB); Konfiguration über den Reiter „Einstellungen" (Admin).</li>
-          <li><strong>Verlauf</strong> — alle Exporte durchsuch- und filterbar, getrennt
-              nach WGC / SHB.</li>
-          <li><strong>Kein CDN</strong> — alle Bibliotheken lokal gehostet; keine externen
-              Aufrufe, verarbeitet wird nur im Browser.</li>
+        <ul class="status-list">
+          <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Rechnungseingang je Werk über Power Automate (u. a. WGC und ZAI) mit Prüfdienst, Regelwerk, Ablage und Archiv-Mail.</span></li>
+          <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Konverter für Ausgangsrechnungen (WGC, SHB, ZAI) mit Vorab- und Selbstprüfung, Ablage und Mail-Entwurf.</span></li>
+          <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> MC-Converter mit SEPA-Preflight und Monitoring mit Schnellfiltern.</span></li>
+          <li><span class="status-dot dot-plan"></span><span><strong>Geplant:</strong> automatischer Versand der Kreditor-Mails.</span></li>
+          <li><span class="status-dot dot-plan"></span><span><strong>Geplant:</strong> Rechnungs-Parser für EIS, DSO, LEG, EWA, HOL, MEG und SCH.</span></li>
         </ul>
       </div>
     </div>
   </div>
 
-  <!-- Aktueller Stand -->
+  <!-- Downloads -->
   <div class="card">
     <div class="card-header">
-      <span class="card-icon">📌</span>
-      <h3>Aktueller Stand</h3>
+      <span class="card-icon">⬇️</span>
+      <h3>Prozessmodelle herunterladen</h3>
     </div>
     <div class="card-body">
-      <ul class="status-list">
-        <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Konverter
-            (PDF → XRechnung/ZUGFeRD), XML → PDF, Verlauf, Zugriffssteuerung sowie alle
-            Prüf- und Integritätsmechanismen.</span></li>
-        <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Ablage in
-            SharePoint inkl. Prüfpfad; Mailerstellung direkt aus dem Tool.</span></li>
-        <li><span class="status-dot dot-live"></span><span><strong>Konformität: KoSIT + veraPDF grün
-            (CI-geprüft)</strong> — XRechnung/EN 16931 (KoSIT) und PDF/A-3b (veraPDF) werden bei jeder
-            Änderung automatisch validiert; alle Musterfälle bestehen.</span></li>
-        <li><span class="status-dot dot-live"></span><span><strong>Live:</strong>
-            Power-Automate-Anbindung über einen serverseitigen XML → PDF-Endpunkt (Azure Function,
-            POST/GET per Function-Key, ohne M365-Login) — Antwort als PDF/A-3b.</span></li>
-      </ul>
+      <p class="proc-lead" style="margin-bottom:12px;">BPMN 2.0 mit Farben und allen Unterprozessen. Öffnen im Camunda Modeler,
+        auf bpmn.io oder in Signavio.</p>
+      <div class="dl-list">
+        <a href="docs/bpmn/01-rechnungseingang.bpmn" download>📥 Rechnungseingang <small>01-rechnungseingang.bpmn</small></a>
+        <a href="docs/bpmn/02-rechnungsausgang.bpmn" download>📤 Rechnungsausgang <small>02-rechnungsausgang.bpmn</small></a>
+        <a href="docs/bpmn/03-zahlungsausgang-mc-converter.bpmn" download>🏦 Zahlungsausgang <small>03-zahlungsausgang-mc-converter.bpmn</small></a>
+      </div>
     </div>
   </div>
-
-  <!-- Ausklappbar: automatischer Eingangsrechnungs-Workflow -->
-  <details class="proc-details">
-    <summary>Automatischer Eingangsrechnungs-Workflow (SharePoint + Power Automate)</summary>
-    <div class="pd-body">
-      Eingehende E-Rechnungen werden ohne manuellen Schritt in eine lesbare, archivfähige
-      PDF-Fassung überführt:
-      <ol>
-        <li>Die Eingangsrechnung (XRechnung-/ZUGFeRD-XML) landet in SharePoint.</li>
-        <li>Power Automate erkennt die neue Datei und ruft den XML&nbsp;→&nbsp;PDF-Endpunkt
-            (Azure Function) per Function-Key auf.</li>
-        <li>Der Endpunkt liefert ein <strong>PDF/A-3b</strong> zurück.</li>
-        <li>Das PDF wird automatisch zur Rechnung in SharePoint abgelegt.</li>
-      </ol>
-      So entsteht zu jeder eingehenden E-Rechnung automatisch eine lesbare PDF-Fassung —
-      ohne M365-Login und ohne manuelle Konvertierung.
-    </div>
-  </details>
 
 </div><!-- /page-content -->
 
-<!-- Footer / Disclaimer -->
 <footer class="app-footer">
   <div class="app-footer-inner">
     <p class="app-footer-disclaimer">
@@ -274,12 +495,176 @@
 
 <!-- Libraries (lokal, kein CDN) -->
 <script src="js/vendor/msal-browser.min.js"></script>
+<script src="js/vendor/bpmn/bpmn-navigated-viewer.production.min.js"></script>
 
 <!-- App Scripts -->
 <script src="js/auth.js"></script>
 <script src="js/access.js"></script>
 
-<script>onAuthReady(() => initAdminNav());</script>
+<script>
+/* ── Prozessdiagramme (bpmn-js, lokal) ─────────────────────────────────── */
+const PROC = {
+  eingang: { file: 'docs/bpmn/01-rechnungseingang.bpmn', main: 'Collab_Eingang',
+             subs: [['B_intake', 'Eingangsprüfung'], ['C_side', 'Nebendateien ablegen']] },
+  ausgang: { file: 'docs/bpmn/02-rechnungsausgang.bpmn', main: 'Collab_Ausgang',
+             subs: [['K_erk', 'Erkennen und erfassen'], ['K_exp', 'Prüfen und erzeugen']] },
+  zahlung: { file: 'docs/bpmn/03-zahlungsausgang-mc-converter.bpmn', main: 'Collab_Zahlung',
+             subs: [['M_conv', 'Umstellen auf 001.09'], ['M_pre', 'SEPA-Preflight']] },
+};
+const _esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function initProzess() {
+  document.querySelectorAll('.ptab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {
+    showTab(b.dataset.go);
+    document.getElementById('prozesse').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+  for (const key of Object.keys(PROC)) buildControls(key);
+  document.addEventListener('fullscreenchange', () => {
+    for (const key of Object.keys(PROC)) if (PROC[key].viewer) setTimeout(() => fitView(key), 60);
+  });
+  window.addEventListener('resize', () => {
+    const key = currentTab();
+    if (key && PROC[key].viewer) PROC[key].viewer.get('canvas').resized();
+  });
+  const start = location.hash.replace('#', '');
+  showTab(PROC[start] ? start : 'eingang');
+}
+
+function currentTab() {
+  const t = document.querySelector('.ptab.active');
+  return t ? t.dataset.tab : null;
+}
+
+function showTab(key) {
+  document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('active', b.dataset.tab === key));
+  document.querySelectorAll('.ppanel').forEach(p => { p.hidden = p.id !== 'panel-' + key; });
+  history.replaceState(null, '', '#' + key);
+  loadDiagram(key);
+}
+
+function buildControls(key) {
+  const cfg = PROC[key];
+  const views = document.getElementById('views-' + key);
+  views.innerHTML = '<span>Ansicht:</span>'
+    + `<button type="button" data-view="">Gesamtprozess</button>`
+    + cfg.subs.map(([id, label]) => `<button type="button" data-view="${id}">↳ ${_esc(label)}</button>`).join('');
+  views.addEventListener('click', e => {
+    const b = e.target.closest('button[data-view]');
+    if (b) openView(key, b.dataset.view);
+  });
+  const file = cfg.file.split('/').pop();
+  const acts = document.querySelector(`[data-actions="${key}"]`);
+  acts.innerHTML =
+      `<button type="button" data-act="in" title="Vergrößern">＋</button>`
+    + `<button type="button" data-act="out" title="Verkleinern">－</button>`
+    + `<button type="button" data-act="fit" title="Ganzes Diagramm zeigen">⤢ Einpassen</button>`
+    + `<button type="button" data-act="full" title="Vollbild">⛶ Vollbild</button>`
+    + `<button type="button" data-act="svg" title="Aktuelle Ansicht als Bild speichern">🖼 SVG</button>`
+    + `<a class="dl" href="${cfg.file}" download="${file}" title="BPMN-Datei herunterladen">⬇ BPMN</a>`;
+  acts.addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (!b || !cfg.viewer) return;
+    const canvas = cfg.viewer.get('canvas');
+    if (b.dataset.act === 'in') canvas.zoom(canvas.zoom() * 1.25);
+    if (b.dataset.act === 'out') canvas.zoom(canvas.zoom() / 1.25);
+    if (b.dataset.act === 'fit') fitView(key);
+    if (b.dataset.act === 'full') {
+      const box = document.getElementById('box-' + key);
+      if (document.fullscreenElement) document.exitFullscreen(); else if (box.requestFullscreen) box.requestFullscreen();
+    }
+    if (b.dataset.act === 'svg') saveSvg(key);
+  });
+}
+
+function whenSized(el) {
+  return new Promise(resolve => {
+    if (el.clientWidth && el.clientHeight) return resolve();
+    if (!window.ResizeObserver) return setTimeout(resolve, 300);
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth && el.clientHeight) { ro.disconnect(); resolve(); }
+    });
+    ro.observe(el);
+  });
+}
+
+async function loadDiagram(key) {
+  const cfg = PROC[key];
+  if (cfg.viewer) { requestAnimationFrame(() => fitView(key)); return; }
+  if (cfg.loading) return;
+  const canvasEl = document.getElementById('canvas-' + key);
+  cfg.loading = true;
+  await whenSized(canvasEl);           // Viewer erst mit echter Größe starten (sonst Zoom = unendlich)
+  const viewer = new BpmnJS({ container: canvasEl });
+  cfg.viewer = viewer;
+  cfg.needsFit = true;
+  try {
+    const res = await fetch(cfg.file, { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const { warnings } = await viewer.importXML(await res.text());
+    if (warnings && warnings.length) console.warn('BPMN-Hinweise (' + key + '):', warnings);
+  } catch (e) {
+    canvasEl.innerHTML = '<div class="bpmn-error">Diagramm konnte nicht geladen werden: ' + _esc(e.message) + '</div>';
+    return;
+  }
+  viewer.get('eventBus').on('root.set', () => markView(key));
+  // Größe beobachten: Reiterwechsel, Vollbild und Fenstergröße passen die Ansicht an.
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => {
+      viewer.get('canvas').resized();
+      if (cfg.needsFit) fitView(key);
+    }).observe(canvasEl);
+  }
+  fitView(key);
+  markView(key);
+}
+
+// Einpassen nur mit echter Größe (versteckter Reiter hat 0 px), sonst später nachholen.
+function fitView(key) {
+  const cfg = PROC[key];
+  if (!cfg.viewer) return;
+  const el = document.getElementById('canvas-' + key);
+  if (!el.clientWidth || !el.clientHeight) { cfg.needsFit = true; return; }
+  const canvas = cfg.viewer.get('canvas');
+  canvas.resized();
+  try { canvas.zoom('fit-viewport', 'auto'); cfg.needsFit = false; }
+  catch (e) { cfg.needsFit = true; }
+}
+
+function openView(key, subId) {
+  const cfg = PROC[key];
+  if (!cfg.viewer) return;
+  const canvas = cfg.viewer.get('canvas'), reg = cfg.viewer.get('elementRegistry');
+  const root = subId ? reg.get(subId + '_plane') : (reg.get(cfg.main) || canvas.getRootElements()[0]);
+  if (root) canvas.setRootElement(root);
+  fitView(key);
+}
+
+function markView(key) {
+  const cfg = PROC[key];
+  const cur = cfg.viewer.get('canvas').getRootElement();
+  const curId = cur ? cur.id : '';
+  document.querySelectorAll('#views-' + key + ' button[data-view]').forEach(b => {
+    const want = b.dataset.view ? b.dataset.view + '_plane' : cfg.main;
+    b.classList.toggle('active', curId === want || (!b.dataset.view && !curId.endsWith('_plane')));
+  });
+}
+
+async function saveSvg(key) {
+  const cfg = PROC[key];
+  const { svg } = await cfg.viewer.saveSVG();
+  const root = cfg.viewer.get('canvas').getRootElement().id;
+  const suffix = root.endsWith('_plane') ? '-' + root.replace('_plane', '') : '';
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = cfg.file.split('/').pop().replace('.bpmn', suffix + '.svg');
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+</script>
+
+<script>onAuthReady(() => { initAdminNav(); initProzess(); });</script>
 <script>authInit();</script>
 <script>
   (function () {
