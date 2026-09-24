@@ -18,7 +18,8 @@ const MON = {
 };
 
 let _monRecords = [];
-const _monFilter = { werk: '', richtung: '', status: '', format: '', q: '' };
+const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', from: '', to: '', q: '', flag: '' };
+let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
 /* ── Laden ──────────────────────────────────────────────────────────── */
 
@@ -285,12 +286,11 @@ function _monMarkDupes(records) {
 /* ── Filter & Rendering ─────────────────────────────────────────────── */
 
 function _monBuildFilterOptions(libs) {
-  const werke = Array.from(new Set(libs.map(l => l.werk))).sort();
-  const status = Array.from(new Set(_monRecords.map(r => r.status).filter(Boolean))).sort();
-  const formate = Array.from(new Set(_monRecords.map(r => r.format).filter(Boolean))).sort();
-  _fillSelect('mon-f-werk', werke, 'Alle Werke');
-  _fillSelect('mon-f-status', status, 'Alle Status');
-  _fillSelect('mon-f-format', formate, 'Alle Formate');
+  const uniq = arr => Array.from(new Set(arr.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'de'));
+  _fillSelect('mon-f-werk',    uniq(libs.map(l => l.werk)),              'Alle Werke');
+  _fillSelect('mon-f-klass',   uniq(_monRecords.map(r => _monKlass(r))), 'Alle Typen');
+  _fillSelect('mon-f-buchung', uniq(_monRecords.map(r => r.buchung)),    'Alle Buchung');
+  _fillSelect('mon-f-status',  uniq(_monRecords.map(r => r.status)),     'Alle Status');
 }
 
 function _fillSelect(id, values, allLabel) {
@@ -303,28 +303,80 @@ function _fillSelect(id, values, allLabel) {
 function _monApply() {
   const f = _monFilter;
   const q = f.q.trim().toLowerCase();
-  const rows = _monRecords.filter(r =>
-    (!f.werk || r.werk === f.werk) &&
-    (!f.richtung || r.richtung === f.richtung) &&
-    (!f.status || r.status === f.status) &&
-    (!f.format || r.format === f.format) &&
-    (!q || (r.nummer + ' ' + r.steller + ' ' + r.empf).toLowerCase().includes(q))
-  );
-  _monRenderKpis(rows);
+  // Basis = alle Filter AUSSER dem Schnellfilter (flag). So zeigen die Kacheln die
+  // Zahlen im aktuellen Filter-Umfang, ohne dass ein aktiver Schnellfilter sich
+  // selbst auf 0 kürzt. Die Tabelle wird zusätzlich per flag eingeengt.
+  const base = _monRecords.filter(r => _monMatchBase(r, f, q));
+  const rows = f.flag ? base.filter(r => _monMatchFlag(r, f.flag)) : base;
+  _monSortRows(rows);
+  _monRenderKpis(base);
   _monRenderTable(rows);
+  _monRenderChips();
+  _monMarkSortHeaders();
+}
+
+function _monMatchBase(r, f, q) {
+  const d = (r.datum || '').slice(0, 10);
+  return (!f.werk     || r.werk === f.werk)
+      && (!f.richtung || r.richtung === f.richtung)
+      && (!f.klass    || _monKlass(r) === f.klass)
+      && (!f.konform  || (r.konform || '').toLowerCase().startsWith(f.konform))
+      && (!f.buchung  || r.buchung === f.buchung)
+      && (!f.status   || r.status === f.status)
+      && (!f.from     || (d && d >= f.from))
+      && (!f.to       || (d && d <= f.to))
+      && (!q || (r.nummer + ' ' + r.steller + ' ' + r.empf).toLowerCase().includes(q));
+}
+
+function _monMatchFlag(r, flag) {
+  switch (flag) {
+    case 'offen':      return !!r.status && !['Gebucht', 'Archiviert'].includes(r.status);
+    case 'fehler':     return r.status === 'Fehler' || /^rot/i.test(r.konform || '') || !!r.fehler;
+    case 'dublette':   return !!r.dublette;
+    case 'manuell':    return r.manuellePruefung || /manuell/i.test(r.buchung || '');
+    case 'rueckfrage': return !!r.rueckfrage;
+    case 'zurueck':    return /zur(?:ü|ue)ckgew/i.test(r.buchung || '');
+    default:           return true;
+  }
+}
+
+function _monSortRows(rows) {
+  const { key, dir } = _monSort;
+  rows.sort((a, b) => {
+    const va = _monSortVal(a, key), vb = _monSortVal(b, key);
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb), 'de') * dir;
+  });
+}
+
+function _monSortVal(r, key) {
+  switch (key) {
+    case 'datum':    return (r.datum || '').slice(0, 10);
+    case 'werk':     return r.werk || '';
+    case 'richtung': return r.richtung || '';
+    case 'nummer':   return (r.nummer || '').toLowerCase();
+    case 'partner':  return ((r.richtung === 'Eingang' ? r.steller : r.empf) || '').toLowerCase();
+    case 'brutto':   return r.brutto == null ? -Infinity : r.brutto;
+    case 'format':   return r.format || '';
+    case 'klass':    return _monKlass(r) || '';
+    case 'status':   return r.status || '';
+    case 'buchung':  return r.buchung || '';
+    case 'konform':  return r.konform || '';
+    default:         return '';
+  }
 }
 
 function _monRenderKpis(rows) {
   const total = rows.length;
   const eingang = rows.filter(r => r.richtung === 'Eingang').length;
   const ausgang = rows.filter(r => r.richtung === 'Ausgang').length;
-  const offen = rows.filter(r => r.status && !['Gebucht', 'Archiviert'].includes(r.status)).length;
-  const fehler = rows.filter(r => r.status === 'Fehler' || /^Rot/i.test(r.konform) || r.fehler).length;
+  const offen = rows.filter(r => _monMatchFlag(r, 'offen')).length;
+  const fehler = rows.filter(r => _monMatchFlag(r, 'fehler')).length;
   const dubletten = rows.filter(r => r.dublette).length;
   // Prüfschritt-Warteschlangen (UStAE/GoBD): manuelle Prüfung, Rückfrage, Zurückweisung.
-  const manuell    = rows.filter(r => r.manuellePruefung || /manuell/i.test(r.buchung || '')).length;
+  const manuell    = rows.filter(r => _monMatchFlag(r, 'manuell')).length;
   const rueckfrage = rows.filter(r => r.rueckfrage).length;
-  const zurueck    = rows.filter(r => /zur(?:ü|ue)ckgew/i.test(r.buchung || '')).length;
+  const zurueck    = rows.filter(r => _monMatchFlag(r, 'zurueck')).length;
 
   // Klassifizierung (ZUGFeRD / XRechnung / PDF ohne E-Rechnung) als Übersichtsfelder.
   const klassCounts = {};
@@ -333,27 +385,47 @@ function _monRenderKpis(rows) {
   const klassKeys = KLASS_ORDER.filter(k => klassCounts[k])
     .concat(Object.keys(klassCounts).filter(k => !KLASS_ORDER.includes(k)));
 
+  // id kodiert den Filter: '' = Alles zeigen (Reset), r:<Richtung>, flag:<Schnellfilter>, k:<Typ>.
   const tiles = [
-    ['Rechnungen gesamt', total, ''],
-    ['Eingang', eingang, 'in'],
-    ['Ausgang', ausgang, 'out'],
-    ['Offen (nicht gebucht)', offen, 'warn'],
-    ['Fehler / rot', fehler, 'bad'],
-    ['Dubletten', dubletten, dubletten ? 'bad' : ''],
-    // Prüfschritt-Warteschlangen (UStAE/GoBD-Regelwerk).
-    ['Manuelle Prüfung', manuell, manuell ? 'warn' : ''],
-    ['Zur Rückfrage', rueckfrage, rueckfrage ? 'bad' : ''],
-    ['Zurückgewiesen', zurueck, zurueck ? 'bad' : ''],
-    // Klassifizierung je Typ (ersetzt GoBD-archiviert + Bruttosumme).
-    ...klassKeys.map(k => [k, klassCounts[k], 'klass']),
+    { id: '',                label: 'Rechnungen gesamt',     val: total,      cls: '' },
+    { id: 'r:Eingang',       label: 'Eingang',               val: eingang,    cls: 'in' },
+    { id: 'r:Ausgang',       label: 'Ausgang',               val: ausgang,    cls: 'out' },
+    { id: 'flag:offen',      label: 'Offen (nicht gebucht)', val: offen,      cls: 'warn' },
+    { id: 'flag:fehler',     label: 'Fehler / rot',          val: fehler,     cls: 'bad' },
+    { id: 'flag:dublette',   label: 'Dubletten',             val: dubletten,  cls: dubletten ? 'bad' : '' },
+    { id: 'flag:manuell',    label: 'Manuelle Prüfung',      val: manuell,    cls: manuell ? 'warn' : '' },
+    { id: 'flag:rueckfrage', label: 'Zur Rückfrage',         val: rueckfrage, cls: rueckfrage ? 'bad' : '' },
+    { id: 'flag:zurueck',    label: 'Zurückgewiesen',        val: zurueck,    cls: zurueck ? 'bad' : '' },
+    ...klassKeys.map(k => ({ id: 'k:' + k, label: k, val: klassCounts[k], cls: 'klass' })),
   ];
-  document.getElementById('mon-kpis').innerHTML = tiles.map(([label, val, cls]) =>
-    `<div class="mon-tile ${cls}"><div class="mon-tile-val">${_esc(String(val))}</div>`
-    + `<div class="mon-tile-label">${_esc(label)}</div></div>`).join('');
+  document.getElementById('mon-kpis').innerHTML = tiles.map(t => {
+    const active = _monTileActive(t.id) ? ' active' : '';
+    return `<div class="mon-tile ${t.cls}${active}" data-tile="${_esc(t.id)}" role="button" tabindex="0" title="Klicken zum Filtern">`
+      + `<div class="mon-tile-val">${_esc(String(t.val))}</div>`
+      + `<div class="mon-tile-label">${_esc(t.label)}</div></div>`;
+  }).join('');
+}
+
+function _monTileActive(id) {
+  const f = _monFilter;
+  if (id.startsWith('r:'))    return f.richtung === id.slice(2);
+  if (id.startsWith('flag:')) return f.flag === id.slice(5);
+  if (id.startsWith('k:'))    return f.klass === id.slice(2);
+  return false;
+}
+
+function _monTileClick(id) {
+  const f = _monFilter;
+  if (id === '') { _monResetFilters(); return; }
+  if (id.startsWith('r:'))         { const v = id.slice(2); f.richtung = f.richtung === v ? '' : v; }
+  else if (id.startsWith('flag:')) { const v = id.slice(5); f.flag = f.flag === v ? '' : v; }
+  else if (id.startsWith('k:'))    { const v = id.slice(2); f.klass = f.klass === v ? '' : v; }
+  _monSyncControls();
+  _monApply();
 }
 
 function _monRenderTable(rows) {
-  rows = rows.slice().sort((a, b) => (b.datum || '').localeCompare(a.datum || ''));
+  // Sortierung erfolgt zentral in _monSortRows (vor dem Rendern).
   const body = rows.map(r => {
     const betrag = r.brutto == null ? '' :
       r.brutto.toLocaleString('de-DE', { style: 'currency', currency: r.waehrung || 'EUR' });
@@ -406,8 +478,9 @@ function _monRenderTable(rows) {
   }).join('');
 
   document.getElementById('mon-tbody').innerHTML = body
-    || `<tr><td colspan="13" style="text-align:center;color:var(--gray-500);padding:24px;">Keine Treffer.</td></tr>`;
-  document.getElementById('mon-count').textContent = `${rows.length} angezeigt`;
+    || `<tr><td colspan="13" style="text-align:center;color:var(--gray-500);padding:28px;">Keine Treffer für die aktuellen Filter.</td></tr>`;
+  document.getElementById('mon-count').textContent =
+    `${rows.length} von ${_monRecords.length} angezeigt`;
 }
 
 // Klartext-Hinweis zur Konformität. Nimmt einen bereits fertigen API-Hinweis
@@ -481,6 +554,59 @@ function monShowAccessDenied() {
 
 /* ── Filter-Events ──────────────────────────────────────────────────── */
 
+/* ── Aktive Filter als Chips (einzeln wegklickbar) ──────────────────── */
+
+function _monRenderChips() {
+  const f = _monFilter;
+  const KONF = { gr: 'grün', gel: 'gelb', rot: 'rot' };
+  const FLAG = { offen: 'Offen', fehler: 'Fehler / rot', dublette: 'Dubletten',
+                 manuell: 'Manuelle Prüfung', rueckfrage: 'Zur Rückfrage', zurueck: 'Zurückgewiesen' };
+  const deDate = s => s.split('-').reverse().join('.');
+  const chips = [];
+  if (f.werk)     chips.push(['werk', 'Werk: ' + f.werk]);
+  if (f.richtung) chips.push(['richtung', f.richtung]);
+  if (f.klass)    chips.push(['klass', 'Typ: ' + f.klass]);
+  if (f.konform)  chips.push(['konform', 'Konform.: ' + (KONF[f.konform] || f.konform)]);
+  if (f.buchung)  chips.push(['buchung', 'Buchung: ' + f.buchung]);
+  if (f.status)   chips.push(['status', 'Status: ' + f.status]);
+  if (f.from)     chips.push(['from', 'ab ' + deDate(f.from)]);
+  if (f.to)       chips.push(['to', 'bis ' + deDate(f.to)]);
+  if (f.q)        chips.push(['q', 'Suche: „' + f.q + '“']);
+  if (f.flag)     chips.push(['flag', FLAG[f.flag] || f.flag]);
+  const el = document.getElementById('mon-chips');
+  if (!el) return;
+  el.innerHTML = chips.map(([key, label]) =>
+    `<span class="mon-chip">${_esc(label)}<button type="button" data-chip="${_esc(key)}" title="Filter entfernen" aria-label="Filter entfernen">✕</button></span>`).join('');
+}
+
+function _monResetFilters() {
+  Object.assign(_monFilter, { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', from: '', to: '', q: '', flag: '' });
+  _monSyncControls();
+  _monApply();
+}
+
+// Filterzustand zurück in die Steuerelemente schreiben (nach Kachel-/Chip-Klick).
+function _monSyncControls() {
+  const f = _monFilter;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('mon-f-werk', f.werk); set('mon-f-richtung', f.richtung); set('mon-f-klass', f.klass);
+  set('mon-f-konform', f.konform); set('mon-f-buchung', f.buchung); set('mon-f-status', f.status);
+  set('mon-f-from', f.from); set('mon-f-to', f.to); set('mon-f-q', f.q);
+}
+
+function _monMarkSortHeaders() {
+  document.querySelectorAll('table.mon-table th[data-sort]').forEach(th => {
+    const ind = th.querySelector('.sort-ind');
+    if (th.getAttribute('data-sort') === _monSort.key) {
+      th.classList.add('sorted'); if (ind) ind.textContent = _monSort.dir < 0 ? '▼' : '▲';
+    } else {
+      th.classList.remove('sorted'); if (ind) ind.textContent = '';
+    }
+  });
+}
+
+/* ── Filter-Events ──────────────────────────────────────────────────── */
+
 function monInitFilterEvents() {
   const bind = (id, key) => {
     const el = document.getElementById(id);
@@ -488,10 +614,50 @@ function monInitFilterEvents() {
   };
   bind('mon-f-werk', 'werk');
   bind('mon-f-richtung', 'richtung');
+  bind('mon-f-klass', 'klass');
+  bind('mon-f-konform', 'konform');
+  bind('mon-f-buchung', 'buchung');
   bind('mon-f-status', 'status');
-  bind('mon-f-format', 'format');
+  bind('mon-f-from', 'from');
+  bind('mon-f-to', 'to');
   const q = document.getElementById('mon-f-q');
   if (q) q.addEventListener('input', () => { _monFilter.q = q.value; _monApply(); });
+  const reset = document.getElementById('mon-reset');
+  if (reset) reset.addEventListener('click', _monResetFilters);
+
+  // KPI-Kacheln als Schnellfilter (Klick + Tastatur), per Event-Delegation.
+  const kpis = document.getElementById('mon-kpis');
+  if (kpis) {
+    kpis.addEventListener('click', e => {
+      const tile = e.target.closest('[data-tile]');
+      if (tile) _monTileClick(tile.getAttribute('data-tile'));
+    });
+    kpis.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const tile = e.target.closest('[data-tile]');
+      if (tile) { e.preventDefault(); _monTileClick(tile.getAttribute('data-tile')); }
+    });
+  }
+
+  // Chips einzeln entfernen.
+  const chips = document.getElementById('mon-chips');
+  if (chips) chips.addEventListener('click', e => {
+    const btn = e.target.closest('[data-chip]');
+    if (!btn) return;
+    _monFilter[btn.getAttribute('data-chip')] = '';
+    _monSyncControls();
+    _monApply();
+  });
+
+  // Spalten sortieren (Klick auf Kopfzeile toggelt Richtung).
+  document.querySelectorAll('table.mon-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.getAttribute('data-sort');
+      if (_monSort.key === key) _monSort.dir = -_monSort.dir;
+      else _monSort = { key, dir: (key === 'datum' || key === 'brutto') ? -1 : 1 };
+      _monApply();
+    });
+  });
 }
 
 function _esc(s) {

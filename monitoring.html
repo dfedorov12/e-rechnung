@@ -13,7 +13,12 @@
 
     .mon-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
     .mon-tile { background:#fff; border:1px solid var(--gray-200); border-left:4px solid var(--primary);
-                border-radius:var(--border-radius); padding:14px 16px; box-shadow:var(--shadow-sm); }
+                border-radius:var(--border-radius); padding:14px 16px; box-shadow:var(--shadow-sm);
+                cursor:pointer; user-select:none; transition:transform .12s ease, box-shadow .12s ease; }
+    .mon-tile:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,.09); }
+    .mon-tile:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+    .mon-tile.active { outline:2px solid var(--primary); outline-offset:1px; box-shadow:0 6px 16px rgba(0,0,0,.10); }
+    .mon-tile.active .mon-tile-label { color:var(--gray-800); font-weight:600; }
     .mon-tile-val { font-size:24px; font-weight:700; color:var(--gray-900); line-height:1.1; }
     .mon-tile-label { font-size:12px; color:var(--gray-500); margin-top:4px; }
     .mon-tile.in   { border-left-color:#2563eb; }
@@ -23,19 +28,42 @@
     .mon-tile.sum  { border-left-color:#7c3aed; }
     .mon-tile.klass { border-left-color:#0891b2; }
 
-    .mon-filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
-    .mon-filters select, .mon-filters input { padding:8px 10px; border:1px solid var(--gray-300);
-                border-radius:6px; font-size:13px; background:#fff; }
-    .mon-filters input { min-width:220px; }
-    .mon-count { margin-left:auto; font-size:12px; color:var(--gray-500); }
+    .mon-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; }
+    .mon-search { position:relative; flex:1 1 240px; min-width:210px; }
+    .mon-search::before { content:'🔍'; position:absolute; left:11px; top:50%; transform:translateY(-50%);
+                font-size:13px; opacity:.55; pointer-events:none; }
+    .mon-search input { width:100%; height:38px; padding:0 12px 0 32px; border:1px solid var(--gray-300);
+                border-radius:8px; font-size:13px; background:#fff; }
+    .mon-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .mon-filters select, .mon-filters input[type=date] { height:38px; padding:0 10px; border:1px solid var(--gray-300);
+                border-radius:8px; font-size:13px; background:#fff; color:var(--gray-700); cursor:pointer; max-width:190px; }
+    .mon-filters select:focus, .mon-filters input[type=date]:focus, .mon-search input:focus {
+                outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(23,80,158,.12); }
+    .mon-reset { height:38px; padding:0 14px; border:1px solid var(--gray-300); background:var(--gray-50);
+                border-radius:8px; font-size:13px; color:var(--gray-600); cursor:pointer; white-space:nowrap; }
+    .mon-reset:hover { background:var(--gray-100); color:var(--gray-800); }
+    .mon-count { margin-left:auto; font-size:12px; color:var(--gray-500); white-space:nowrap; }
+
+    .mon-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+    .mon-chips:empty { display:none; }
+    .mon-chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+                background:var(--primary-light,#e8f0fb); color:var(--primary-dark,#0f3a6e);
+                border-radius:999px; padding:4px 5px 4px 11px; }
+    .mon-chip button { border:none; background:rgba(0,0,0,.10); color:inherit; width:17px; height:17px;
+                border-radius:50%; cursor:pointer; font-size:10px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; }
+    .mon-chip button:hover { background:rgba(0,0,0,.22); }
 
     .mon-table-wrap { overflow-x:auto; background:#fff; border:1px solid var(--gray-200);
                 border-radius:var(--border-radius); box-shadow:var(--shadow-sm); }
     table.mon-table { width:100%; border-collapse:collapse; font-size:13px; min-width:900px; }
-    table.mon-table th { text-align:left; padding:10px 12px; background:var(--gray-50); color:var(--gray-600);
-                font-weight:600; border-bottom:1px solid var(--gray-200); white-space:nowrap; position:sticky; top:0; }
-    table.mon-table td { padding:9px 12px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
-    table.mon-table tr:hover td { background:var(--gray-50); }
+    table.mon-table th { text-align:left; padding:11px 12px; background:var(--gray-50); color:var(--gray-600);
+                font-weight:600; border-bottom:1px solid var(--gray-200); white-space:nowrap; position:sticky; top:0; z-index:1; }
+    table.mon-table th[data-sort] { cursor:pointer; user-select:none; }
+    table.mon-table th[data-sort]:hover { background:var(--gray-100); color:var(--gray-800); }
+    table.mon-table th .sort-ind { display:inline-block; width:10px; font-size:10px; margin-left:2px; color:var(--primary); }
+    table.mon-table td { padding:10px 12px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
+    table.mon-table tbody tr:nth-child(even) td { background:#fafbfc; }
+    table.mon-table tbody tr:hover td { background:#eef4fc; }
     .mon-err { color:var(--danger); max-width:220px; }
 
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
@@ -92,26 +120,50 @@
   <div id="mon-body" style="display:none;">
     <div class="mon-kpis" id="mon-kpis"></div>
 
-    <div class="mon-filters">
-      <select id="mon-f-werk"><option value="">Alle Werke</option></select>
-      <select id="mon-f-richtung">
-        <option value="">Ein- + Ausgang</option>
-        <option value="Eingang">Eingang</option>
-        <option value="Ausgang">Ausgang</option>
-      </select>
-      <select id="mon-f-status"><option value="">Alle Status</option></select>
-      <select id="mon-f-format"><option value="">Alle Formate</option></select>
-      <input type="search" id="mon-f-q" placeholder="🔍 Nummer, Steller, Empfänger…">
+    <div class="mon-toolbar">
+      <div class="mon-search">
+        <input type="search" id="mon-f-q" placeholder="Nummer, Steller, Empfänger…">
+      </div>
+      <div class="mon-filters">
+        <select id="mon-f-werk" aria-label="Werk"><option value="">Alle Werke</option></select>
+        <select id="mon-f-richtung" aria-label="Richtung">
+          <option value="">Ein- + Ausgang</option>
+          <option value="Eingang">Eingang</option>
+          <option value="Ausgang">Ausgang</option>
+        </select>
+        <select id="mon-f-klass" aria-label="Klassifizierung"><option value="">Alle Typen</option></select>
+        <select id="mon-f-konform" aria-label="Konformität">
+          <option value="">Alle Konformität</option>
+          <option value="gr">🟢 grün</option>
+          <option value="gel">🟡 gelb</option>
+          <option value="rot">🔴 rot</option>
+        </select>
+        <select id="mon-f-buchung" aria-label="Buchung"><option value="">Alle Buchung</option></select>
+        <select id="mon-f-status" aria-label="Status"><option value="">Alle Status</option></select>
+        <input type="date" id="mon-f-from" aria-label="Datum von" title="Datum von">
+        <input type="date" id="mon-f-to" aria-label="Datum bis" title="Datum bis">
+        <button type="button" id="mon-reset" class="mon-reset">Zurücksetzen</button>
+      </div>
       <span class="mon-count" id="mon-count"></span>
     </div>
+    <div class="mon-chips" id="mon-chips"></div>
 
     <div class="mon-table-wrap">
       <table class="mon-table">
         <thead>
           <tr>
-            <th>Datum</th><th>Werk</th><th>Richtung</th><th>Rechnungsnr.</th>
-            <th>Steller / Empfänger</th><th>Brutto</th><th>Format</th><th>Klassifizierung</th>
-            <th>Status</th><th>Buchung</th><th>Konform.</th><th>Fehler</th><th></th>
+            <th data-sort="datum">Datum<span class="sort-ind"></span></th>
+            <th data-sort="werk">Werk<span class="sort-ind"></span></th>
+            <th data-sort="richtung">Richtung<span class="sort-ind"></span></th>
+            <th data-sort="nummer">Rechnungsnr.<span class="sort-ind"></span></th>
+            <th data-sort="partner">Steller / Empfänger<span class="sort-ind"></span></th>
+            <th data-sort="brutto">Brutto<span class="sort-ind"></span></th>
+            <th data-sort="format">Format<span class="sort-ind"></span></th>
+            <th data-sort="klass">Klassifizierung<span class="sort-ind"></span></th>
+            <th data-sort="status">Status<span class="sort-ind"></span></th>
+            <th data-sort="buchung">Buchung<span class="sort-ind"></span></th>
+            <th data-sort="konform">Konform.<span class="sort-ind"></span></th>
+            <th>Fehler</th><th></th>
           </tr>
         </thead>
         <tbody id="mon-tbody"></tbody>
