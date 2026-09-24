@@ -163,6 +163,7 @@ function _monMap(it, f, lib) {
     brutto:   num(f.Bruttobetrag),
     waehrung: (f.Waehrung || 'EUR').toString(),
     datum:    (f.Rechnungsdatum || f.Eingangszeitpunkt || it.createdDateTime || '').toString(),
+    faelligkeit: (f.Faelligkeitsdatum || '').toString(),
     format:   (f.Format || '').toString(),
     status:   (f.Verarbeitungsstatus || '').toString(),
     konform:  (f.Konformitaet || '').toString(),
@@ -218,7 +219,7 @@ function _monGroup(recs) {
       primary.dateien.push({ label, url: r.url });
     }
     // Metadaten aus Geschwisterdateien auffüllen, falls die Primärzeile sie nicht hat.
-    for (const key of ['steller', 'empf', 'format', 'status', 'konform', 'fehler', 'meldung']) {
+    for (const key of ['steller', 'empf', 'format', 'status', 'konform', 'fehler', 'meldung', 'faelligkeit']) {
       if (!primary[key]) { const s = arr.find(r => r[key]); if (s) primary[key] = s[key]; }
     }
     if (primary.brutto == null) { const s = arr.find(r => r.brutto != null); if (s) primary.brutto = s.brutto; }
@@ -357,7 +358,7 @@ function _monSortVal(r, key) {
     case 'nummer':   return (r.nummer || '').toLowerCase();
     case 'partner':  return ((r.richtung === 'Eingang' ? r.steller : r.empf) || '').toLowerCase();
     case 'brutto':   return r.brutto == null ? -Infinity : r.brutto;
-    case 'format':   return r.format || '';
+    case 'faellig':  return (r.faelligkeit || '').slice(0, 10);
     case 'klass':    return _monKlass(r) || '';
     case 'status':   return r.status || '';
     case 'buchung':  return r.buchung || '';
@@ -430,6 +431,14 @@ function _monRenderTable(rows) {
     const betrag = r.brutto == null ? '' :
       r.brutto.toLocaleString('de-DE', { style: 'currency', currency: r.waehrung || 'EUR' });
     const datum = _monDate(r.datum);
+    // Fälligkeit statt Format: überfällige, noch nicht gebuchte Rechnungen rot + ⚠.
+    const faellig = _monDate(r.faelligkeit);
+    const fDate = String(r.faelligkeit || '').slice(0, 10);
+    const overdue = /^\d{4}-\d{2}-\d{2}$/.test(fDate) && fDate < _monTodayIso()
+                    && !['Gebucht', 'Archiviert'].includes(r.status);
+    const faelligCell = faellig
+      ? `<span style="white-space:nowrap;${overdue ? 'color:#b40000;font-weight:600;' : ''}">${_esc(faellig)}${overdue ? ' ⚠' : ''}</span>`
+      : '<span style="color:#9ca3af;">–</span>';
     const richtCls = r.richtung === 'Eingang' ? 'pill-in' : 'pill-out';
     const kon = _monKonPill(r);
     const hinweis = _monHinweis(r);
@@ -467,7 +476,7 @@ function _monRenderTable(rows) {
         : ''}</td>
       <td>${_esc(r.richtung === 'Eingang' ? r.steller : r.empf)}</td>
       <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
-      <td>${_esc(r.format)}</td>
+      <td>${faelligCell}</td>
       <td>${_esc(_monKlass(r))}</td>
       <td>${stat}${gobdBadge}</td>
       <td>${buchungCell}</td>
@@ -510,6 +519,12 @@ function _monHinweis(r) {
 function _monDate(s) {
   const d = String(s || '').slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('.') : d;
+}
+
+// Heutiges Datum als ISO (lokal), für den Überfälligkeits-Vergleich.
+function _monTodayIso() {
+  const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
 }
 
 // Klassifizierung aus Format/Endung ableiten (ZUGFeRD | XRechnung | PDF ohne E-Rechnung).
