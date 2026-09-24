@@ -429,12 +429,12 @@ function _monRenderTable(rows) {
   const body = rows.map(r => {
     const betrag = r.brutto == null ? '' :
       r.brutto.toLocaleString('de-DE', { style: 'currency', currency: r.waehrung || 'EUR' });
-    const datum = r.datum ? (r.datum.slice(0, 10)) : '';
+    const datum = _monDate(r.datum);
     const richtCls = r.richtung === 'Eingang' ? 'pill-in' : 'pill-out';
     const kon = _monKonPill(r);
     const hinweis = _monHinweis(r);
     const konCell = kon + (hinweis
-      ? `<div class="mon-hint" title="${_esc(hinweis)}" style="font-size:11px;color:var(--gray-600,#6b7280);margin-top:3px;max-width:260px;line-height:1.3;">${_esc(hinweis)}</div>`
+      ? `<div class="mon-hint" title="${_esc(hinweis)}" style="font-size:11px;color:var(--gray-600,#6b7280);margin-top:3px;max-width:100%;line-height:1.3;">${_esc(hinweis)}</div>`
       : '');
     const stat = r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : '';
     const gobdBadge = r.gobdArchiviert
@@ -459,7 +459,7 @@ function _monRenderTable(rows) {
       extra,
     ].filter(Boolean).join(' · ');
     return `<tr>
-      <td>${_esc(datum)}</td>
+      <td style="white-space:nowrap;">${_esc(datum)}</td>
       <td><span class="pill pill-werk">${_esc(r.werk)}</span></td>
       <td><span class="pill ${richtCls}">${_esc(r.richtung)}</span></td>
       <td>${_esc(r.nummer)}${r.dublette
@@ -504,6 +504,12 @@ function _monHinweis(r) {
   ];
   for (const [re, text] of regeln) if (re.test(s)) return text;
   return 'Nicht konform (siehe KoSIT-Bericht).';
+}
+
+// Datum kompakt einzeilig: ISO (YYYY-MM-DD…) -> TT.MM.JJJJ, sonst unverändert.
+function _monDate(s) {
+  const d = String(s || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('.') : d;
 }
 
 // Klassifizierung aus Format/Endung ableiten (ZUGFeRD | XRechnung | PDF ohne E-Rechnung).

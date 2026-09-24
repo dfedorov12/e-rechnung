@@ -55,13 +55,13 @@
 
     .mon-table-wrap { overflow-x:auto; background:#fff; border:1px solid var(--gray-200);
                 border-radius:var(--border-radius); box-shadow:var(--shadow-sm); }
-    table.mon-table { width:100%; border-collapse:collapse; font-size:13px; min-width:900px; }
+    table.mon-table { width:100%; border-collapse:collapse; font-size:13px; min-width:1040px; table-layout:fixed; }
     table.mon-table th { text-align:left; padding:11px 12px; background:var(--gray-50); color:var(--gray-600);
                 font-weight:600; border-bottom:1px solid var(--gray-200); white-space:nowrap; position:sticky; top:0; z-index:1; }
     table.mon-table th[data-sort] { cursor:pointer; user-select:none; }
     table.mon-table th[data-sort]:hover { background:var(--gray-100); color:var(--gray-800); }
     table.mon-table th .sort-ind { display:inline-block; width:10px; font-size:10px; margin-left:2px; color:var(--primary); }
-    table.mon-table td { padding:10px 12px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
+    table.mon-table td { padding:10px 12px; border-bottom:1px solid var(--gray-100); vertical-align:top; word-break:break-word; overflow-wrap:anywhere; }
     table.mon-table tbody tr:nth-child(even) td { background:#fafbfc; }
     table.mon-table tbody tr:hover td { background:#eef4fc; }
     .mon-err { color:var(--danger); max-width:220px; }
@@ -150,6 +150,11 @@
 
     <div class="mon-table-wrap">
       <table class="mon-table">
+        <colgroup>
+          <col style="width:6%"><col style="width:5%"><col style="width:6%"><col style="width:9%">
+          <col style="width:15%"><col style="width:7%"><col style="width:6%"><col style="width:9%">
+          <col style="width:8%"><col style="width:8%"><col style="width:10%"><col style="width:6%"><col style="width:5%">
+        </colgroup>
         <thead>
           <tr>
             <th data-sort="datum">Datum<span class="sort-ind"></span></th>
