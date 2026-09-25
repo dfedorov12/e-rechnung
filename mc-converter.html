@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MC-Converter (SEPA pain.001) | E-Rechnung Konverter | DIHAG</title>
+  <title>MC-Converter (SEPA pain.001 und DTAZV) | E-Rechnung Konverter | DIHAG</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
   <link rel="stylesheet" href="css/style.css">
   <style>
@@ -32,6 +32,19 @@
     table.mc-txn td { padding:7px 10px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
     table.mc-txn td.amt { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
     table.mc-txn .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--gray-500); }
+
+    .mc-sub { font-size:11.5px; color:var(--gray-500); margin-top:2px; }
+    input.mc-town { display:block; width:100%; max-width:220px; margin-top:4px; padding:5px 8px; font-size:12.5px;
+                    border:1px solid #fca5a5; border-radius:6px; background:#fff7f7; }
+    input.mc-town.filled { border-color:var(--gray-300); background:#fff; }
+
+    .azv-opts { flex-basis:100%; display:flex; flex-direction:column; gap:10px; }
+    .azv-acc { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; }
+    .azv-acc-head { flex-basis:100%; font-size:13px; font-weight:600; color:var(--gray-700); }
+    .mc-options .azv-acc label { flex-direction:column; align-items:flex-start; gap:4px; font-size:12px; color:var(--gray-600); cursor:default; }
+    .azv-acc input { width:260px; max-width:100%; height:auto; padding:6px 9px; font-size:13px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+                     border:1px solid var(--gray-300); border-radius:6px; }
+    .azv-note { font-size:12px; color:var(--gray-500); }
 
     pre.mc-xml { max-height:420px; overflow:auto; background:#0f172a; color:#e2e8f0; padding:16px;
                  border-radius:var(--border-radius); font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -66,15 +79,16 @@
   <div class="hero">
     <div class="hero-icon">🏦</div>
     <div>
-      <h1>SEPA-Zahldatei umstellen: pain.001.003.03 → pain.001.001.09</h1>
-      <p>Wandelt eine SEPA-Überweisungsdatei aus der alten DK-/MultiCash-Version
-         <strong>pain.001.003.03</strong> in die seit November 2023 von den Banken verlangte
-         ISO-20022-Version <strong>pain.001.001.09</strong>. Prüfsummen und Postenzahl werden
-         neu berechnet, der SEPA-Zeichensatz erzwungen. Alles läuft im Browser — die Zahldatei
-         verlässt Ihren Rechner nicht.</p>
+      <h1>Zahldateien umstellen auf pain.001.001.09</h1>
+      <p><strong>SEPA-Überweisungen</strong> aus der alten DK-/MultiCash-Version
+         <strong>pain.001.003.03</strong> werden zur ISO-20022-Version <strong>pain.001.001.09</strong>.
+         <strong>Auslandszahlungen im DTAZV-Format</strong> (<code>.AZV</code>) werden zu
+         <strong>pain.001.001.09 AXZ</strong>. DTAZV nehmen die Banken ab 14.11.2026 nicht mehr an.
+         Prüfsummen und Postenzahl werden neu berechnet, der Zeichensatz bereinigt. Alles läuft im
+         Browser, die Zahldatei verlässt Ihren Rechner nicht.</p>
       <div class="hero-badges">
-        <span class="badge">pain.001.003.03</span>
-        <span class="badge">→ pain.001.001.09</span>
+        <span class="badge">pain.001.003.03 → 001.09</span>
+        <span class="badge">DTAZV → AXZ</span>
         <span class="badge">ISO 20022</span>
       </div>
     </div>
@@ -85,8 +99,8 @@
     <input type="file" id="xml-input">
     <div class="upload-placeholder">
       <span class="upload-icon">📤</span>
-      <h3>pain.001-Zahldatei hier ablegen oder klicken</h3>
-      <p>SEPA-Überweisung aus MultiCash / DK-Format (pain.001.003.03, 001.001.03 … — auch ohne Dateiendung)</p>
+      <h3>Zahldatei hier ablegen oder klicken</h3>
+      <p>SEPA-Überweisung (pain.001.003.03, 001.001.03 …) oder Auslandszahlung (DTAZV, .AZV), auch ohne Dateiendung</p>
       <button class="btn-upload" type="button">Datei auswählen</button>
     </div>
     <div class="file-info">
@@ -101,9 +115,10 @@
 
   <!-- Optionen -->
   <div class="mc-options" id="mc-options" style="display:none;">
-    <label><input type="checkbox" id="opt-batch" checked> Sammelbuchung (<code>BtchBookg = true</code>)</label>
-    <label><input type="checkbox" id="opt-instr" checked> <code>InstrId</code> übernehmen</label>
-    <label><input type="checkbox" id="opt-clean" checked> SEPA-Zeichensatz erzwingen (Umlaute → ae/oe/ue)</label>
+    <label id="lbl-batch"><input type="checkbox" id="opt-batch" checked> Sammelbuchung (<code>BtchBookg = true</code>)</label>
+    <label id="lbl-instr"><input type="checkbox" id="opt-instr" checked> <code>InstrId</code> übernehmen</label>
+    <label><input type="checkbox" id="opt-clean" checked> <span id="lbl-clean-text">SEPA-Zeichensatz erzwingen (Umlaute → ae/oe/ue)</span></label>
+    <div class="azv-opts" id="mc-azv-opts" style="display:none;"></div>
   </div>
 
   <!-- Ergebnis -->
@@ -133,7 +148,7 @@
           <div class="card-body">
             <div class="mc-txn-wrap">
               <table class="mc-txn">
-                <thead><tr><th>Empfänger</th><th>IBAN / BIC</th><th class="amt">Betrag</th><th>Verwendungszweck</th></tr></thead>
+                <thead><tr><th>Empfänger</th><th id="th-acct">IBAN / BIC</th><th class="amt">Betrag</th><th>Verwendungszweck</th></tr></thead>
                 <tbody id="mc-txn-body"></tbody>
               </table>
             </div>
@@ -142,7 +157,7 @@
 
         <div class="export-section">
           <div class="export-info">
-            <h3>pain.001.001.09 herunterladen</h3>
+            <h3 id="export-title">pain.001.001.09 herunterladen</h3>
             <p id="export-hint">Fertige ISO-20022-Zahldatei für die Bank</p>
           </div>
           <div class="export-buttons">
@@ -157,7 +172,7 @@
       <!-- XML-Vorschau -->
       <div class="pdf-viewer-panel">
         <div class="panel-header">
-          <h3>📄 pain.001.001.09 (Vorschau)</h3>
+          <h3 id="preview-title">📄 pain.001.001.09 (Vorschau)</h3>
           <button class="btn-change-file" id="btn-copy-xml" type="button">Kopieren</button>
         </div>
         <div class="pdf-canvas-wrapper" style="padding:0;">
@@ -194,6 +209,21 @@
 let _srcText = null;
 let _result  = null;
 let _fileBase = 'zahlung';
+let _mode = 'sepa';          // 'sepa' = pain.001 -> 001.09, 'azv' = DTAZV -> AXZ
+let _accounts = {};          // AZV: { 'BLZ/KTO': { iban, bic } } aus Eingabe oder Speicher
+let _towns = {};             // AZV: { <Posten-Index>: 'Ort' } fuer Empfaenger ohne Ort
+let _azvOptsKey = '';
+
+/* Eingaben fuer AZV merken (nur in diesem Browser). Fehlt der Speicher,
+   laeuft alles ohne Vorbelegung weiter. */
+const AZV_STORE = 'mcConverter.azv.v1';
+function azvStore() {
+  try { return JSON.parse(localStorage.getItem(AZV_STORE)) || { accounts: {}, towns: {} }; }
+  catch { return { accounts: {}, towns: {} }; }
+}
+function azvSave(fn) {
+  try { const s = azvStore(); fn(s); localStorage.setItem(AZV_STORE, JSON.stringify(s)); } catch { /* ohne Speicher */ }
+}
 
 /* ── Upload-Zone ── */
 document.addEventListener('DOMContentLoaded', () => {
@@ -215,6 +245,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   ['opt-batch', 'opt-instr', 'opt-clean'].forEach(id =>
     document.getElementById(id).addEventListener('change', () => { if (_srcText) runConvert(); }));
+
+  // AZV: Belastungskonto (IBAN/BIC) und fehlende Orte der Empfaenger
+  document.getElementById('mc-azv-opts').addEventListener('change', e => {
+    const el = e.target.closest('input[data-acc]');
+    if (!el) return;
+    const key = el.dataset.acc;
+    const val = el.value.replace(/\s+/g, '').toUpperCase();
+    _accounts[key] = Object.assign({}, _accounts[key], { [el.dataset.f]: val });
+    azvSave(s => { s.accounts[key] = Object.assign({}, s.accounts[key], { [el.dataset.f]: val }); });
+    runConvert();
+  });
+  document.getElementById('mc-txn-body').addEventListener('change', e => {
+    const el = e.target.closest('input.mc-town');
+    if (!el || !_result) return;
+    const idx = el.dataset.idx;
+    const town = el.value.trim();
+    _towns[idx] = town;
+    const t = _result.txns[idx];
+    if (t && t.cdtrIban) azvSave(s => { if (town) s.towns[t.cdtrIban] = town; else delete s.towns[t.cdtrIban]; });
+    runConvert();
+  });
 });
 
 /* ── Datei einlesen ── */
@@ -222,10 +273,16 @@ async function handleFile(file) {
   // Keine Endungspruefung: MultiCash-/DK-Exporte haben oft keine oder eine
   // fremde Endung. Ob es wirklich eine pain.001 ist, entscheidet der Inhalt
   // (convertPain001 wirft sonst eine klare Meldung).
-  _fileBase = file.name.replace(/\.xml$/i, '');
+  _fileBase = file.name.replace(/\.(xml|azv)$/i, '');
   showLoading(true, 'Datei wird gelesen…');
   try {
-    _srcText = await file.text();
+    // UTF-8 zuerst, sonst Windows-1252 (DTAZV-Exporte sind oft ANSI)
+    const buf = await file.arrayBuffer();
+    try { _srcText = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+    catch { _srcText = new TextDecoder('windows-1252').decode(buf); }
+    _mode = isDtazv(_srcText) ? 'azv' : 'sepa';
+    _accounts = {}; _towns = {}; _azvOptsKey = '';
+    applyModeUi();
     document.getElementById('upload-zone').classList.add('has-file');
     document.getElementById('file-name-display').textContent = file.name;
     document.getElementById('file-size-display').textContent = (file.size / 1024).toFixed(1) + ' KB';
@@ -237,19 +294,69 @@ async function handleFile(file) {
   }
 }
 
+/* ── Oberflaeche je nach Dateiart ── */
+function applyModeUi() {
+  const azv = _mode === 'azv';
+  document.getElementById('lbl-batch').style.display = azv ? 'none' : '';
+  document.getElementById('lbl-instr').style.display = azv ? 'none' : '';
+  document.getElementById('mc-azv-opts').style.display = azv ? 'flex' : 'none';
+  document.getElementById('lbl-clean-text').textContent = azv
+    ? 'Zeichensatz bereinigen (SWIFT: Umlaute → ae/oe/ue)'
+    : 'SEPA-Zeichensatz erzwingen (Umlaute → ae/oe/ue)';
+  document.getElementById('th-acct').textContent = azv ? 'Konto / Bank' : 'IBAN / BIC';
+  document.getElementById('export-title').textContent = azv ? 'pain.001.001.09 AXZ herunterladen' : 'pain.001.001.09 herunterladen';
+  document.getElementById('preview-title').textContent = azv ? '📄 pain.001.001.09 AXZ (Vorschau)' : '📄 pain.001.001.09 (Vorschau)';
+}
+
+/* Gemerkte IBAN/BIC und Orte uebernehmen, wenn noch nichts eingetragen ist */
+function applyRemembered(r) {
+  const s = azvStore();
+  let changed = false;
+  for (const a of r.accounts) {
+    if (!_accounts[a.key] && s.accounts[a.key]) { _accounts[a.key] = Object.assign({}, s.accounts[a.key]); changed = true; }
+  }
+  for (const t of r.txns) {
+    if (t.townMissing && _towns[t.idx] == null && t.cdtrIban && s.towns[t.cdtrIban]) { _towns[t.idx] = s.towns[t.cdtrIban]; changed = true; }
+  }
+  return changed;
+}
+
+/* AZV: Eingabefelder fuer das Belastungskonto (einmal je Datei aufbauen) */
+function renderAzvOpts(r) {
+  const key = r.accounts.map(a => a.key).join('|');
+  const box = document.getElementById('mc-azv-opts');
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  if (key === _azvOptsKey) return;
+  _azvOptsKey = key;
+  box.innerHTML = r.accounts.map(a => `
+    <div class="azv-acc">
+      <div class="azv-acc-head">Belastungskonto BLZ ${esc(a.blz)} · Konto ${esc(a.kto)} (${esc(a.ccy)})</div>
+      <label>IBAN <input data-acc="${esc(a.key)}" data-f="iban" value="${esc(a.iban)}" spellcheck="false"></label>
+      <label>BIC der eigenen Bank (optional) <input data-acc="${esc(a.key)}" data-f="bic" value="${esc(a.bic)}" placeholder="z. B. DEUTDEFFXXX" spellcheck="false"></label>
+    </div>`).join('')
+    + '<div class="azv-note">Die IBAN wird aus BLZ und Kontonummer berechnet. Eingaben werden in diesem Browser gemerkt.</div>';
+}
+
 /* ── Konvertieren ── */
 function runConvert() {
   showLoading(true, 'Wird umgestellt…');
   try {
-    _result = convertPain001(_srcText, {
-      batchBooking: document.getElementById('opt-batch').checked,
-      keepInstrId:  document.getElementById('opt-instr').checked,
-      sepaClean:    document.getElementById('opt-clean').checked,
-    });
+    if (_mode === 'azv') {
+      const opts = () => ({ sepaClean: document.getElementById('opt-clean').checked, accounts: _accounts, towns: _towns });
+      _result = convertDtazv(_srcText, opts());
+      if (applyRemembered(_result)) _result = convertDtazv(_srcText, opts());
+      renderAzvOpts(_result);
+    } else {
+      _result = convertPain001(_srcText, {
+        batchBooking: document.getElementById('opt-batch').checked,
+        keepInstrId:  document.getElementById('opt-instr').checked,
+        sepaClean:    document.getElementById('opt-clean').checked,
+      });
+    }
     render(_result);
     document.getElementById('result-area').style.display = 'block';
     showLoading(false);
-    showToast('Umstellung auf pain.001.001.09 erfolgreich.', 'success');
+    showToast(_mode === 'azv' ? 'Auslandszahlung auf pain.001.001.09 AXZ umgestellt.' : 'Umstellung auf pain.001.001.09 erfolgreich.', 'success');
   } catch (err) {
     showLoading(false); console.error(err);
     document.getElementById('result-area').style.display = 'none';
@@ -259,19 +366,29 @@ function runConvert() {
 
 /* ── Anzeige ── */
 function render(r) {
-  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const dt  = s => (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) ? s.split('-').reverse().join('.') : (s || '–');
   const eur = s => Number(s || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' €';
+
+  const azv = r.kind === 'axz';
+  // Nachkommastellen wie im Betrag (USD 2, JPY 0, KWD 3)
+  const money = (s, ccy) => {
+    const dec = (String(s || '').split('.')[1] || '').length;
+    return Number(s || 0).toLocaleString('de-DE', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' ' + (ccy === 'EUR' || !ccy ? '€' : ccy);
+  };
+  const sumTxt = azv ? Object.entries(r.stats.sums).map(([c, v]) => money(v, c)).join(' · ') : eur(r.stats.ctrlSum);
+  const ibanCalc = azv && r.accounts.some(a => !a.ibanOverridden) ? ' <span class="mc-sub">(aus BLZ und Konto berechnet)</span>' : '';
 
   const rows = [
     ['Quellformat',     `<code>${esc(r.stats.srcVersion)}</code>`],
     ['Zielformat',      `<code>${esc(r.stats.dstVersion)}</code> ✅`],
+    ...(azv ? [['Einreichen per', 'EBICS-Auftragsart <strong>AXZ</strong> (nicht CCT)']] : []),
     ['Nachrichten-ID',  esc(r.stats.msgId) || '–'],
     ['Auftraggeber',    esc(r.stats.debtor || r.stats.initgParty) || '–'],
-    ['Konto (IBAN)',    esc(r.stats.debtorIban) || '–'],
+    ['Konto (IBAN)',    (esc(r.stats.debtorIban) || '–') + ibanCalc],
     ['Ausführung am',   dt(r.stats.execDate)],
     ['Anzahl Zahlungen', `<strong>${r.stats.nbOfTxs}</strong>`],
-    ['Kontrollsumme',   `<strong>${eur(r.stats.ctrlSum)}</strong>`],
+    [azv ? 'Summe' : 'Kontrollsumme', `<strong>${sumTxt}</strong>`],
   ];
   document.getElementById('mc-summary').innerHTML =
     rows.map(([k, v]) => `<tr><td class="xs-label">${k}</td><td class="xs-value">${v}</td></tr>`).join('');
@@ -283,6 +400,10 @@ function render(r) {
   if (pf.errors.length) {
     html += `<div class="mc-err"><h4>✗ Preflight: ${pf.errors.length} Fehler — so nicht bankfertig</h4><ul>${
       pf.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
+  } else if (azv) {
+    html += `<div class="mc-ok">✅ <strong>Preflight bestanden, bankfertig für AXZ.</strong> ${pf.nbOfTxs} Posten, ${sumTxt}. `
+          + `DK-Pflichtfelder, Ort und Land, IBAN-Prüfziffern, BIC-Format, Entgeltregelung, Summen, SWIFT-Zeichensatz und Feldlängen sind ok. `
+          + `Einreichen per EBICS-Auftragsart AXZ.</div>`;
   } else {
     html += `<div class="mc-ok">✅ <strong>Preflight bestanden — bankfertig.</strong> ${pf.nbOfTxs} Posten, ${eur(pf.ctrlSum)}. `
           + `IBAN-Prüfziffern (Mod-97), BIC-Format, Summen, SEPA-Zeichensatz und Feldlängen sind ok.</div>`;
@@ -299,11 +420,27 @@ function render(r) {
   dl.classList.toggle('btn-xrechnung', !pf.errors.length);
   document.getElementById('export-hint').textContent = pf.errors.length
     ? '⚠ Preflight-Fehler — vor dem Bank-Upload korrigieren'
-    : 'Bankfertige ISO-20022-Zahldatei (Preflight bestanden)';
+    : azv ? 'Bankfertig, per EBICS-Auftragsart AXZ einreichen' : 'Bankfertige ISO-20022-Zahldatei (Preflight bestanden)';
 
   // Posten-Tabelle
   document.getElementById('mc-txn-count').textContent = r.txns.length;
-  document.getElementById('mc-txn-body').innerHTML = r.txns.map(t => `
+  const FEE = { DEBT: 'OUR', SHAR: 'SHA', CRED: 'BEN' };
+  if (azv) {
+    document.getElementById('mc-txn-body').innerHTML = r.txns.map(t => {
+      const place = [t.pstCd, t.town].filter(Boolean).join(' ');
+      const adr = t.townMissing
+        ? `<input class="mc-town${t.town ? ' filled' : ''}" data-idx="${t.idx}" value="${esc(t.town)}" placeholder="Ort fehlt (Pflicht)" title="Ort des Empfängers, Pflicht für AXZ">
+           <div class="mc-sub">Land ${esc(t.ctry || '–')}${t.town ? '' : ' · Ort bitte eintragen'}</div>`
+        : `<div class="mc-sub">${esc(place)} · ${esc(t.ctry)}</div>`;
+      return `
+      <tr>
+        <td>${esc(t.cdtrNm)}${adr}</td>
+        <td class="mono">${esc(t.cdtrIban)}<br>${esc(t.cdtrBic || 'ohne BIC')}</td>
+        <td class="amt">${money(t.amount, t.ccy)}<div class="mc-sub" title="${esc(t.chrgTxt)}">${FEE[t.chrgBr] || t.chrgBr}${t.svcLvl === 'URGP' ? ' · Eilzahlung' : ''}</div></td>
+        <td>${esc(t.ustrd)}</td>
+      </tr>`;
+    }).join('');
+  } else document.getElementById('mc-txn-body').innerHTML = r.txns.map(t => `
     <tr>
       <td>${esc(t.cdtrNm)}</td>
       <td class="mono">${esc(t.cdtrIban)}<br>${esc(t.cdtrBic || 'ohne BIC')}</td>
@@ -321,7 +458,7 @@ function downloadXml() {
   const blob = new Blob([_result.xml], { type: 'application/xml' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = _fileBase + '_pain.001.001.09.xml';
+  a.href = url; a.download = _fileBase + (_mode === 'azv' ? '_pain.001.001.09_AXZ.xml' : '_pain.001.001.09.xml');
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast('Datei heruntergeladen.', 'success');
