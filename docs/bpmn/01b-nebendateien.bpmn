@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" id="Definitions_neben" targetNamespace="https://e-rechnung.dihag-extern.com/bpmn" exporter="DIHAG BPMN-Generator (scripts/bpmn/generate-bpmn.js)" exporterVersion="2.0">
+  <bpmn:collaboration id="Collab_neben">
+    <bpmn:participant id="P_Neben" name="Nebendateien ablegen" processRef="Process_ERechnung_Nebendateien" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_ERechnung_Nebendateien" name="E-Rechnung Nebendateien ablegen" isExecutable="false">
+    <bpmn:documentation>Neben dem Original legt der Flow je nach Prüfergebnis das lesbare PDF, den KoSIT-Prüfbericht und bei ZUGFeRD die XML separat in ERAR_&lt;Werk&gt; ab.
+Eingebunden in: E-Rechnung Rechnungseingang.
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang</bpmn:documentation>
+    <bpmn:laneSet id="LaneSet_P_Neben">
+      <bpmn:lane id="LN" name="SharePoint &amp; Monitoring"><bpmn:flowNodeRef>S_start</bpmn:flowNodeRef><bpmn:flowNodeRef>S_split</bpmn:flowNodeRef><bpmn:flowNodeRef>S_lesbar</bpmn:flowNodeRef><bpmn:flowNodeRef>S_kosit</bpmn:flowNodeRef><bpmn:flowNodeRef>S_xml</bpmn:flowNodeRef><bpmn:flowNodeRef>S_join</bpmn:flowNodeRef><bpmn:flowNodeRef>S_end</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+      <bpmn:startEvent id="S_start" name="Prüfergebnis liegt vor"><bpmn:outgoing>Flow_S_start_S_split</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:inclusiveGateway id="S_split" name="Was liegt vor?"><bpmn:incoming>Flow_S_start_S_split</bpmn:incoming><bpmn:outgoing>Flow_S_split_S_lesbar</bpmn:outgoing><bpmn:outgoing>Flow_S_split_S_kosit</bpmn:outgoing><bpmn:outgoing>Flow_S_split_S_xml</bpmn:outgoing></bpmn:inclusiveGateway>
+      <bpmn:serviceTask id="S_lesbar" name="Lesbares PDF als _lesbar.pdf ablegen"><bpmn:incoming>Flow_S_split_S_lesbar</bpmn:incoming><bpmn:outgoing>Flow_S_lesbar_S_join</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="S_kosit" name="Prüfbericht als _KoSIT-Bericht.xml ablegen"><bpmn:incoming>Flow_S_split_S_kosit</bpmn:incoming><bpmn:outgoing>Flow_S_kosit_S_join</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="S_xml" name="XML separat ablegen"><bpmn:incoming>Flow_S_split_S_xml</bpmn:incoming><bpmn:outgoing>Flow_S_xml_S_join</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:inclusiveGateway id="S_join"><bpmn:incoming>Flow_S_lesbar_S_join</bpmn:incoming><bpmn:incoming>Flow_S_kosit_S_join</bpmn:incoming><bpmn:incoming>Flow_S_xml_S_join</bpmn:incoming><bpmn:outgoing>Flow_S_join_S_end</bpmn:outgoing></bpmn:inclusiveGateway>
+      <bpmn:endEvent id="S_end" name="Nebendateien abgelegt"><bpmn:incoming>Flow_S_join_S_end</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_S_start_S_split" sourceRef="S_start" targetRef="S_split" />
+      <bpmn:sequenceFlow id="Flow_S_split_S_lesbar" sourceRef="S_split" targetRef="S_lesbar" name="lesbares PDF" />
+      <bpmn:sequenceFlow id="Flow_S_split_S_kosit" sourceRef="S_split" targetRef="S_kosit" name="Prüfbericht" />
+      <bpmn:sequenceFlow id="Flow_S_split_S_xml" sourceRef="S_split" targetRef="S_xml" name="nur ZUGFeRD" />
+      <bpmn:sequenceFlow id="Flow_S_lesbar_S_join" sourceRef="S_lesbar" targetRef="S_join" />
+      <bpmn:sequenceFlow id="Flow_S_kosit_S_join" sourceRef="S_kosit" targetRef="S_join" />
+      <bpmn:sequenceFlow id="Flow_S_xml_S_join" sourceRef="S_xml" targetRef="S_join" />
+      <bpmn:sequenceFlow id="Flow_S_join_S_end" sourceRef="S_join" targetRef="S_end" />
+      <bpmn:textAnnotation id="SN_lesbar"><bpmn:text>Entsteht bei XRechnung-XML und bei ZUGFeRD mit Formatmangel. Das Original bleibt immer erhalten.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_SN_lesbar" associationDirection="None" sourceRef="S_lesbar" targetRef="SN_lesbar" />
+      <bpmn:textAnnotation id="SN_xml"><bpmn:text>Bei reiner XRechnung ist das Original schon die XML, darum keine zweite Datei.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_SN_xml" associationDirection="None" sourceRef="S_xml" targetRef="SN_xml" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_neben">
+    <bpmndi:BPMNPlane id="Plane_neben" bpmnElement="Collab_neben">
+      <bpmndi:BPMNShape id="P_Neben_di" bpmnElement="P_Neben" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#1A2644"><dc:Bounds x="100" y="60" width="960" height="620" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LN_di" bpmnElement="LN" isHorizontal="true" bioc:stroke="#0F766E" bioc:fill="#F1FAF8" color:background-color="#F1FAF8" color:border-color="#0F766E"><dc:Bounds x="130" y="60" width="930" height="620" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_start_di" bpmnElement="S_start" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="247" y="352" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="205" y="393" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_split_di" bpmnElement="S_split" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="410" y="345" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="335" y="326" width="96" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_lesbar_di" bpmnElement="S_lesbar" bioc:stroke="#0F766E" bioc:fill="#D2EEE8" color:background-color="#D2EEE8" color:border-color="#0F766E"><dc:Bounds x="539" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_kosit_di" bpmnElement="S_kosit" bioc:stroke="#0F766E" bioc:fill="#D2EEE8" color:background-color="#D2EEE8" color:border-color="#0F766E"><dc:Bounds x="539" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_xml_di" bpmnElement="S_xml" bioc:stroke="#0F766E" bioc:fill="#D2EEE8" color:background-color="#D2EEE8" color:border-color="#0F766E"><dc:Bounds x="539" y="448" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_join_di" bpmnElement="S_join" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="750" y="345" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_end_di" bpmnElement="S_end" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="927" y="352" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="885" y="393" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_S_start_S_split_di" bpmnElement="Flow_S_start_S_split"><di:waypoint x="283" y="370" /><di:waypoint x="410" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_S_split_S_lesbar_di" bpmnElement="Flow_S_split_S_lesbar"><di:waypoint x="435" y="345" /><di:waypoint x="435" y="250" /><di:waypoint x="539" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="443" y="233" width="89" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_S_split_S_kosit_di" bpmnElement="Flow_S_split_S_kosit"><di:waypoint x="460" y="370" /><di:waypoint x="539" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="466" y="353" width="82" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_S_split_S_xml_di" bpmnElement="Flow_S_split_S_xml"><di:waypoint x="435" y="395" /><di:waypoint x="435" y="490" /><di:waypoint x="539" y="490" /><bpmndi:BPMNLabel><dc:Bounds x="443" y="473" width="82" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_S_lesbar_S_join_di" bpmnElement="Flow_S_lesbar_S_join"><di:waypoint x="671" y="250" /><di:waypoint x="775" y="250" /><di:waypoint x="775" y="345" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_S_kosit_S_join_di" bpmnElement="Flow_S_kosit_S_join"><di:waypoint x="671" y="370" /><di:waypoint x="750" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_S_xml_S_join_di" bpmnElement="Flow_S_xml_S_join"><di:waypoint x="671" y="490" /><di:waypoint x="775" y="490" /><di:waypoint x="775" y="395" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_S_join_S_end_di" bpmnElement="Flow_S_join_S_end"><di:waypoint x="800" y="370" /><di:waypoint x="927" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SN_lesbar_di" bpmnElement="SN_lesbar" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="530" y="102" width="280" height="56" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_SN_lesbar_di" bpmnElement="Assoc_SN_lesbar"><di:waypoint x="605" y="208" /><di:waypoint x="605" y="158" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SN_xml_di" bpmnElement="SN_xml" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="530" y="582" width="280" height="56" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_SN_xml_di" bpmnElement="Assoc_SN_xml"><di:waypoint x="605" y="532" /><di:waypoint x="605" y="582" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

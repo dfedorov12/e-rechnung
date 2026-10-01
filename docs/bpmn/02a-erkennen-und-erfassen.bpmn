@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" id="Definitions_erfassen" targetNamespace="https://e-rechnung.dihag-extern.com/bpmn" exporter="DIHAG BPMN-Generator (scripts/bpmn/generate-bpmn.js)" exporterVersion="2.0">
+  <bpmn:collaboration id="Collab_erfassen">
+    <bpmn:participant id="P_Erf" name="Erkennen und erfassen" processRef="Process_ERechnung_Erfassen" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_ERechnung_Erfassen" name="E-Rechnung Erkennen und erfassen" isExecutable="false">
+    <bpmn:documentation>Der Konverter liest das Rechnungs-PDF (bei Scans per Texterkennung), erkennt das Werk, befüllt die Felder vor und lässt den Vertrieb prüfen und ergänzen.
+Eingebunden in: E-Rechnung Rechnungsausgang.
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang</bpmn:documentation>
+    <bpmn:laneSet id="LaneSet_P_Erf">
+      <bpmn:lane id="LKK" name="Konverter (Browser-App)"><bpmn:flowNodeRef>E_start</bpmn:flowNodeRef><bpmn:flowNodeRef>E_gwText</bpmn:flowNodeRef><bpmn:flowNodeRef>E_ocr</bpmn:flowNodeRef><bpmn:flowNodeRef>E_werk</bpmn:flowNodeRef><bpmn:flowNodeRef>E_fill</bpmn:flowNodeRef><bpmn:flowNodeRef>E_gwEU</bpmn:flowNodeRef><bpmn:flowNodeRef>E_vat</bpmn:flowNodeRef><bpmn:flowNodeRef>E_end</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="LKV" name="Vertrieb / Fakturierung"><bpmn:flowNodeRef>E_check</bpmn:flowNodeRef><bpmn:flowNodeRef>E_fmt</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+      <bpmn:startEvent id="E_start" name="PDF hochgeladen"><bpmn:outgoing>Flow_E_start_E_gwText</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:exclusiveGateway id="E_gwText" name="Textebene vorhanden?"><bpmn:incoming>Flow_E_start_E_gwText</bpmn:incoming><bpmn:outgoing>Flow_E_gwText_E_werk</bpmn:outgoing><bpmn:outgoing>Flow_E_gwText_E_ocr</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="E_ocr" name="Text erkennen (OCR)"><bpmn:incoming>Flow_E_gwText_E_ocr</bpmn:incoming><bpmn:outgoing>Flow_E_ocr_E_werk</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="E_werk" name="Werk erkennen, passenden Rechnungs-Parser wählen"><bpmn:incoming>Flow_E_gwText_E_werk</bpmn:incoming><bpmn:incoming>Flow_E_ocr_E_werk</bpmn:incoming><bpmn:outgoing>Flow_E_werk_E_fill</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="E_fill" name="Felder vorbefüllen, Verkäufer-Stammdaten sperren"><bpmn:incoming>Flow_E_werk_E_fill</bpmn:incoming><bpmn:outgoing>Flow_E_fill_E_check</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:userTask id="E_check" name="Daten prüfen und ergänzen (Belegart, Leitweg-ID, Lieferschein)"><bpmn:incoming>Flow_E_fill_E_check</bpmn:incoming><bpmn:outgoing>Flow_E_check_E_gwEU</bpmn:outgoing></bpmn:userTask>
+      <bpmn:exclusiveGateway id="E_gwEU" name="Kunde im EU-Ausland mit USt-IdNr?"><bpmn:incoming>Flow_E_check_E_gwEU</bpmn:incoming><bpmn:outgoing>Flow_E_gwEU_E_fmt</bpmn:outgoing><bpmn:outgoing>Flow_E_gwEU_E_vat</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="E_vat" name="USt-IdNr qualifiziert prüfen (BZSt / VIES) und Nachweis sichern"><bpmn:incoming>Flow_E_gwEU_E_vat</bpmn:incoming><bpmn:outgoing>Flow_E_vat_E_fmt</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:userTask id="E_fmt" name="Format wählen (ZUGFeRD als Standard oder XRechnung)"><bpmn:incoming>Flow_E_gwEU_E_fmt</bpmn:incoming><bpmn:incoming>Flow_E_vat_E_fmt</bpmn:incoming><bpmn:outgoing>Flow_E_fmt_E_end</bpmn:outgoing></bpmn:userTask>
+      <bpmn:endEvent id="E_end" name="Daten vollständig"><bpmn:incoming>Flow_E_fmt_E_end</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_E_start_E_gwText" sourceRef="E_start" targetRef="E_gwText" />
+      <bpmn:sequenceFlow id="Flow_E_gwText_E_werk" sourceRef="E_gwText" targetRef="E_werk" name="ja" />
+      <bpmn:sequenceFlow id="Flow_E_gwText_E_ocr" sourceRef="E_gwText" targetRef="E_ocr" name="nein, Scan" />
+      <bpmn:sequenceFlow id="Flow_E_ocr_E_werk" sourceRef="E_ocr" targetRef="E_werk" />
+      <bpmn:sequenceFlow id="Flow_E_werk_E_fill" sourceRef="E_werk" targetRef="E_fill" />
+      <bpmn:sequenceFlow id="Flow_E_fill_E_check" sourceRef="E_fill" targetRef="E_check" />
+      <bpmn:sequenceFlow id="Flow_E_check_E_gwEU" sourceRef="E_check" targetRef="E_gwEU" />
+      <bpmn:sequenceFlow id="Flow_E_gwEU_E_fmt" sourceRef="E_gwEU" targetRef="E_fmt" name="nein" />
+      <bpmn:sequenceFlow id="Flow_E_gwEU_E_vat" sourceRef="E_gwEU" targetRef="E_vat" name="ja" />
+      <bpmn:sequenceFlow id="Flow_E_vat_E_fmt" sourceRef="E_vat" targetRef="E_fmt" />
+      <bpmn:sequenceFlow id="Flow_E_fmt_E_end" sourceRef="E_fmt" targetRef="E_end" />
+      <bpmn:textAnnotation id="EN_werk"><bpmn:text>Eigene Parser: WGC, SHB, ZAI. Weitere Werke folgen.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_EN_werk" associationDirection="None" sourceRef="E_werk" targetRef="EN_werk" />
+      <bpmn:textAnnotation id="EN_fill"><bpmn:text>Entsperren nur bewusst, es landet im Prüfpfad.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_EN_fill" associationDirection="None" sourceRef="E_fill" targetRef="EN_fill" />
+      <bpmn:textAnnotation id="EN_fmt"><bpmn:text>Standard ist ZUGFeRD. XRechnung z. B. für öffentliche Auftraggeber mit Leitweg-ID.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_EN_fmt" associationDirection="None" sourceRef="E_fmt" targetRef="EN_fmt" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_erfassen">
+    <bpmndi:BPMNPlane id="Plane_erfassen" bpmnElement="Collab_erfassen">
+      <bpmndi:BPMNShape id="P_Erf_di" bpmnElement="P_Erf" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#1A2644"><dc:Bounds x="100" y="60" width="1980" height="520" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LKK_di" bpmnElement="LKK" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#F3F6FB" color:background-color="#F3F6FB" color:border-color="#1A2644"><dc:Bounds x="130" y="60" width="1950" height="380" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LKV_di" bpmnElement="LKV" isHorizontal="true" bioc:stroke="#C2410C" bioc:fill="#FFF8F1" color:background-color="#FFF8F1" color:border-color="#C2410C"><dc:Bounds x="130" y="440" width="1950" height="140" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_start_di" bpmnElement="E_start" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="247" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="205" y="273" width="120" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_gwText_di" bpmnElement="E_gwText" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="410" y="225" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="335" y="193" width="96" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_ocr_di" bpmnElement="E_ocr" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="539" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_werk_di" bpmnElement="E_werk" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="709" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_fill_di" bpmnElement="E_fill" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="879" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_check_di" bpmnElement="E_check" bioc:stroke="#C2410C" bioc:fill="#FFE3C8" color:background-color="#FFE3C8" color:border-color="#C2410C"><dc:Bounds x="1049" y="468" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_gwEU_di" bpmnElement="E_gwEU" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1260" y="225" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1185" y="180" width="96" height="41" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_vat_di" bpmnElement="E_vat" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1389" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_fmt_di" bpmnElement="E_fmt" bioc:stroke="#C2410C" bioc:fill="#FFE3C8" color:background-color="#FFE3C8" color:border-color="#C2410C"><dc:Bounds x="1559" y="468" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_end_di" bpmnElement="E_end" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="1777" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1735" y="273" width="120" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_E_start_E_gwText_di" bpmnElement="Flow_E_start_E_gwText"><di:waypoint x="283" y="250" /><di:waypoint x="410" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_gwText_E_werk_di" bpmnElement="Flow_E_gwText_E_werk"><di:waypoint x="460" y="250" /><di:waypoint x="709" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="466" y="233" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_gwText_E_ocr_di" bpmnElement="Flow_E_gwText_E_ocr"><di:waypoint x="435" y="275" /><di:waypoint x="435" y="370" /><di:waypoint x="539" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="443" y="353" width="76" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_ocr_E_werk_di" bpmnElement="Flow_E_ocr_E_werk"><di:waypoint x="671" y="370" /><di:waypoint x="690" y="370" /><di:waypoint x="690" y="250" /><di:waypoint x="709" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_werk_E_fill_di" bpmnElement="Flow_E_werk_E_fill"><di:waypoint x="841" y="250" /><di:waypoint x="879" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_fill_E_check_di" bpmnElement="Flow_E_fill_E_check"><di:waypoint x="1011" y="250" /><di:waypoint x="1030" y="250" /><di:waypoint x="1030" y="510" /><di:waypoint x="1049" y="510" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_check_E_gwEU_di" bpmnElement="Flow_E_check_E_gwEU"><di:waypoint x="1181" y="510" /><di:waypoint x="1221" y="510" /><di:waypoint x="1221" y="250" /><di:waypoint x="1260" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_gwEU_E_fmt_di" bpmnElement="Flow_E_gwEU_E_fmt"><di:waypoint x="1285" y="275" /><di:waypoint x="1285" y="510" /><di:waypoint x="1559" y="510" /><bpmndi:BPMNLabel><dc:Bounds x="1293" y="493" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_gwEU_E_vat_di" bpmnElement="Flow_E_gwEU_E_vat"><di:waypoint x="1285" y="275" /><di:waypoint x="1285" y="370" /><di:waypoint x="1389" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="1293" y="353" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_vat_E_fmt_di" bpmnElement="Flow_E_vat_E_fmt"><di:waypoint x="1521" y="370" /><di:waypoint x="1540" y="370" /><di:waypoint x="1540" y="510" /><di:waypoint x="1559" y="510" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_E_fmt_E_end_di" bpmnElement="Flow_E_fmt_E_end"><di:waypoint x="1625" y="468" /><di:waypoint x="1625" y="250" /><di:waypoint x="1777" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="EN_werk_di" bpmnElement="EN_werk" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="700" y="99" width="160" height="62" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_EN_werk_di" bpmnElement="Assoc_EN_werk"><di:waypoint x="775" y="208" /><di:waypoint x="775" y="161" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="EN_fill_di" bpmnElement="EN_fill" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="870" y="99" width="160" height="62" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_EN_fill_di" bpmnElement="Assoc_EN_fill"><di:waypoint x="945" y="208" /><di:waypoint x="945" y="161" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="EN_fmt_di" bpmnElement="EN_fmt" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="1720" y="474" width="200" height="72" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_EN_fmt_di" bpmnElement="Assoc_EN_fmt"><di:waypoint x="1691" y="510" /><di:waypoint x="1720" y="510" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" id="Definitions_intake" targetNamespace="https://e-rechnung.dihag-extern.com/bpmn" exporter="DIHAG BPMN-Generator (scripts/bpmn/generate-bpmn.js)" exporterVersion="2.0">
+  <bpmn:collaboration id="Collab_intake">
+    <bpmn:participant id="P_Intake" name="Eingangsprüfung" processRef="Process_ERechnung_Eingangspruefung" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_ERechnung_Eingangspruefung" name="E-Rechnung Eingangsprüfung" isExecutable="false">
+    <bpmn:documentation>Der Prüfdienst /api/intake prüft jeden Anhang: Art erkennen, PDF/A-Hülle und eingebettete XML (ZUGFeRD) oder XRechnung validieren, Kopfdaten lesen, Steuerkategorie und Abgleich PDF zu XML bewerten. Ergebnis ist ein JSON mit Buchungsweg und Prüf-Flags.
+Eingebunden in: E-Rechnung Rechnungseingang.
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang</bpmn:documentation>
+    <bpmn:laneSet id="LaneSet_P_Intake">
+      <bpmn:lane id="LI" name="Prüfdienst (Azure)"><bpmn:flowNodeRef>I_start</bpmn:flowNodeRef><bpmn:flowNodeRef>I_norm</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwTyp</bpmn:flowNodeRef><bpmn:flowNodeRef>I_pdfa</bpmn:flowNodeRef><bpmn:flowNodeRef>I_extract</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwEinv</bpmn:flowNodeRef><bpmn:flowNodeRef>I_sonst</bpmn:flowNodeRef><bpmn:flowNodeRef>I_endSonst</bpmn:flowNodeRef><bpmn:flowNodeRef>I_zf</bpmn:flowNodeRef><bpmn:flowNodeRef>I_mustang</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwMin</bpmn:flowNodeRef><bpmn:flowNodeRef>I_rej</bpmn:flowNodeRef><bpmn:flowNodeRef>I_endRej</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwPdfa</bpmn:flowNodeRef><bpmn:flowNodeRef>I_fm</bpmn:flowNodeRef><bpmn:flowNodeRef>I_xr</bpmn:flowNodeRef><bpmn:flowNodeRef>I_kosit</bpmn:flowNodeRef><bpmn:flowNodeRef>I_daten</bpmn:flowNodeRef><bpmn:flowNodeRef>I_werk</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwSt</bpmn:flowNodeRef><bpmn:flowNodeRef>I_man</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwZf</bpmn:flowNodeRef><bpmn:flowNodeRef>I_abgl</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwMat</bpmn:flowNodeRef><bpmn:flowNodeRef>I_rf</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwRend</bpmn:flowNodeRef><bpmn:flowNodeRef>I_render</bpmn:flowNodeRef><bpmn:flowNodeRef>I_end</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+      <bpmn:startEvent id="I_start" name="Anhang vom Flow"><bpmn:outgoing>Flow_I_start_I_norm</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:serviceTask id="I_norm" name="Inhalt erkennen (PDF, XML, base64 oder Flow-Hülle)"><bpmn:incoming>Flow_I_start_I_norm</bpmn:incoming><bpmn:outgoing>Flow_I_norm_I_gwTyp</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="I_gwTyp" name="PDF oder XML?"><bpmn:incoming>Flow_I_norm_I_gwTyp</bpmn:incoming><bpmn:outgoing>Flow_I_gwTyp_I_pdfa</bpmn:outgoing><bpmn:outgoing>Flow_I_gwTyp_I_xr</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_pdfa" name="PDF/A-Hülle mit veraPDF prüfen"><bpmn:incoming>Flow_I_gwTyp_I_pdfa</bpmn:incoming><bpmn:outgoing>Flow_I_pdfa_I_extract</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="I_extract" name="Eingebettete XML suchen"><bpmn:incoming>Flow_I_pdfa_I_extract</bpmn:incoming><bpmn:outgoing>Flow_I_extract_I_gwEinv</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="I_gwEinv" name="Echte E-Rechnung (CII oder UBL) eingebettet?"><bpmn:incoming>Flow_I_extract_I_gwEinv</bpmn:incoming><bpmn:outgoing>Flow_I_gwEinv_I_zf</bpmn:outgoing><bpmn:outgoing>Flow_I_gwEinv_I_sonst</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_sonst" name="Sonstige Rechnung: unter Vorbehalt, Berichtigung anfordern"><bpmn:incoming>Flow_I_gwEinv_I_sonst</bpmn:incoming><bpmn:outgoing>Flow_I_sonst_I_endSonst</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:endEvent id="I_endSonst" name="Ergebnis: sonstige Rechnung"><bpmn:incoming>Flow_I_sonst_I_endSonst</bpmn:incoming></bpmn:endEvent>
+      <bpmn:serviceTask id="I_zf" name="Als ZUGFeRD einordnen"><bpmn:incoming>Flow_I_gwEinv_I_zf</bpmn:incoming><bpmn:outgoing>Flow_I_zf_I_mustang</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="I_mustang" name="Tatsächliches Profil mit Mustang prüfen (mit Prüfbericht)"><bpmn:incoming>Flow_I_zf_I_mustang</bpmn:incoming><bpmn:outgoing>Flow_I_mustang_I_gwMin</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="I_gwMin" name="Profil MINIMUM oder BASIC-WL?"><bpmn:incoming>Flow_I_mustang_I_gwMin</bpmn:incoming><bpmn:outgoing>Flow_I_gwMin_I_rej</bpmn:outgoing><bpmn:outgoing>Flow_I_gwMin_I_gwPdfa</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_rej" name="Als keine E-Rechnung zurückweisen (harter Stopp)"><bpmn:incoming>Flow_I_gwMin_I_rej</bpmn:incoming><bpmn:outgoing>Flow_I_rej_I_endRej</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:endEvent id="I_endRej" name="Ergebnis: zurückgewiesen"><bpmn:incoming>Flow_I_rej_I_endRej</bpmn:incoming></bpmn:endEvent>
+      <bpmn:exclusiveGateway id="I_gwPdfa" name="PDF/A-3 in Ordnung?"><bpmn:incoming>Flow_I_gwMin_I_gwPdfa</bpmn:incoming><bpmn:outgoing>Flow_I_gwPdfa_I_daten</bpmn:outgoing><bpmn:outgoing>Flow_I_gwPdfa_I_fm</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_fm" name="Formatmangel: unter Vorbehalt, Berichtigung anfordern"><bpmn:incoming>Flow_I_gwPdfa_I_fm</bpmn:incoming><bpmn:outgoing>Flow_I_fm_I_daten</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="I_xr" name="Als XRechnung einordnen (reine XML)"><bpmn:incoming>Flow_I_gwTyp_I_xr</bpmn:incoming><bpmn:outgoing>Flow_I_xr_I_kosit</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="I_kosit" name="XRechnung / EN 16931 mit KoSIT prüfen (mit Prüfbericht)"><bpmn:incoming>Flow_I_xr_I_kosit</bpmn:incoming><bpmn:outgoing>Flow_I_kosit_I_daten</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="I_daten" name="Kopfdaten lesen (Nummer, Datum, Beträge, Steuerkategorie)"><bpmn:incoming>Flow_I_gwPdfa_I_daten</bpmn:incoming><bpmn:incoming>Flow_I_fm_I_daten</bpmn:incoming><bpmn:incoming>Flow_I_kosit_I_daten</bpmn:incoming><bpmn:outgoing>Flow_I_daten_I_werk</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="I_werk" name="Richtung und Werk bestimmen (mit Empfänger-Gegenprobe)"><bpmn:incoming>Flow_I_daten_I_werk</bpmn:incoming><bpmn:outgoing>Flow_I_werk_I_gwSt</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="I_gwSt" name="Steuerkategorie AE, K, G, E oder O?"><bpmn:incoming>Flow_I_werk_I_gwSt</bpmn:incoming><bpmn:outgoing>Flow_I_gwSt_I_man</bpmn:outgoing><bpmn:outgoing>Flow_I_gwSt_I_gwZf</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_man" name="Buchungsweg „manuell“ setzen (Vier-Augen-Prüfung nötig)"><bpmn:incoming>Flow_I_gwSt_I_man</bpmn:incoming><bpmn:outgoing>Flow_I_man_I_gwZf</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="I_gwZf" name="Quelle ZUGFeRD?"><bpmn:incoming>Flow_I_gwSt_I_gwZf</bpmn:incoming><bpmn:incoming>Flow_I_man_I_gwZf</bpmn:incoming><bpmn:outgoing>Flow_I_gwZf_I_abgl</bpmn:outgoing><bpmn:outgoing>Flow_I_gwZf_I_gwRend</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_abgl" name="PDF und XML abgleichen (Nummer, Steuer, Brutto, rundungstolerant)"><bpmn:incoming>Flow_I_gwZf_I_abgl</bpmn:incoming><bpmn:outgoing>Flow_I_abgl_I_gwMat</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="I_gwMat" name="Materielle Abweichung?"><bpmn:incoming>Flow_I_abgl_I_gwMat</bpmn:incoming><bpmn:outgoing>Flow_I_gwMat_I_rf</bpmn:outgoing><bpmn:outgoing>Flow_I_gwMat_I_gwRend</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_rf" name="Rückfrage-Flag setzen (die XML bleibt maßgeblich)"><bpmn:incoming>Flow_I_gwMat_I_rf</bpmn:incoming><bpmn:outgoing>Flow_I_rf_I_gwRend</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="I_gwRend" name="XRechnung-XML oder Formatmangel?"><bpmn:incoming>Flow_I_gwZf_I_gwRend</bpmn:incoming><bpmn:incoming>Flow_I_gwMat_I_gwRend</bpmn:incoming><bpmn:incoming>Flow_I_rf_I_gwRend</bpmn:incoming><bpmn:outgoing>Flow_I_gwRend_I_render</bpmn:outgoing><bpmn:outgoing>Flow_I_gwRend_I_end</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="I_render" name="Lesbares PDF/A-3b aus der XML erzeugen"><bpmn:incoming>Flow_I_gwRend_I_render</bpmn:incoming><bpmn:outgoing>Flow_I_render_I_end</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:endEvent id="I_end" name="Prüfergebnis an den Flow (JSON)"><bpmn:incoming>Flow_I_gwRend_I_end</bpmn:incoming><bpmn:incoming>Flow_I_render_I_end</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_I_start_I_norm" sourceRef="I_start" targetRef="I_norm" />
+      <bpmn:sequenceFlow id="Flow_I_norm_I_gwTyp" sourceRef="I_norm" targetRef="I_gwTyp" />
+      <bpmn:sequenceFlow id="Flow_I_gwTyp_I_pdfa" sourceRef="I_gwTyp" targetRef="I_pdfa" name="PDF" />
+      <bpmn:sequenceFlow id="Flow_I_gwTyp_I_xr" sourceRef="I_gwTyp" targetRef="I_xr" name="XML" />
+      <bpmn:sequenceFlow id="Flow_I_pdfa_I_extract" sourceRef="I_pdfa" targetRef="I_extract" />
+      <bpmn:sequenceFlow id="Flow_I_extract_I_gwEinv" sourceRef="I_extract" targetRef="I_gwEinv" />
+      <bpmn:sequenceFlow id="Flow_I_gwEinv_I_zf" sourceRef="I_gwEinv" targetRef="I_zf" name="ja" />
+      <bpmn:sequenceFlow id="Flow_I_gwEinv_I_sonst" sourceRef="I_gwEinv" targetRef="I_sonst" name="nein oder fremde XML" />
+      <bpmn:sequenceFlow id="Flow_I_sonst_I_endSonst" sourceRef="I_sonst" targetRef="I_endSonst" />
+      <bpmn:sequenceFlow id="Flow_I_zf_I_mustang" sourceRef="I_zf" targetRef="I_mustang" />
+      <bpmn:sequenceFlow id="Flow_I_mustang_I_gwMin" sourceRef="I_mustang" targetRef="I_gwMin" />
+      <bpmn:sequenceFlow id="Flow_I_gwMin_I_rej" sourceRef="I_gwMin" targetRef="I_rej" name="ja" />
+      <bpmn:sequenceFlow id="Flow_I_rej_I_endRej" sourceRef="I_rej" targetRef="I_endRej" />
+      <bpmn:sequenceFlow id="Flow_I_gwMin_I_gwPdfa" sourceRef="I_gwMin" targetRef="I_gwPdfa" name="nein" />
+      <bpmn:sequenceFlow id="Flow_I_gwPdfa_I_daten" sourceRef="I_gwPdfa" targetRef="I_daten" name="ja" />
+      <bpmn:sequenceFlow id="Flow_I_gwPdfa_I_fm" sourceRef="I_gwPdfa" targetRef="I_fm" name="nein" />
+      <bpmn:sequenceFlow id="Flow_I_fm_I_daten" sourceRef="I_fm" targetRef="I_daten" />
+      <bpmn:sequenceFlow id="Flow_I_xr_I_kosit" sourceRef="I_xr" targetRef="I_kosit" />
+      <bpmn:sequenceFlow id="Flow_I_kosit_I_daten" sourceRef="I_kosit" targetRef="I_daten" />
+      <bpmn:sequenceFlow id="Flow_I_daten_I_werk" sourceRef="I_daten" targetRef="I_werk" />
+      <bpmn:sequenceFlow id="Flow_I_werk_I_gwSt" sourceRef="I_werk" targetRef="I_gwSt" />
+      <bpmn:sequenceFlow id="Flow_I_gwSt_I_man" sourceRef="I_gwSt" targetRef="I_man" name="ja" />
+      <bpmn:sequenceFlow id="Flow_I_gwSt_I_gwZf" sourceRef="I_gwSt" targetRef="I_gwZf" name="nein" />
+      <bpmn:sequenceFlow id="Flow_I_man_I_gwZf" sourceRef="I_man" targetRef="I_gwZf" />
+      <bpmn:sequenceFlow id="Flow_I_gwZf_I_abgl" sourceRef="I_gwZf" targetRef="I_abgl" name="ja" />
+      <bpmn:sequenceFlow id="Flow_I_gwZf_I_gwRend" sourceRef="I_gwZf" targetRef="I_gwRend" name="nein" />
+      <bpmn:sequenceFlow id="Flow_I_abgl_I_gwMat" sourceRef="I_abgl" targetRef="I_gwMat" />
+      <bpmn:sequenceFlow id="Flow_I_gwMat_I_rf" sourceRef="I_gwMat" targetRef="I_rf" name="ja" />
+      <bpmn:sequenceFlow id="Flow_I_gwMat_I_gwRend" sourceRef="I_gwMat" targetRef="I_gwRend" name="nein" />
+      <bpmn:sequenceFlow id="Flow_I_rf_I_gwRend" sourceRef="I_rf" targetRef="I_gwRend" />
+      <bpmn:sequenceFlow id="Flow_I_gwRend_I_render" sourceRef="I_gwRend" targetRef="I_render" name="ja" />
+      <bpmn:sequenceFlow id="Flow_I_gwRend_I_end" sourceRef="I_gwRend" targetRef="I_end" name="nein" />
+      <bpmn:sequenceFlow id="Flow_I_render_I_end" sourceRef="I_render" targetRef="I_end" />
+      <bpmn:textAnnotation id="IN_sonst"><bpmn:text>Auch fremde XML (z. B. openTRANS) zählt nicht als E-Rechnung. Übergang: sonstige Rechnungen sind bis 31.12.2026 zulässig, bei Vorjahresumsatz bis 800.000 € bis 31.12.2027.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_IN_sonst" associationDirection="None" sourceRef="I_sonst" targetRef="IN_sonst" />
+      <bpmn:textAnnotation id="IN_kosit"><bpmn:text>Nur formale Verstöße (Leitweg-ID, elektronische Adresse) sind Hinweise und werten nicht ab.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_IN_kosit" associationDirection="None" sourceRef="I_kosit" targetRef="IN_kosit" />
+      <bpmn:textAnnotation id="IN_werk"><bpmn:text>Ist eine DIHAG-Gesellschaft Verkäufer, gilt die Rechnung als Ausgang (Ablage in AR_&lt;Werk&gt;).</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_IN_werk" associationDirection="None" sourceRef="I_werk" targetRef="IN_werk" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_intake">
+    <bpmndi:BPMNPlane id="Plane_intake" bpmnElement="Collab_intake">
+      <bpmndi:BPMNShape id="P_Intake_di" bpmnElement="P_Intake" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#1A2644"><dc:Bounds x="100" y="60" width="2150" height="1220" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LI_di" bpmnElement="LI" isHorizontal="true" bioc:stroke="#5B3FA8" bioc:fill="#F8F5FD" color:background-color="#F8F5FD" color:border-color="#5B3FA8"><dc:Bounds x="130" y="60" width="2120" height="1220" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_start_di" bpmnElement="I_start" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="247" y="352" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="205" y="393" width="120" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_norm_di" bpmnElement="I_norm" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="369" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwTyp_di" bpmnElement="I_gwTyp" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="580" y="345" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="505" y="326" width="96" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_pdfa_di" bpmnElement="I_pdfa" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="709" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_extract_di" bpmnElement="I_extract" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="879" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwEinv_di" bpmnElement="I_gwEinv" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1090" y="345" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1015" y="300" width="96" height="41" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_sonst_di" bpmnElement="I_sonst" bioc:stroke="#A65F00" bioc:fill="#FFF1CC" color:background-color="#FFF1CC" color:border-color="#A65F00"><dc:Bounds x="1219" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_endSonst_di" bpmnElement="I_endSonst" bioc:stroke="#A65F00" bioc:fill="#FFF1CC" color:background-color="#FFF1CC" color:border-color="#A65F00"><dc:Bounds x="1437" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1395" y="273" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_zf_di" bpmnElement="I_zf" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="1219" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_mustang_di" bpmnElement="I_mustang" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="1389" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwMin_di" bpmnElement="I_gwMin" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1600" y="345" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1525" y="313" width="96" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_rej_di" bpmnElement="I_rej" bioc:stroke="#B42318" bioc:fill="#FDE2E1" color:background-color="#FDE2E1" color:border-color="#B42318"><dc:Bounds x="1729" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_endRej_di" bpmnElement="I_endRej" bioc:stroke="#B42318" bioc:fill="#FDE2E1" color:background-color="#FDE2E1" color:border-color="#B42318"><dc:Bounds x="1947" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1905" y="273" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwPdfa_di" bpmnElement="I_gwPdfa" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1770" y="345" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1695" y="313" width="96" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_fm_di" bpmnElement="I_fm" bioc:stroke="#A65F00" bioc:fill="#FFF1CC" color:background-color="#FFF1CC" color:border-color="#A65F00"><dc:Bounds x="1899" y="448" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_xr_di" bpmnElement="I_xr" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="709" y="568" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_kosit_di" bpmnElement="I_kosit" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="879" y="568" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_daten_di" bpmnElement="I_daten" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="2069" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_werk_di" bpmnElement="I_werk" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="199" y="1048" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwSt_di" bpmnElement="I_gwSt" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="410" y="1065" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="335" y="1020" width="96" height="41" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_man_di" bpmnElement="I_man" bioc:stroke="#A65F00" bioc:fill="#FFF1CC" color:background-color="#FFF1CC" color:border-color="#A65F00"><dc:Bounds x="539" y="1168" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwZf_di" bpmnElement="I_gwZf" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="750" y="1065" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="675" y="1046" width="96" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_abgl_di" bpmnElement="I_abgl" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="879" y="1048" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwMat_di" bpmnElement="I_gwMat" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1090" y="1065" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1015" y="1033" width="96" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_rf_di" bpmnElement="I_rf" bioc:stroke="#A65F00" bioc:fill="#FFF1CC" color:background-color="#FFF1CC" color:border-color="#A65F00"><dc:Bounds x="1219" y="1168" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_gwRend_di" bpmnElement="I_gwRend" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1430" y="1065" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1355" y="1033" width="96" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_render_di" bpmnElement="I_render" bioc:stroke="#5B3FA8" bioc:fill="#E6DDF7" color:background-color="#E6DDF7" color:border-color="#5B3FA8"><dc:Bounds x="1559" y="1168" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_end_di" bpmnElement="I_end" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="1777" y="1072" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1735" y="1113" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_I_start_I_norm_di" bpmnElement="Flow_I_start_I_norm"><di:waypoint x="283" y="370" /><di:waypoint x="369" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_norm_I_gwTyp_di" bpmnElement="Flow_I_norm_I_gwTyp"><di:waypoint x="501" y="370" /><di:waypoint x="580" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwTyp_I_pdfa_di" bpmnElement="Flow_I_gwTyp_I_pdfa"><di:waypoint x="630" y="370" /><di:waypoint x="709" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="636" y="353" width="31" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwTyp_I_xr_di" bpmnElement="Flow_I_gwTyp_I_xr"><di:waypoint x="605" y="395" /><di:waypoint x="605" y="610" /><di:waypoint x="709" y="610" /><bpmndi:BPMNLabel><dc:Bounds x="613" y="593" width="31" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_pdfa_I_extract_di" bpmnElement="Flow_I_pdfa_I_extract"><di:waypoint x="841" y="370" /><di:waypoint x="879" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_extract_I_gwEinv_di" bpmnElement="Flow_I_extract_I_gwEinv"><di:waypoint x="1011" y="370" /><di:waypoint x="1090" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwEinv_I_zf_di" bpmnElement="Flow_I_gwEinv_I_zf"><di:waypoint x="1140" y="370" /><di:waypoint x="1219" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="1146" y="353" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwEinv_I_sonst_di" bpmnElement="Flow_I_gwEinv_I_sonst"><di:waypoint x="1115" y="345" /><di:waypoint x="1115" y="250" /><di:waypoint x="1219" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="1123" y="220" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_sonst_I_endSonst_di" bpmnElement="Flow_I_sonst_I_endSonst"><di:waypoint x="1351" y="250" /><di:waypoint x="1437" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_zf_I_mustang_di" bpmnElement="Flow_I_zf_I_mustang"><di:waypoint x="1351" y="370" /><di:waypoint x="1389" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_mustang_I_gwMin_di" bpmnElement="Flow_I_mustang_I_gwMin"><di:waypoint x="1521" y="370" /><di:waypoint x="1600" y="370" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwMin_I_rej_di" bpmnElement="Flow_I_gwMin_I_rej"><di:waypoint x="1625" y="345" /><di:waypoint x="1625" y="250" /><di:waypoint x="1729" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="1633" y="233" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_rej_I_endRej_di" bpmnElement="Flow_I_rej_I_endRej"><di:waypoint x="1861" y="250" /><di:waypoint x="1947" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwMin_I_gwPdfa_di" bpmnElement="Flow_I_gwMin_I_gwPdfa"><di:waypoint x="1650" y="370" /><di:waypoint x="1770" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="1656" y="353" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwPdfa_I_daten_di" bpmnElement="Flow_I_gwPdfa_I_daten"><di:waypoint x="1820" y="370" /><di:waypoint x="2069" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="1826" y="353" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwPdfa_I_fm_di" bpmnElement="Flow_I_gwPdfa_I_fm"><di:waypoint x="1795" y="395" /><di:waypoint x="1795" y="490" /><di:waypoint x="1899" y="490" /><bpmndi:BPMNLabel><dc:Bounds x="1803" y="473" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_fm_I_daten_di" bpmnElement="Flow_I_fm_I_daten"><di:waypoint x="2031" y="490" /><di:waypoint x="2135" y="490" /><di:waypoint x="2135" y="412" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_xr_I_kosit_di" bpmnElement="Flow_I_xr_I_kosit"><di:waypoint x="841" y="610" /><di:waypoint x="879" y="610" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_kosit_I_daten_di" bpmnElement="Flow_I_kosit_I_daten"><di:waypoint x="1011" y="610" /><di:waypoint x="2135" y="610" /><di:waypoint x="2135" y="412" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_daten_I_werk_di" bpmnElement="Flow_I_daten_I_werk"><di:waypoint x="2201" y="370" /><di:waypoint x="2229" y="370" /><di:waypoint x="2229" y="850" /><di:waypoint x="265" y="850" /><di:waypoint x="265" y="1048" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_werk_I_gwSt_di" bpmnElement="Flow_I_werk_I_gwSt"><di:waypoint x="331" y="1090" /><di:waypoint x="410" y="1090" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwSt_I_man_di" bpmnElement="Flow_I_gwSt_I_man"><di:waypoint x="435" y="1115" /><di:waypoint x="435" y="1210" /><di:waypoint x="539" y="1210" /><bpmndi:BPMNLabel><dc:Bounds x="443" y="1193" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwSt_I_gwZf_di" bpmnElement="Flow_I_gwSt_I_gwZf"><di:waypoint x="460" y="1090" /><di:waypoint x="750" y="1090" /><bpmndi:BPMNLabel><dc:Bounds x="466" y="1073" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_man_I_gwZf_di" bpmnElement="Flow_I_man_I_gwZf"><di:waypoint x="671" y="1210" /><di:waypoint x="775" y="1210" /><di:waypoint x="775" y="1115" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwZf_I_abgl_di" bpmnElement="Flow_I_gwZf_I_abgl"><di:waypoint x="800" y="1090" /><di:waypoint x="879" y="1090" /><bpmndi:BPMNLabel><dc:Bounds x="806" y="1073" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwZf_I_gwRend_di" bpmnElement="Flow_I_gwZf_I_gwRend"><di:waypoint x="775" y="1065" /><di:waypoint x="775" y="993" /><di:waypoint x="1455" y="993" /><di:waypoint x="1455" y="1065" /><bpmndi:BPMNLabel><dc:Bounds x="783" y="976" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_abgl_I_gwMat_di" bpmnElement="Flow_I_abgl_I_gwMat"><di:waypoint x="1011" y="1090" /><di:waypoint x="1090" y="1090" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwMat_I_rf_di" bpmnElement="Flow_I_gwMat_I_rf"><di:waypoint x="1115" y="1115" /><di:waypoint x="1115" y="1210" /><di:waypoint x="1219" y="1210" /><bpmndi:BPMNLabel><dc:Bounds x="1123" y="1193" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwMat_I_gwRend_di" bpmnElement="Flow_I_gwMat_I_gwRend"><di:waypoint x="1140" y="1090" /><di:waypoint x="1430" y="1090" /><bpmndi:BPMNLabel><dc:Bounds x="1146" y="1073" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_rf_I_gwRend_di" bpmnElement="Flow_I_rf_I_gwRend"><di:waypoint x="1351" y="1210" /><di:waypoint x="1455" y="1210" /><di:waypoint x="1455" y="1115" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwRend_I_render_di" bpmnElement="Flow_I_gwRend_I_render"><di:waypoint x="1455" y="1115" /><di:waypoint x="1455" y="1210" /><di:waypoint x="1559" y="1210" /><bpmndi:BPMNLabel><dc:Bounds x="1463" y="1193" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_gwRend_I_end_di" bpmnElement="Flow_I_gwRend_I_end"><di:waypoint x="1480" y="1090" /><di:waypoint x="1777" y="1090" /><bpmndi:BPMNLabel><dc:Bounds x="1486" y="1073" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_I_render_I_end_di" bpmnElement="Flow_I_render_I_end"><di:waypoint x="1691" y="1210" /><di:waypoint x="1734" y="1210" /><di:waypoint x="1734" y="1090" /><di:waypoint x="1777" y="1090" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="IN_sonst_di" bpmnElement="IN_sonst" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="1210" y="94" width="330" height="72" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_IN_sonst_di" bpmnElement="Assoc_IN_sonst"><di:waypoint x="1285" y="208" /><di:waypoint x="1285" y="166" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="IN_kosit_di" bpmnElement="IN_kosit" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="700" y="702" width="320" height="56" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_IN_kosit_di" bpmnElement="Assoc_IN_kosit"><di:waypoint x="945" y="652" /><di:waypoint x="945" y="702" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="IN_werk_di" bpmnElement="IN_werk" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="190" y="1174" width="225" height="72" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_IN_werk_di" bpmnElement="Assoc_IN_werk"><di:waypoint x="265" y="1132" /><di:waypoint x="265" y="1174" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

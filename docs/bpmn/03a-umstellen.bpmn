@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" id="Definitions_umstellen" targetNamespace="https://e-rechnung.dihag-extern.com/bpmn" exporter="DIHAG BPMN-Generator (scripts/bpmn/generate-bpmn.js)" exporterVersion="2.0">
+  <bpmn:collaboration id="Collab_umstellen">
+    <bpmn:participant id="P_Umst" name="Zahldatei umstellen" processRef="Process_Zahldatei_Umstellen" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Zahldatei_Umstellen" name="Zahldatei auf pain.001.001.09 umstellen" isExecutable="false">
+    <bpmn:documentation>Der MC-Converter erkennt die Dateiart am Inhalt. SEPA-Überweisungen (pain.001.003.03 oder 001.001.03) werden zu pain.001.001.09, DTAZV-Auslandszahlungen zu pain.001.001.09 AXZ nach DK-Schema GBIC_5.
+Eingebunden in: Zahlungsausgang (MC-Converter).
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#zahlung</bpmn:documentation>
+    <bpmn:laneSet id="LaneSet_P_Umst">
+      <bpmn:lane id="LUM" name="MC-Converter (Browser-App)"><bpmn:flowNodeRef>U_start</bpmn:flowNodeRef><bpmn:flowNodeRef>U_ns</bpmn:flowNodeRef><bpmn:flowNodeRef>U_gw</bpmn:flowNodeRef><bpmn:flowNodeRef>U_stop</bpmn:flowNodeRef><bpmn:flowNodeRef>U_struct</bpmn:flowNodeRef><bpmn:flowNodeRef>U_strip</bpmn:flowNodeRef><bpmn:flowNodeRef>U_sum</bpmn:flowNodeRef><bpmn:flowNodeRef>U_clean</bpmn:flowNodeRef><bpmn:flowNodeRef>U_end</bpmn:flowNodeRef><bpmn:flowNodeRef>U_read</bpmn:flowNodeRef><bpmn:flowNodeRef>U_map</bpmn:flowNodeRef><bpmn:flowNodeRef>U_iban</bpmn:flowNodeRef><bpmn:flowNodeRef>U_adr</bpmn:flowNodeRef><bpmn:flowNodeRef>U_gwOrt</bpmn:flowNodeRef><bpmn:flowNodeRef>U_endAxz</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="LUT" name="Treasury / Buchhaltung"><bpmn:flowNodeRef>U_ort</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+      <bpmn:startEvent id="U_start" name="Datei geladen"><bpmn:outgoing>Flow_U_start_U_ns</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:serviceTask id="U_ns" name="Dateiart erkennen (pain.001-Namespace oder DTAZV-Vorsatz)"><bpmn:incoming>Flow_U_start_U_ns</bpmn:incoming><bpmn:outgoing>Flow_U_ns_U_gw</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="U_gw" name="Welche Dateiart?"><bpmn:incoming>Flow_U_ns_U_gw</bpmn:incoming><bpmn:outgoing>Flow_U_gw_U_struct</bpmn:outgoing><bpmn:outgoing>Flow_U_gw_U_read</bpmn:outgoing><bpmn:outgoing>Flow_U_gw_U_stop</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:endEvent id="U_stop" name="Abbruch: keine Überweisung, z. B. Lastschrift pain.008"><bpmn:incoming>Flow_U_gw_U_stop</bpmn:incoming></bpmn:endEvent>
+      <bpmn:serviceTask id="U_struct" name="Struktur umstellen (Datum als &lt;Dt&gt;, BIC als &lt;BICFI&gt;, Sammelbuchung)"><bpmn:incoming>Flow_U_gw_U_struct</bpmn:incoming><bpmn:outgoing>Flow_U_struct_U_strip</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="U_strip" name="Adressen und Konto-Währung entfernen (IBAN genügt)"><bpmn:incoming>Flow_U_struct_U_strip</bpmn:incoming><bpmn:outgoing>Flow_U_strip_U_sum</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="U_sum" name="Anzahl und Kontrollsumme aus den Posten neu berechnen"><bpmn:incoming>Flow_U_strip_U_sum</bpmn:incoming><bpmn:outgoing>Flow_U_sum_U_clean</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="U_clean" name="SEPA-Zeichensatz erzwingen (Verwendungszweck max. 140 Zeichen)"><bpmn:incoming>Flow_U_sum_U_clean</bpmn:incoming><bpmn:outgoing>Flow_U_clean_U_end</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:endEvent id="U_end" name="pain.001.001.09 (SEPA) erzeugt"><bpmn:incoming>Flow_U_clean_U_end</bpmn:incoming></bpmn:endEvent>
+      <bpmn:serviceTask id="U_read" name="Q-, T- und Z-Sätze lesen und Nachsatz gegenprüfen"><bpmn:incoming>Flow_U_gw_U_read</bpmn:incoming><bpmn:outgoing>Flow_U_read_U_map</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="U_map" name="Entgelt, Zahlungsart und Weisungen auf AXZ abbilden"><bpmn:incoming>Flow_U_read_U_map</bpmn:incoming><bpmn:outgoing>Flow_U_map_U_iban</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="U_iban" name="IBAN des Belastungskontos aus BLZ und Konto berechnen"><bpmn:incoming>Flow_U_map_U_iban</bpmn:incoming><bpmn:outgoing>Flow_U_iban_U_adr</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="U_adr" name="Adressen hybrid aufbauen (Ort und Land strukturiert)"><bpmn:incoming>Flow_U_iban_U_adr</bpmn:incoming><bpmn:outgoing>Flow_U_adr_U_gwOrt</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="U_gwOrt" name="Ort des Empfängers vorhanden?"><bpmn:incoming>Flow_U_adr_U_gwOrt</bpmn:incoming><bpmn:outgoing>Flow_U_gwOrt_U_endAxz</bpmn:outgoing><bpmn:outgoing>Flow_U_gwOrt_U_ort</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:userTask id="U_ort" name="Ort im MC-Converter eintragen"><bpmn:incoming>Flow_U_gwOrt_U_ort</bpmn:incoming><bpmn:outgoing>Flow_U_ort_U_endAxz</bpmn:outgoing></bpmn:userTask>
+      <bpmn:endEvent id="U_endAxz" name="pain.001.001.09 AXZ erzeugt"><bpmn:incoming>Flow_U_gwOrt_U_endAxz</bpmn:incoming><bpmn:incoming>Flow_U_ort_U_endAxz</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_U_start_U_ns" sourceRef="U_start" targetRef="U_ns" />
+      <bpmn:sequenceFlow id="Flow_U_ns_U_gw" sourceRef="U_ns" targetRef="U_gw" />
+      <bpmn:sequenceFlow id="Flow_U_gw_U_struct" sourceRef="U_gw" targetRef="U_struct" name="SEPA" />
+      <bpmn:sequenceFlow id="Flow_U_gw_U_read" sourceRef="U_gw" targetRef="U_read" name="DTAZV" />
+      <bpmn:sequenceFlow id="Flow_U_gw_U_stop" sourceRef="U_gw" targetRef="U_stop" name="andere Datei" />
+      <bpmn:sequenceFlow id="Flow_U_struct_U_strip" sourceRef="U_struct" targetRef="U_strip" />
+      <bpmn:sequenceFlow id="Flow_U_strip_U_sum" sourceRef="U_strip" targetRef="U_sum" />
+      <bpmn:sequenceFlow id="Flow_U_sum_U_clean" sourceRef="U_sum" targetRef="U_clean" />
+      <bpmn:sequenceFlow id="Flow_U_clean_U_end" sourceRef="U_clean" targetRef="U_end" />
+      <bpmn:sequenceFlow id="Flow_U_read_U_map" sourceRef="U_read" targetRef="U_map" />
+      <bpmn:sequenceFlow id="Flow_U_map_U_iban" sourceRef="U_map" targetRef="U_iban" />
+      <bpmn:sequenceFlow id="Flow_U_iban_U_adr" sourceRef="U_iban" targetRef="U_adr" />
+      <bpmn:sequenceFlow id="Flow_U_adr_U_gwOrt" sourceRef="U_adr" targetRef="U_gwOrt" />
+      <bpmn:sequenceFlow id="Flow_U_gwOrt_U_endAxz" sourceRef="U_gwOrt" targetRef="U_endAxz" name="ja" />
+      <bpmn:sequenceFlow id="Flow_U_gwOrt_U_ort" sourceRef="U_gwOrt" targetRef="U_ort" name="nein" />
+      <bpmn:sequenceFlow id="Flow_U_ort_U_endAxz" sourceRef="U_ort" targetRef="U_endAxz" />
+      <bpmn:textAnnotation id="UN_ns"><bpmn:text>Erkennung am Inhalt, die Dateiendung spielt keine Rolle.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_UN_ns" associationDirection="None" sourceRef="U_ns" targetRef="UN_ns" />
+      <bpmn:textAnnotation id="UN_struct"><bpmn:text>Im Reiter umschaltbar: Sammelbuchung, InstrId übernehmen, Zeichensatz.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_UN_struct" associationDirection="None" sourceRef="U_struct" targetRef="UN_struct" />
+      <bpmn:textAnnotation id="UN_dtazv"><bpmn:text>DTAZV nehmen die Banken ab 14.11.2026 nicht mehr an. Einreichen per EBICS-Auftragsart AXZ.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_UN_dtazv" associationDirection="None" sourceRef="U_map" targetRef="UN_dtazv" />
+      <bpmn:textAnnotation id="UN_ort"><bpmn:text>Ohne Ort lehnt die Bank die AXZ-Datei ab. Der Ort wird je Empfängerkonto gemerkt.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_UN_ort" associationDirection="None" sourceRef="U_ort" targetRef="UN_ort" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_umstellen">
+    <bpmndi:BPMNPlane id="Plane_umstellen" bpmnElement="Collab_umstellen">
+      <bpmndi:BPMNShape id="P_Umst_di" bpmnElement="P_Umst" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#1A2644"><dc:Bounds x="100" y="60" width="1980" height="760" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LUM_di" bpmnElement="LUM" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#F3F6FB" color:background-color="#F3F6FB" color:border-color="#1A2644"><dc:Bounds x="130" y="60" width="1950" height="620" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LUT_di" bpmnElement="LUT" isHorizontal="true" bioc:stroke="#C2410C" bioc:fill="#FFF8F1" color:background-color="#FFF8F1" color:border-color="#C2410C"><dc:Bounds x="130" y="680" width="1950" height="140" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_start_di" bpmnElement="U_start" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="247" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="205" y="273" width="120" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_ns_di" bpmnElement="U_ns" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="369" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_gw_di" bpmnElement="U_gw" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="580" y="225" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="505" y="206" width="96" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_stop_di" bpmnElement="U_stop" bioc:stroke="#B42318" bioc:fill="#FDE2E1" color:background-color="#FDE2E1" color:border-color="#B42318"><dc:Bounds x="757" y="112" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="715" y="153" width="120" height="41" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_struct_di" bpmnElement="U_struct" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="709" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_strip_di" bpmnElement="U_strip" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="879" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_sum_di" bpmnElement="U_sum" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1049" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_clean_di" bpmnElement="U_clean" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1219" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_end_di" bpmnElement="U_end" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="1437" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1395" y="273" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_read_di" bpmnElement="U_read" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="709" y="448" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_map_di" bpmnElement="U_map" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="879" y="448" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_iban_di" bpmnElement="U_iban" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1049" y="448" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_adr_di" bpmnElement="U_adr" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1219" y="448" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_gwOrt_di" bpmnElement="U_gwOrt" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1430" y="465" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1355" y="433" width="96" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_ort_di" bpmnElement="U_ort" bioc:stroke="#A65F00" bioc:fill="#FFF1CC" color:background-color="#FFF1CC" color:border-color="#A65F00"><dc:Bounds x="1559" y="708" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="U_endAxz_di" bpmnElement="U_endAxz" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="1607" y="472" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1565" y="439" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_U_start_U_ns_di" bpmnElement="Flow_U_start_U_ns"><di:waypoint x="283" y="250" /><di:waypoint x="369" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_ns_U_gw_di" bpmnElement="Flow_U_ns_U_gw"><di:waypoint x="501" y="250" /><di:waypoint x="580" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_gw_U_struct_di" bpmnElement="Flow_U_gw_U_struct"><di:waypoint x="630" y="250" /><di:waypoint x="709" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="636" y="233" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_gw_U_read_di" bpmnElement="Flow_U_gw_U_read"><di:waypoint x="605" y="275" /><di:waypoint x="605" y="490" /><di:waypoint x="709" y="490" /><bpmndi:BPMNLabel><dc:Bounds x="613" y="473" width="44" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_gw_U_stop_di" bpmnElement="Flow_U_gw_U_stop"><di:waypoint x="605" y="225" /><di:waypoint x="605" y="130" /><di:waypoint x="757" y="130" /><bpmndi:BPMNLabel><dc:Bounds x="613" y="113" width="89" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_struct_U_strip_di" bpmnElement="Flow_U_struct_U_strip"><di:waypoint x="841" y="250" /><di:waypoint x="879" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_strip_U_sum_di" bpmnElement="Flow_U_strip_U_sum"><di:waypoint x="1011" y="250" /><di:waypoint x="1049" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_sum_U_clean_di" bpmnElement="Flow_U_sum_U_clean"><di:waypoint x="1181" y="250" /><di:waypoint x="1219" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_clean_U_end_di" bpmnElement="Flow_U_clean_U_end"><di:waypoint x="1351" y="250" /><di:waypoint x="1437" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_read_U_map_di" bpmnElement="Flow_U_read_U_map"><di:waypoint x="841" y="490" /><di:waypoint x="879" y="490" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_map_U_iban_di" bpmnElement="Flow_U_map_U_iban"><di:waypoint x="1011" y="490" /><di:waypoint x="1049" y="490" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_iban_U_adr_di" bpmnElement="Flow_U_iban_U_adr"><di:waypoint x="1181" y="490" /><di:waypoint x="1219" y="490" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_adr_U_gwOrt_di" bpmnElement="Flow_U_adr_U_gwOrt"><di:waypoint x="1351" y="490" /><di:waypoint x="1430" y="490" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_gwOrt_U_endAxz_di" bpmnElement="Flow_U_gwOrt_U_endAxz"><di:waypoint x="1480" y="490" /><di:waypoint x="1607" y="490" /><bpmndi:BPMNLabel><dc:Bounds x="1486" y="473" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_gwOrt_U_ort_di" bpmnElement="Flow_U_gwOrt_U_ort"><di:waypoint x="1455" y="515" /><di:waypoint x="1455" y="750" /><di:waypoint x="1559" y="750" /><bpmndi:BPMNLabel><dc:Bounds x="1463" y="733" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_U_ort_U_endAxz_di" bpmnElement="Flow_U_ort_U_endAxz"><di:waypoint x="1625" y="708" /><di:waypoint x="1625" y="508" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="UN_ns_di" bpmnElement="UN_ns" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="360" y="334" width="160" height="72" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_UN_ns_di" bpmnElement="Assoc_UN_ns"><di:waypoint x="435" y="292" /><di:waypoint x="435" y="334" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="UN_struct_di" bpmnElement="UN_struct" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="870" y="342" width="280" height="56" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_UN_struct_di" bpmnElement="Assoc_UN_struct"><di:waypoint x="775" y="292" /><di:waypoint x="882" y="342" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="UN_dtazv_di" bpmnElement="UN_dtazv" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="870" y="582" width="300" height="56" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_UN_dtazv_di" bpmnElement="Assoc_UN_dtazv"><di:waypoint x="945" y="532" /><di:waypoint x="945" y="582" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="UN_ort_di" bpmnElement="UN_ort" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="1720" y="719" width="250" height="62" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_UN_ort_di" bpmnElement="Assoc_UN_ort"><di:waypoint x="1691" y="750" /><di:waypoint x="1720" y="750" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

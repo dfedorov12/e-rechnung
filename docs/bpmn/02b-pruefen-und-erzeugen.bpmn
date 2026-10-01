@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" id="Definitions_erzeugen" targetNamespace="https://e-rechnung.dihag-extern.com/bpmn" exporter="DIHAG BPMN-Generator (scripts/bpmn/generate-bpmn.js)" exporterVersion="2.0">
+  <bpmn:error id="Error_Pruefung" name="Prüfung nicht bestanden" errorCode="PRUEFUNG" />
+  <bpmn:collaboration id="Collab_erzeugen">
+    <bpmn:participant id="P_Erz" name="Prüfen und E-Rechnung erzeugen" processRef="Process_ERechnung_Erzeugen" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_ERechnung_Erzeugen" name="E-Rechnung Prüfen und erzeugen" isExecutable="false">
+    <bpmn:documentation>Vor dem Export prüft der Konverter Pflichtfelder, IBAN, Summen und USt-IdNr. Danach entsteht die XML nach EN 16931, wird zurückgelesen und als ZUGFeRD oder XRechnung mit Prüfpfad ausgegeben.
+Eingebunden in: E-Rechnung Rechnungsausgang.
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang</bpmn:documentation>
+    <bpmn:laneSet id="LaneSet_P_Erz">
+      <bpmn:lane id="LXK" name="Konverter (Browser-App)"><bpmn:flowNodeRef>X_start</bpmn:flowNodeRef><bpmn:flowNodeRef>X_pflicht</bpmn:flowNodeRef><bpmn:flowNodeRef>X_pre</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwHard</bpmn:flowNodeRef><bpmn:flowNodeRef>X_err1</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwSoft</bpmn:flowNodeRef><bpmn:flowNodeRef>X_xml</bpmn:flowNodeRef><bpmn:flowNodeRef>X_self</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwSelf</bpmn:flowNodeRef><bpmn:flowNodeRef>X_err2</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwFmt</bpmn:flowNodeRef><bpmn:flowNodeRef>X_zf</bpmn:flowNodeRef><bpmn:flowNodeRef>X_xr</bpmn:flowNodeRef><bpmn:flowNodeRef>X_audit</bpmn:flowNodeRef><bpmn:flowNodeRef>X_dl</bpmn:flowNodeRef><bpmn:flowNodeRef>X_end</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="LXV" name="Vertrieb / Fakturierung"><bpmn:flowNodeRef>X_confirm</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+      <bpmn:startEvent id="X_start" name="Export angestoßen"><bpmn:outgoing>Flow_X_start_X_pflicht</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:serviceTask id="X_pflicht" name="Pflichtfelder prüfen"><bpmn:incoming>Flow_X_start_X_pflicht</bpmn:incoming><bpmn:outgoing>Flow_X_pflicht_X_pre</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="X_pre" name="Vorab prüfen (IBAN-Prüfziffer, Summen, USt-IdNr-Format)"><bpmn:incoming>Flow_X_pflicht_X_pre</bpmn:incoming><bpmn:outgoing>Flow_X_pre_X_gwHard</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="X_gwHard" name="Harter Fehler?"><bpmn:incoming>Flow_X_pre_X_gwHard</bpmn:incoming><bpmn:outgoing>Flow_X_gwHard_X_err1</bpmn:outgoing><bpmn:outgoing>Flow_X_gwHard_X_gwSoft</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:endEvent id="X_err1" name="Prüfung nicht bestanden"><bpmn:incoming>Flow_X_gwHard_X_err1</bpmn:incoming><bpmn:errorEventDefinition id="X_err1_def" errorRef="Error_Pruefung" /></bpmn:endEvent>
+      <bpmn:exclusiveGateway id="X_gwSoft" name="Abweichung zum Original-PDF?"><bpmn:incoming>Flow_X_gwHard_X_gwSoft</bpmn:incoming><bpmn:outgoing>Flow_X_gwSoft_X_xml</bpmn:outgoing><bpmn:outgoing>Flow_X_gwSoft_X_confirm</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:userTask id="X_confirm" name="Warnung ansehen: fortfahren oder abbrechen"><bpmn:incoming>Flow_X_gwSoft_X_confirm</bpmn:incoming><bpmn:outgoing>Flow_X_confirm_X_xml</bpmn:outgoing></bpmn:userTask>
+      <bpmn:serviceTask id="X_xml" name="XML nach EN 16931 erzeugen"><bpmn:incoming>Flow_X_gwSoft_X_xml</bpmn:incoming><bpmn:incoming>Flow_X_confirm_X_xml</bpmn:incoming><bpmn:outgoing>Flow_X_xml_X_self</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="X_self" name="Selbstprüfung: XML zurücklesen und vergleichen"><bpmn:incoming>Flow_X_xml_X_self</bpmn:incoming><bpmn:outgoing>Flow_X_self_X_gwSelf</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:exclusiveGateway id="X_gwSelf" name="Abweichung?"><bpmn:incoming>Flow_X_self_X_gwSelf</bpmn:incoming><bpmn:outgoing>Flow_X_gwSelf_X_err2</bpmn:outgoing><bpmn:outgoing>Flow_X_gwSelf_X_gwFmt</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:endEvent id="X_err2" name="Selbstprüfung fehlgeschlagen"><bpmn:incoming>Flow_X_gwSelf_X_err2</bpmn:incoming><bpmn:errorEventDefinition id="X_err2_def" errorRef="Error_Pruefung" /></bpmn:endEvent>
+      <bpmn:exclusiveGateway id="X_gwFmt" name="Format?"><bpmn:incoming>Flow_X_gwSelf_X_gwFmt</bpmn:incoming><bpmn:outgoing>Flow_X_gwFmt_X_zf</bpmn:outgoing><bpmn:outgoing>Flow_X_gwFmt_X_xr</bpmn:outgoing></bpmn:exclusiveGateway>
+      <bpmn:serviceTask id="X_zf" name="ZUGFeRD-PDF/A-3b mit eingebetteter XML erzeugen"><bpmn:incoming>Flow_X_gwFmt_X_zf</bpmn:incoming><bpmn:outgoing>Flow_X_zf_X_audit</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="X_xr" name="XRechnung-XML und lesbares PDF erzeugen"><bpmn:incoming>Flow_X_gwFmt_X_xr</bpmn:incoming><bpmn:outgoing>Flow_X_xr_X_audit</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="X_audit" name="Prüfpfad schreiben (Hash, manuelle Änderungen, Prüfer)"><bpmn:incoming>Flow_X_zf_X_audit</bpmn:incoming><bpmn:incoming>Flow_X_xr_X_audit</bpmn:incoming><bpmn:outgoing>Flow_X_audit_X_dl</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:serviceTask id="X_dl" name="Dateien zum Herunterladen bereitstellen"><bpmn:incoming>Flow_X_audit_X_dl</bpmn:incoming><bpmn:outgoing>Flow_X_dl_X_end</bpmn:outgoing></bpmn:serviceTask>
+      <bpmn:endEvent id="X_end" name="E-Rechnung erstellt"><bpmn:incoming>Flow_X_dl_X_end</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_X_start_X_pflicht" sourceRef="X_start" targetRef="X_pflicht" />
+      <bpmn:sequenceFlow id="Flow_X_pflicht_X_pre" sourceRef="X_pflicht" targetRef="X_pre" />
+      <bpmn:sequenceFlow id="Flow_X_pre_X_gwHard" sourceRef="X_pre" targetRef="X_gwHard" />
+      <bpmn:sequenceFlow id="Flow_X_gwHard_X_err1" sourceRef="X_gwHard" targetRef="X_err1" name="ja" />
+      <bpmn:sequenceFlow id="Flow_X_gwHard_X_gwSoft" sourceRef="X_gwHard" targetRef="X_gwSoft" name="nein" />
+      <bpmn:sequenceFlow id="Flow_X_gwSoft_X_xml" sourceRef="X_gwSoft" targetRef="X_xml" name="nein" />
+      <bpmn:sequenceFlow id="Flow_X_gwSoft_X_confirm" sourceRef="X_gwSoft" targetRef="X_confirm" name="ja" />
+      <bpmn:sequenceFlow id="Flow_X_confirm_X_xml" sourceRef="X_confirm" targetRef="X_xml" name="fortfahren" />
+      <bpmn:sequenceFlow id="Flow_X_xml_X_self" sourceRef="X_xml" targetRef="X_self" />
+      <bpmn:sequenceFlow id="Flow_X_self_X_gwSelf" sourceRef="X_self" targetRef="X_gwSelf" />
+      <bpmn:sequenceFlow id="Flow_X_gwSelf_X_err2" sourceRef="X_gwSelf" targetRef="X_err2" name="ja" />
+      <bpmn:sequenceFlow id="Flow_X_gwSelf_X_gwFmt" sourceRef="X_gwSelf" targetRef="X_gwFmt" name="nein" />
+      <bpmn:sequenceFlow id="Flow_X_gwFmt_X_zf" sourceRef="X_gwFmt" targetRef="X_zf" name="ZUGFeRD" />
+      <bpmn:sequenceFlow id="Flow_X_gwFmt_X_xr" sourceRef="X_gwFmt" targetRef="X_xr" name="XRechnung" />
+      <bpmn:sequenceFlow id="Flow_X_zf_X_audit" sourceRef="X_zf" targetRef="X_audit" />
+      <bpmn:sequenceFlow id="Flow_X_xr_X_audit" sourceRef="X_xr" targetRef="X_audit" />
+      <bpmn:sequenceFlow id="Flow_X_audit_X_dl" sourceRef="X_audit" targetRef="X_dl" />
+      <bpmn:sequenceFlow id="Flow_X_dl_X_end" sourceRef="X_dl" targetRef="X_end" />
+      <bpmn:textAnnotation id="XN_pre"><bpmn:text>Harte Fehler: IBAN-Prüfziffer falsch, Summe nicht plausibel, Netto + MwSt ≠ Brutto.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_XN_pre" associationDirection="None" sourceRef="X_pre" targetRef="XN_pre" />
+      <bpmn:textAnnotation id="XN_confirm"><bpmn:text>„Abbrechen“ beendet den Export, es entsteht keine Datei.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_XN_confirm" associationDirection="None" sourceRef="X_confirm" targetRef="XN_confirm" />
+      <bpmn:textAnnotation id="XN_zf"><bpmn:text>Standard: Das PDF wird aus den Rechnungsdaten erzeugt, PDF und XML sind identisch.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_XN_zf" associationDirection="None" sourceRef="X_zf" targetRef="XN_zf" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_erzeugen">
+    <bpmndi:BPMNPlane id="Plane_erzeugen" bpmnElement="Collab_erzeugen">
+      <bpmndi:BPMNShape id="P_Erz_di" bpmnElement="P_Erz" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#1A2644"><dc:Bounds x="100" y="60" width="2490" height="520" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LXK_di" bpmnElement="LXK" isHorizontal="true" bioc:stroke="#1A2644" bioc:fill="#F3F6FB" color:background-color="#F3F6FB" color:border-color="#1A2644"><dc:Bounds x="130" y="60" width="2460" height="380" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LXV_di" bpmnElement="LXV" isHorizontal="true" bioc:stroke="#C2410C" bioc:fill="#FFF8F1" color:background-color="#FFF8F1" color:border-color="#C2410C"><dc:Bounds x="130" y="440" width="2460" height="140" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_start_di" bpmnElement="X_start" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="247" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="205" y="273" width="120" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_pflicht_di" bpmnElement="X_pflicht" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="369" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_pre_di" bpmnElement="X_pre" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="539" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_gwHard_di" bpmnElement="X_gwHard" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="750" y="225" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="675" y="206" width="96" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_err1_di" bpmnElement="X_err1" bioc:stroke="#B42318" bioc:fill="#FDE2E1" color:background-color="#FDE2E1" color:border-color="#B42318"><dc:Bounds x="927" y="112" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="885" y="153" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_gwSoft_di" bpmnElement="X_gwSoft" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="920" y="225" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="845" y="193" width="96" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_confirm_di" bpmnElement="X_confirm" bioc:stroke="#A65F00" bioc:fill="#FFF1CC" color:background-color="#FFF1CC" color:border-color="#A65F00"><dc:Bounds x="1049" y="468" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_xml_di" bpmnElement="X_xml" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1219" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_self_di" bpmnElement="X_self" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1389" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_gwSelf_di" bpmnElement="X_gwSelf" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1600" y="225" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1525" y="206" width="96" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_err2_di" bpmnElement="X_err2" bioc:stroke="#B42318" bioc:fill="#FDE2E1" color:background-color="#FDE2E1" color:border-color="#B42318"><dc:Bounds x="1777" y="112" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1735" y="153" width="120" height="28" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_gwFmt_di" bpmnElement="X_gwFmt" isMarkerVisible="true" bioc:stroke="#8A6100" bioc:fill="#FFF8DB" color:background-color="#FFF8DB" color:border-color="#8A6100"><dc:Bounds x="1770" y="225" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1695" y="206" width="96" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_zf_di" bpmnElement="X_zf" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1899" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_xr_di" bpmnElement="X_xr" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="1899" y="328" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_audit_di" bpmnElement="X_audit" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="2069" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_dl_di" bpmnElement="X_dl" bioc:stroke="#1A2644" bioc:fill="#DCE5F2" color:background-color="#DCE5F2" color:border-color="#1A2644"><dc:Bounds x="2239" y="208" width="132" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="X_end_di" bpmnElement="X_end" bioc:stroke="#1E7B3A" bioc:fill="#DDF3E4" color:background-color="#DDF3E4" color:border-color="#1E7B3A"><dc:Bounds x="2457" y="232" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2415" y="273" width="120" height="15" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_X_start_X_pflicht_di" bpmnElement="Flow_X_start_X_pflicht"><di:waypoint x="283" y="250" /><di:waypoint x="369" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_pflicht_X_pre_di" bpmnElement="Flow_X_pflicht_X_pre"><di:waypoint x="501" y="250" /><di:waypoint x="539" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_pre_X_gwHard_di" bpmnElement="Flow_X_pre_X_gwHard"><di:waypoint x="671" y="250" /><di:waypoint x="750" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwHard_X_err1_di" bpmnElement="Flow_X_gwHard_X_err1"><di:waypoint x="775" y="225" /><di:waypoint x="775" y="130" /><di:waypoint x="927" y="130" /><bpmndi:BPMNLabel><dc:Bounds x="783" y="113" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwHard_X_gwSoft_di" bpmnElement="Flow_X_gwHard_X_gwSoft"><di:waypoint x="800" y="250" /><di:waypoint x="920" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="806" y="233" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwSoft_X_xml_di" bpmnElement="Flow_X_gwSoft_X_xml"><di:waypoint x="970" y="250" /><di:waypoint x="1219" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="976" y="233" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwSoft_X_confirm_di" bpmnElement="Flow_X_gwSoft_X_confirm"><di:waypoint x="945" y="275" /><di:waypoint x="945" y="510" /><di:waypoint x="1049" y="510" /><bpmndi:BPMNLabel><dc:Bounds x="953" y="493" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_confirm_X_xml_di" bpmnElement="Flow_X_confirm_X_xml"><di:waypoint x="1115" y="468" /><di:waypoint x="1115" y="250" /><di:waypoint x="1219" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="1123" y="233" width="76" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_xml_X_self_di" bpmnElement="Flow_X_xml_X_self"><di:waypoint x="1351" y="250" /><di:waypoint x="1389" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_self_X_gwSelf_di" bpmnElement="Flow_X_self_X_gwSelf"><di:waypoint x="1521" y="250" /><di:waypoint x="1600" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwSelf_X_err2_di" bpmnElement="Flow_X_gwSelf_X_err2"><di:waypoint x="1625" y="225" /><di:waypoint x="1625" y="130" /><di:waypoint x="1777" y="130" /><bpmndi:BPMNLabel><dc:Bounds x="1633" y="113" width="25" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwSelf_X_gwFmt_di" bpmnElement="Flow_X_gwSelf_X_gwFmt"><di:waypoint x="1650" y="250" /><di:waypoint x="1770" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="1656" y="233" width="38" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwFmt_X_zf_di" bpmnElement="Flow_X_gwFmt_X_zf"><di:waypoint x="1820" y="250" /><di:waypoint x="1899" y="250" /><bpmndi:BPMNLabel><dc:Bounds x="1826" y="233" width="57" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_gwFmt_X_xr_di" bpmnElement="Flow_X_gwFmt_X_xr"><di:waypoint x="1795" y="275" /><di:waypoint x="1795" y="370" /><di:waypoint x="1899" y="370" /><bpmndi:BPMNLabel><dc:Bounds x="1803" y="353" width="70" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_zf_X_audit_di" bpmnElement="Flow_X_zf_X_audit"><di:waypoint x="2031" y="250" /><di:waypoint x="2069" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_xr_X_audit_di" bpmnElement="Flow_X_xr_X_audit"><di:waypoint x="2031" y="370" /><di:waypoint x="2050" y="370" /><di:waypoint x="2050" y="250" /><di:waypoint x="2069" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_audit_X_dl_di" bpmnElement="Flow_X_audit_X_dl"><di:waypoint x="2201" y="250" /><di:waypoint x="2239" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X_dl_X_end_di" bpmnElement="Flow_X_dl_X_end"><di:waypoint x="2371" y="250" /><di:waypoint x="2457" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="XN_pre_di" bpmnElement="XN_pre" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="530" y="94" width="160" height="72" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_XN_pre_di" bpmnElement="Assoc_XN_pre"><di:waypoint x="605" y="208" /><di:waypoint x="605" y="166" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="XN_confirm_di" bpmnElement="XN_confirm" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="1210" y="482" width="260" height="56" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_XN_confirm_di" bpmnElement="Assoc_XN_confirm"><di:waypoint x="1181" y="510" /><di:waypoint x="1210" y="510" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="XN_zf_di" bpmnElement="XN_zf" bioc:stroke="#6B7280" bioc:fill="#FFFFFF" color:background-color="#FFFFFF" color:border-color="#6B7280"><dc:Bounds x="1890" y="94" width="170" height="72" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_XN_zf_di" bpmnElement="Assoc_XN_zf"><di:waypoint x="1965" y="208" /><di:waypoint x="1965" y="166" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

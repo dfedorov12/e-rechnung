@@ -1,0 +1,118 @@
+{
+  "hinweis": "Erzeugt von scripts/bpmn/generate-bpmn.js. Führend sind die Modelle im RMS.",
+  "rms": {
+    "url": "https://rms.dihag.de",
+    "ablage": "Prozesse/KONZERN",
+    "driveId": ""
+  },
+  "modelle": [
+    {
+      "key": "eingang",
+      "name": "E-Rechnung Rechnungseingang",
+      "kennung": "Process_ERechnung_Eingang",
+      "datei": "docs/bpmn/01-rechnungseingang.bpmn",
+      "tab": "eingang",
+      "haupt": true,
+      "von": "",
+      "unter": [
+        "intake",
+        "neben"
+      ],
+      "itemId": ""
+    },
+    {
+      "key": "intake",
+      "name": "E-Rechnung Eingangsprüfung",
+      "kennung": "Process_ERechnung_Eingangspruefung",
+      "datei": "docs/bpmn/01a-eingangspruefung.bpmn",
+      "tab": "eingang",
+      "haupt": false,
+      "von": "eingang",
+      "unter": [],
+      "itemId": ""
+    },
+    {
+      "key": "neben",
+      "name": "E-Rechnung Nebendateien ablegen",
+      "kennung": "Process_ERechnung_Nebendateien",
+      "datei": "docs/bpmn/01b-nebendateien.bpmn",
+      "tab": "eingang",
+      "haupt": false,
+      "von": "eingang",
+      "unter": [],
+      "itemId": ""
+    },
+    {
+      "key": "ausgang",
+      "name": "E-Rechnung Rechnungsausgang",
+      "kennung": "Process_ERechnung_Ausgang",
+      "datei": "docs/bpmn/02-rechnungsausgang.bpmn",
+      "tab": "ausgang",
+      "haupt": true,
+      "von": "",
+      "unter": [
+        "erfassen",
+        "erzeugen"
+      ],
+      "itemId": ""
+    },
+    {
+      "key": "erfassen",
+      "name": "E-Rechnung Erkennen und erfassen",
+      "kennung": "Process_ERechnung_Erfassen",
+      "datei": "docs/bpmn/02a-erkennen-und-erfassen.bpmn",
+      "tab": "ausgang",
+      "haupt": false,
+      "von": "ausgang",
+      "unter": [],
+      "itemId": ""
+    },
+    {
+      "key": "erzeugen",
+      "name": "E-Rechnung Prüfen und erzeugen",
+      "kennung": "Process_ERechnung_Erzeugen",
+      "datei": "docs/bpmn/02b-pruefen-und-erzeugen.bpmn",
+      "tab": "ausgang",
+      "haupt": false,
+      "von": "ausgang",
+      "unter": [],
+      "itemId": ""
+    },
+    {
+      "key": "zahlung",
+      "name": "Zahlungsausgang (MC-Converter)",
+      "kennung": "Process_Zahlungsausgang_MC",
+      "datei": "docs/bpmn/03-zahlungsausgang-mc-converter.bpmn",
+      "tab": "zahlung",
+      "haupt": true,
+      "von": "",
+      "unter": [
+        "umstellen",
+        "preflight"
+      ],
+      "itemId": ""
+    },
+    {
+      "key": "umstellen",
+      "name": "Zahldatei auf pain.001.001.09 umstellen",
+      "kennung": "Process_Zahldatei_Umstellen",
+      "datei": "docs/bpmn/03a-umstellen.bpmn",
+      "tab": "zahlung",
+      "haupt": false,
+      "von": "zahlung",
+      "unter": [],
+      "itemId": ""
+    },
+    {
+      "key": "preflight",
+      "name": "Zahldatei-Preflight",
+      "kennung": "Process_Zahldatei_Preflight",
+      "datei": "docs/bpmn/03b-preflight.bpmn",
+      "tab": "zahlung",
+      "haupt": false,
+      "von": "zahlung",
+      "unter": [],
+      "itemId": ""
+    }
+  ]
+}

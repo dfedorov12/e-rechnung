@@ -91,6 +91,11 @@
                          border:1.5px solid var(--gray-300); background:#fff; color:var(--gray-700); }
     .bpmn-views button:hover { border-color:var(--primary); color:var(--primary); }
     .bpmn-views button.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .bpmn-src { margin-left:auto; font-size:12px; color:var(--gray-500); }
+    .bpmn-src a { color:var(--primary); }
+    .src-live { color:#1E7B3A; } .src-repo { color:#A65F00; }
+    .pz-call { cursor:pointer; }
+    .pz-call:hover .djs-visual > rect { stroke:#F08300 !important; }
     .bpmn-actions { display:flex; flex-wrap:wrap; gap:6px; }
     .bpmn-actions button, .bpmn-actions a { font:inherit; font-size:12.5px; font-weight:600; padding:7px 11px; border-radius:8px;
                          border:1px solid var(--gray-300); background:var(--gray-50); color:var(--gray-700); cursor:pointer; text-decoration:none; white-space:nowrap; }
@@ -175,8 +180,8 @@
       <h1>So laufen Rechnungen und Zahlungen bei DIHAG</h1>
       <p>Drei Prozesse, farbig als BPMN dargestellt: der Rechnungseingang aus den Werks-Postfächern,
          der Rechnungsausgang mit dem Konverter und der Zahlungsausgang mit dem MC-Converter.
-         Jede Farbe steht für einen Beteiligten, jede Raute für eine Entscheidung. Unterprozesse
-         klappst du per Klick auf.</p>
+         Jede Farbe steht für einen Beteiligten, jede Raute für eine Entscheidung. Unterprozesse (⊞)
+         öffnest du per Klick. Gepflegt werden die Modelle im RMS, diese Seite zeigt ihren aktuellen Stand.</p>
       <div class="hero-badges">
         <span class="badge">BPMN 2.0</span>
         <span class="badge">XRechnung 3.0</span>
@@ -213,7 +218,7 @@
         <button type="button" class="pmap-row" data-go="zahlung">
           <span class="pmap-ext"><b>💶</b>Zahllauf (ERP / MultiCash)</span>
           <span class="pmap-arrow">➜</span>
-          <span class="pmap-core pay"><h4>🏦 Zahlungsausgang</h4><p>SEPA-Datei auf pain.001.001.09 umstellen, Preflight, Freigabe im Vier-Augen-Prinzip</p></span>
+          <span class="pmap-core pay"><h4>🏦 Zahlungsausgang</h4><p>SEPA und Auslandszahlung (DTAZV) auf pain.001.001.09 umstellen, Preflight, Freigabe im Vier-Augen-Prinzip</p></span>
           <span class="pmap-arrow">➜</span>
           <span class="pmap-ext"><b>🏛️</b>Hausbank</span>
         </button>
@@ -258,11 +263,10 @@
           <div class="sym"><svg viewBox="0 0 34 26"><circle cx="17" cy="13" r="10" fill="#DDF3E4" stroke="#1E7B3A" stroke-width="1.5"/><rect x="11.5" y="9" width="11" height="8" fill="none" stroke="#1E7B3A" stroke-width="1.2"/><path d="M11.5 9 L17 13.5 L22.5 9" fill="none" stroke="#1E7B3A" stroke-width="1.2"/></svg>Start durch Nachricht (Mail)</div>
           <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#D8E8F8" stroke="#17509E" stroke-width="1.5"/><circle cx="9" cy="9" r="3" fill="none" stroke="#17509E" stroke-width="1.2"/></svg>Automatischer Schritt (Zahnrad)</div>
           <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#FFE3C8" stroke="#C2410C" stroke-width="1.5"/><circle cx="9" cy="8" r="2.2" fill="none" stroke="#C2410C" stroke-width="1.2"/><path d="M5.5 14 Q9 10 12.5 14" fill="none" stroke="#C2410C" stroke-width="1.2"/></svg>Schritt einer Person (Männchen)</div>
-          <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#D8E8F8" stroke="#17509E" stroke-width="1.5"/><rect x="5.5" y="6" width="8" height="6" fill="#17509E"/></svg>Nachricht senden (Brief)</div>
           <div class="sym"><svg viewBox="0 0 34 26"><path d="M17 2 L28 13 L17 24 L6 13 Z" fill="#FFF8DB" stroke="#8A6100" stroke-width="1.5"/><path d="M13 9 L21 17 M21 9 L13 17" stroke="#8A6100" stroke-width="1.8"/></svg>Entscheidung: genau ein Weg</div>
           <div class="sym"><svg viewBox="0 0 34 26"><path d="M17 2 L28 13 L17 24 L6 13 Z" fill="#FFF8DB" stroke="#8A6100" stroke-width="1.5"/><circle cx="17" cy="13" r="4.5" fill="none" stroke="#8A6100" stroke-width="1.8"/></svg>Entscheidung: ein oder mehrere Wege</div>
           <div class="sym"><svg viewBox="0 0 34 26"><path d="M17 2 L28 13 L17 24 L6 13 Z" fill="#FFF8DB" stroke="#8A6100" stroke-width="1.5"/><path d="M17 8 V18 M12 13 H22" stroke="#8A6100" stroke-width="1.8"/></svg>Alle Wege gleichzeitig</div>
-          <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#E6DDF7" stroke="#5B3FA8" stroke-width="1.5"/><rect x="13" y="15" width="8" height="7" fill="#fff" stroke="#5B3FA8" stroke-width="1"/><path d="M17 16.5 V20.5 M15 18.5 H19" stroke="#5B3FA8" stroke-width="1.1"/></svg>Unterprozess: Pfeil unten rechts klicken</div>
+          <div class="sym"><svg viewBox="0 0 34 26"><rect x="3" y="3" width="28" height="20" rx="4" fill="#E6DDF7" stroke="#5B3FA8" stroke-width="3"/><rect x="13" y="14" width="8" height="7" fill="#fff" stroke="#5B3FA8" stroke-width="1"/><path d="M17 15.5 V19.5 M15 17.5 H19" stroke="#5B3FA8" stroke-width="1.1"/></svg>Unterprozess (⊞): Klick öffnet ihn</div>
           <div class="sym"><svg viewBox="0 0 34 26"><rect x="2" y="3" width="30" height="20" rx="4" fill="none" stroke="#17509E" stroke-width="1.4" stroke-dasharray="4 3"/></svg>Gruppe, z. B. „je Anhang“</div>
           <div class="sym"><svg viewBox="0 0 34 26"><path d="M3 13 H28" stroke="#374151" stroke-width="1.3" stroke-dasharray="4 3"/><circle cx="4" cy="13" r="2.5" fill="#fff" stroke="#374151"/><path d="M26 9 L31 13 L26 17 Z" fill="#fff" stroke="#374151"/></svg>Nachricht zwischen Beteiligten</div>
         </div>
@@ -292,7 +296,7 @@
       <div class="bpmn-views" id="views-eingang"></div>
       <div class="bpmn-box" id="box-eingang">
         <div class="bpmn-canvas" id="canvas-eingang"></div>
-        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Pfeil an einem Unterprozess klappt ihn auf</div>
+        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Klick auf ⊞ öffnet den Unterprozess</div>
       </div>
       <div class="steps-wrap">
         <div>
@@ -336,7 +340,7 @@
       <div class="bpmn-views" id="views-ausgang"></div>
       <div class="bpmn-box" id="box-ausgang">
         <div class="bpmn-canvas" id="canvas-ausgang"></div>
-        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Pfeil an einem Unterprozess klappt ihn auf</div>
+        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Klick auf ⊞ öffnet den Unterprozess</div>
       </div>
       <div class="steps-wrap">
         <div>
@@ -369,24 +373,26 @@
       <div class="bpmn-head">
         <div>
           <h2>🏦 Zahlungsausgang (MC-Converter)</h2>
-          <p class="proc-lead">MultiCash und ältere ERP-Exporte liefern SEPA-Dateien im alten Format. Der MC-Converter
-            stellt sie auf das von den Banken verlangte pain.001.001.09 um und prüft sie vor dem Upload.</p>
+          <p class="proc-lead">MultiCash und ältere ERP-Exporte liefern SEPA-Dateien im alten Format und Auslandszahlungen
+            als DTAZV. Der MC-Converter stellt beides auf das von den Banken verlangte pain.001.001.09 um
+            (Ausland als AXZ) und prüft die Datei vor dem Upload.</p>
         </div>
         <div class="bpmn-actions" data-actions="zahlung"></div>
       </div>
       <div class="bpmn-views" id="views-zahlung"></div>
       <div class="bpmn-box" id="box-zahlung">
         <div class="bpmn-canvas" id="canvas-zahlung"></div>
-        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Pfeil an einem Unterprozess klappt ihn auf</div>
+        <div class="bpmn-hint">Ziehen verschiebt · Strg + Mausrad zoomt · Klick auf ⊞ öffnet den Unterprozess</div>
       </div>
       <div class="steps-wrap">
         <div>
           <h4 class="box-title">Schritt für Schritt</h4>
           <ol class="steps">
-            <li><span class="chip a-erp">ERP / MultiCash</span>Zahlungsvorschlag erstellen, freigeben und die SEPA-Datei exportieren (pain.001.003.03 oder 001.001.03).</li>
-            <li><span class="chip a-app">MC-Converter</span>Datei laden, die Endung ist egal. Das Tool stellt auf pain.001.001.09 um: Datum als &lt;Dt&gt;, BIC als &lt;BICFI&gt;, Sammelbuchung, Adressen raus, Summen neu berechnet, Zeichensatz bereinigt.</li>
-            <li><span class="chip a-app">MC-Converter</span>SEPA-Preflight: IBAN-Prüfziffern, BIC, Summen, Zeichensatz, Feldlängen und Datum. Grün heißt bankfertig.</li>
-            <li><span class="chip a-mensch">Treasury</span>Bei Rot die Ursache im ERP korrigieren und neu exportieren. Bei Grün die Datei im Banking-Portal oder per EBICS hochladen und im Vier-Augen-Prinzip freigeben.</li>
+            <li><span class="chip a-erp">ERP / MultiCash</span>Zahlungsvorschlag erstellen, freigeben und die Zahldatei exportieren: SEPA (pain.001.003.03 oder 001.001.03) oder Auslandszahlung als DTAZV (.AZV).</li>
+            <li><span class="chip a-app">MC-Converter</span>Datei laden, die Endung ist egal. SEPA wird zu pain.001.001.09: Datum als &lt;Dt&gt;, BIC als &lt;BICFI&gt;, Sammelbuchung, Adressen raus, Summen neu berechnet, Zeichensatz bereinigt.</li>
+            <li><span class="chip a-app">MC-Converter</span>DTAZV wird zu pain.001.001.09 AXZ: Entgelt als OUR, SHA oder BEN, IBAN des Belastungskontos aus BLZ und Konto, Adressen mit Ort und Land. Fehlt beim Empfänger der Ort, trägt die Treasury ihn ein.</li>
+            <li><span class="chip a-app">MC-Converter</span>Preflight: IBAN-Prüfziffern, BIC, Summen, Zeichensatz, Feldlängen und Datum, bei AXZ zusätzlich Ort und Land, Entgelt und Währungsstellen. Grün heißt bankfertig.</li>
+            <li><span class="chip a-mensch">Treasury</span>Bei Rot die Ursache im ERP korrigieren und neu exportieren. Bei Grün per EBICS hochladen (SEPA als CCT, Ausland als AXZ) und im Vier-Augen-Prinzip freigeben.</li>
             <li><span class="chip a-extern">Hausbank</span>führt die Überweisungen aus.</li>
           </ol>
         </div>
@@ -397,6 +403,7 @@
             <tr><td><span class="chip t-ok">Grün</span></td><td>Alle IBANs rechnerisch gültig, Summen stimmen, Zeichensatz sauber.</td></tr>
             <tr><td><span class="chip t-err">Rot</span></td><td>Nicht hochladen. Die Liste zeigt den betroffenen Posten.</td></tr>
             <tr><td><span class="chip t-warn">Hinweis</span></td><td>Ein Datum in der Vergangenheit ist erlaubt. Die Bank bucht am nächsten Bankarbeitstag.</td></tr>
+            <tr><td><span class="chip t-warn">DTAZV</span></td><td>Ab 14.11.2026 nehmen die Banken kein DTAZV mehr an. Auslandszahlungen gehen dann nur noch als AXZ.</td></tr>
           </table>
           <p class="note">Zum Tool: <a href="mc-converter.html">MC-Converter öffnen</a>.</p>
         </div>
@@ -447,7 +454,7 @@
         <ul class="status-list">
           <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Rechnungseingang je Werk über Power Automate (u. a. WGC und ZAI) mit Prüfdienst, Regelwerk, Ablage und Archiv-Mail.</span></li>
           <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Konverter für Ausgangsrechnungen (WGC, SHB, ZAI) mit Vorab- und Selbstprüfung, Ablage und Mail-Entwurf.</span></li>
-          <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> MC-Converter mit SEPA-Preflight und Monitoring mit Schnellfiltern.</span></li>
+          <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> MC-Converter für SEPA und Auslandszahlungen (DTAZV zu AXZ) mit Preflight, Monitoring mit Schnellfiltern.</span></li>
           <li><span class="status-dot dot-plan"></span><span><strong>Geplant:</strong> automatischer Versand der Kreditor-Mails.</span></li>
           <li><span class="status-dot dot-plan"></span><span><strong>Geplant:</strong> Rechnungs-Parser für EIS, DSO, LEG, EWA, HOL, MEG und SCH.</span></li>
         </ul>
@@ -462,12 +469,20 @@
       <h3>Prozessmodelle herunterladen</h3>
     </div>
     <div class="card-body">
-      <p class="proc-lead" style="margin-bottom:12px;">BPMN 2.0 mit Farben und allen Unterprozessen. Öffnen im Camunda Modeler,
-        auf bpmn.io oder in Signavio.</p>
+      <p class="proc-lead" style="margin-bottom:12px;">BPMN 2.0 mit Farben, drei Hauptprozesse und sechs eingebundene Unterprozesse.
+        Gepflegt werden sie im <a href="https://rms.dihag.de" target="_blank" rel="noopener">RMS</a> (Reiter Prozesse, Ablage Konzern).
+        Hier liegt die Kopie aus dem Repository; den aktuellen Stand eines Modells speichert der Knopf „⬇ BPMN“ am Diagramm.
+        Öffnen im Camunda Modeler, auf bpmn.io oder in Signavio.</p>
       <div class="dl-list">
         <a href="docs/bpmn/01-rechnungseingang.bpmn" download>📥 Rechnungseingang <small>01-rechnungseingang.bpmn</small></a>
+        <a href="docs/bpmn/01a-eingangspruefung.bpmn" download>⊞ Eingangsprüfung <small>01a-eingangspruefung.bpmn</small></a>
+        <a href="docs/bpmn/01b-nebendateien.bpmn" download>⊞ Nebendateien ablegen <small>01b-nebendateien.bpmn</small></a>
         <a href="docs/bpmn/02-rechnungsausgang.bpmn" download>📤 Rechnungsausgang <small>02-rechnungsausgang.bpmn</small></a>
+        <a href="docs/bpmn/02a-erkennen-und-erfassen.bpmn" download>⊞ Erkennen und erfassen <small>02a-erkennen-und-erfassen.bpmn</small></a>
+        <a href="docs/bpmn/02b-pruefen-und-erzeugen.bpmn" download>⊞ Prüfen und erzeugen <small>02b-pruefen-und-erzeugen.bpmn</small></a>
         <a href="docs/bpmn/03-zahlungsausgang-mc-converter.bpmn" download>🏦 Zahlungsausgang <small>03-zahlungsausgang-mc-converter.bpmn</small></a>
+        <a href="docs/bpmn/03a-umstellen.bpmn" download>⊞ Zahldatei umstellen <small>03a-umstellen.bpmn</small></a>
+        <a href="docs/bpmn/03b-preflight.bpmn" download>⊞ Preflight <small>03b-preflight.bpmn</small></a>
       </div>
     </div>
   </div>
@@ -502,30 +517,39 @@
 <script src="js/access.js"></script>
 
 <script>
-/* ── Prozessdiagramme (bpmn-js, lokal) ─────────────────────────────────── */
-const PROC = {
-  eingang: { file: 'docs/bpmn/01-rechnungseingang.bpmn', main: 'Collab_Eingang',
-             subs: [['B_intake', 'Eingangsprüfung'], ['C_side', 'Nebendateien ablegen']] },
-  ausgang: { file: 'docs/bpmn/02-rechnungsausgang.bpmn', main: 'Collab_Ausgang',
-             subs: [['K_erk', 'Erkennen und erfassen'], ['K_exp', 'Prüfen und erzeugen']] },
-  zahlung: { file: 'docs/bpmn/03-zahlungsausgang-mc-converter.bpmn', main: 'Collab_Zahlung',
-             subs: [['M_conv', 'Umstellen auf 001.09'], ['M_pre', 'SEPA-Preflight']] },
-};
-const _esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/* ── Prozessdiagramme (bpmn-js, lokal) ─────────────────────────────────────
+   Führend sind die Modelle im RMS (rms.dihag.de, Prozesse/KONZERN). Die Seite
+   liest sie live von dort, sobald das Konto Zugriff hat. Sonst zeigt sie die
+   Kopie aus dem Repository (docs/bpmn). Unterprozesse sind eigene Modelle,
+   die per Aufrufaktivität (⊞) eingebunden sind; ein Klick darauf öffnet sie. */
+const PROC = { eingang: null, ausgang: null, zahlung: null };
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+const GRAPH_SCOPES = ['https://graph.microsoft.com/Sites.ReadWrite.All', 'https://graph.microsoft.com/Files.ReadWrite.All'];
+const MODELL_MARKER = /\[\[rms:modell=([^\]]+)\]\]/;
+let MODELLE = {}, RMS = { url: 'https://rms.dihag.de', driveId: '' };
+const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function initProzess() {
+async function initProzess() {
+  try {
+    const j = await fetch('docs/bpmn/modelle.json', { cache: 'no-cache' }).then(r => r.json());
+    RMS = Object.assign(RMS, j.rms || {});
+    for (const m of j.modelle) MODELLE[m.key] = m;
+    for (const m of j.modelle) if (m.haupt) PROC[m.tab] = { haupt: m.key, cur: m.key, calls: [] };
+  } catch (e) {
+    console.error('Modell-Liste nicht lesbar:', e);
+  }
   document.querySelectorAll('.ptab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {
     showTab(b.dataset.go);
     document.getElementById('prozesse').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
-  for (const key of Object.keys(PROC)) buildControls(key);
+  for (const key of Object.keys(PROC)) if (PROC[key]) buildControls(key);
   document.addEventListener('fullscreenchange', () => {
-    for (const key of Object.keys(PROC)) if (PROC[key].viewer) setTimeout(() => fitView(key), 60);
+    for (const key of Object.keys(PROC)) if (PROC[key] && PROC[key].viewer) setTimeout(() => fitView(key), 60);
   });
   window.addEventListener('resize', () => {
     const key = currentTab();
-    if (key && PROC[key].viewer) PROC[key].viewer.get('canvas').resized();
+    if (key && PROC[key] && PROC[key].viewer) PROC[key].viewer.get('canvas').resized();
   });
   const start = location.hash.replace('#', '');
   showTab(PROC[start] ? start : 'eingang');
@@ -543,17 +567,72 @@ function showTab(key) {
   loadDiagram(key);
 }
 
+/* ── Modelle laden: RMS zuerst, Repository als Rückfall ── */
+
+/** Token nur still holen. Ohne Zugriff auf das RMS bleibt die Seite beim
+    Repository-Stand, statt den Leser auf eine Anmeldeseite zu schicken. */
+async function tokenStill() {
+  try {
+    if (typeof _msal === 'undefined' || !_msal || !_account) return null;
+    const r = await _msal.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: _account });
+    return r.accessToken;
+  } catch (e) { return null; }
+}
+
+async function holeModell(key) {
+  const m = MODELLE[key];
+  if (!m) throw new Error('Modell unbekannt: ' + key);
+  if (m.cache) return m.cache;
+  if (RMS.driveId && m.itemId) {
+    const token = await tokenStill();
+    if (token) {
+      try {
+        const h = { Authorization: 'Bearer ' + token };
+        const basis = `${GRAPH}/drives/${RMS.driveId}/items/${m.itemId}`;
+        const [meta, xml] = await Promise.all([
+          fetch(basis + '?$select=name,lastModifiedDateTime,lastModifiedBy,webUrl', { headers: h })
+            .then(r => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))),
+          fetch(basis + '/content', { headers: h })
+            .then(r => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))),
+        ]);
+        m.cache = { xml, quelle: 'rms', geaendert: meta.lastModifiedDateTime,
+          von: (meta.lastModifiedBy && meta.lastModifiedBy.user && meta.lastModifiedBy.user.displayName) || '' };
+        return m.cache;
+      } catch (e) {
+        console.warn('RMS nicht erreichbar, nehme die Kopie aus dem Repository:', m.name, e.message);
+      }
+    }
+  }
+  if (!m.datei) throw new Error('Kein Zugriff auf das RMS, und im Repository gibt es keine Kopie.');
+  const res = await fetch(m.datei, { cache: 'no-cache' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  m.cache = { xml: await res.text(), quelle: 'repo' };
+  return m.cache;
+}
+
+/** Das Ziel einer Aufrufaktivität: Datei-Kennung aus dem RMS-Marker, sonst die Prozess-Kennung. */
+function zielVonAufruf(bo) {
+  const doku = (bo.documentation || []).map(d => d.text || '').join('\n');
+  const mk = doku.match(MODELL_MARKER);
+  const itemId = mk ? mk[1].trim() : '';
+  let m = Object.values(MODELLE).find(x => (itemId && x.itemId === itemId)
+    || (!itemId && bo.calledElement && x.kennung === bo.calledElement));
+  if (!m && itemId) {
+    // Im RMS neu eingebunden und noch nicht in der Modell-Liste: direkt von dort lesen.
+    m = MODELLE['rms:' + itemId] = { key: 'rms:' + itemId, name: bo.name || 'Unterprozess', itemId, datei: '', kennung: bo.calledElement || '' };
+  }
+  return m ? m.key : null;
+}
+
+/* ── Bedienleiste ── */
+
 function buildControls(key) {
   const cfg = PROC[key];
   const views = document.getElementById('views-' + key);
-  views.innerHTML = '<span>Ansicht:</span>'
-    + `<button type="button" data-view="">Gesamtprozess</button>`
-    + cfg.subs.map(([id, label]) => `<button type="button" data-view="${id}">↳ ${_esc(label)}</button>`).join('');
   views.addEventListener('click', e => {
-    const b = e.target.closest('button[data-view]');
-    if (b) openView(key, b.dataset.view);
+    const b = e.target.closest('button[data-modell]');
+    if (b) zeigeModell(key, b.dataset.modell);
   });
-  const file = cfg.file.split('/').pop();
   const acts = document.querySelector(`[data-actions="${key}"]`);
   acts.innerHTML =
       `<button type="button" data-act="in" title="Vergrößern">＋</button>`
@@ -561,7 +640,7 @@ function buildControls(key) {
     + `<button type="button" data-act="fit" title="Ganzes Diagramm zeigen">⤢ Einpassen</button>`
     + `<button type="button" data-act="full" title="Vollbild">⛶ Vollbild</button>`
     + `<button type="button" data-act="svg" title="Aktuelle Ansicht als Bild speichern">🖼 SVG</button>`
-    + `<a class="dl" href="${cfg.file}" download="${file}" title="BPMN-Datei herunterladen">⬇ BPMN</a>`;
+    + `<button type="button" data-act="bpmn" class="dl" title="Angezeigtes Modell als BPMN-Datei speichern">⬇ BPMN</button>`;
   acts.addEventListener('click', e => {
     const b = e.target.closest('button[data-act]');
     if (!b || !cfg.viewer) return;
@@ -574,7 +653,30 @@ function buildControls(key) {
       if (document.fullscreenElement) document.exitFullscreen(); else if (box.requestFullscreen) box.requestFullscreen();
     }
     if (b.dataset.act === 'svg') saveSvg(key);
+    if (b.dataset.act === 'bpmn') saveBpmn(key);
   });
+}
+
+/** Ansicht-Knöpfe aus dem geladenen Hauptmodell: was es per ⊞ einbindet. */
+function renderViews(key) {
+  const cfg = PROC[key];
+  const views = document.getElementById('views-' + key);
+  views.innerHTML = '<span>Ansicht:</span>'
+    + `<button type="button" data-modell="${_esc(cfg.haupt)}">Gesamtprozess</button>`
+    + cfg.calls.map(c => `<button type="button" data-modell="${_esc(c.key)}">⊞ ${_esc(c.name)}</button>`).join('')
+    + `<span class="bpmn-src" id="src-${key}"></span>`;
+  views.querySelectorAll('button[data-modell]').forEach(b => b.classList.toggle('active', b.dataset.modell === cfg.cur));
+  const m = MODELLE[cfg.cur], c = m && m.cache;
+  const src = document.getElementById('src-' + key);
+  if (!c || !src) return;
+  const rmsLink = m.itemId
+    ? ` · <a href="${_esc(RMS.url)}/?modell=${encodeURIComponent(m.itemId)}" target="_blank" rel="noopener">im RMS öffnen ↗</a>` : '';
+  if (c.quelle === 'rms') {
+    const d = c.geaendert ? new Date(c.geaendert).toLocaleDateString('de-DE') : '';
+    src.innerHTML = `<b class="src-live">● live aus dem RMS</b>${d ? ' · geändert ' + d : ''}${c.von ? ' von ' + _esc(c.von) : ''}${rmsLink}`;
+  } else {
+    src.innerHTML = `<b class="src-repo">● Stand aus dem Repository</b> (kein Zugriff auf das RMS)${rmsLink}`;
+  }
 }
 
 function whenSized(el) {
@@ -590,6 +692,7 @@ function whenSized(el) {
 
 async function loadDiagram(key) {
   const cfg = PROC[key];
+  if (!cfg) return;
   if (cfg.viewer) { requestAnimationFrame(() => fitView(key)); return; }
   if (cfg.loading) return;
   const canvasEl = document.getElementById('canvas-' + key);
@@ -598,16 +701,13 @@ async function loadDiagram(key) {
   const viewer = new BpmnJS({ container: canvasEl });
   cfg.viewer = viewer;
   cfg.needsFit = true;
-  try {
-    const res = await fetch(cfg.file, { cache: 'no-cache' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const { warnings } = await viewer.importXML(await res.text());
-    if (warnings && warnings.length) console.warn('BPMN-Hinweise (' + key + '):', warnings);
-  } catch (e) {
-    canvasEl.innerHTML = '<div class="bpmn-error">Diagramm konnte nicht geladen werden: ' + _esc(e.message) + '</div>';
-    return;
-  }
-  viewer.get('eventBus').on('root.set', () => markView(key));
+  // Klick auf eine Aufrufaktivität (⊞) öffnet das eingebundene Modell
+  viewer.get('eventBus').on('element.click', e => {
+    const bo = e.element && e.element.businessObject;
+    if (!bo || bo.$type !== 'bpmn:CallActivity') return;
+    const ziel = zielVonAufruf(bo);
+    if (ziel) zeigeModell(key, ziel);
+  });
   // Größe beobachten: Reiterwechsel, Vollbild und Fenstergröße passen die Ansicht an.
   if (window.ResizeObserver) {
     new ResizeObserver(() => {
@@ -615,14 +715,40 @@ async function loadDiagram(key) {
       if (cfg.needsFit) fitView(key);
     }).observe(canvasEl);
   }
+  await zeigeModell(key, cfg.haupt);
+}
+
+async function zeigeModell(key, modellKey) {
+  const cfg = PROC[key];
+  const canvasEl = document.getElementById('canvas-' + key);
+  canvasEl.querySelectorAll('.bpmn-error').forEach(x => x.remove());
+  try {
+    const mod = await holeModell(modellKey);
+    const { warnings } = await cfg.viewer.importXML(mod.xml);
+    if (warnings && warnings.length) console.warn('BPMN-Hinweise (' + modellKey + '):', warnings);
+  } catch (e) {
+    canvasEl.insertAdjacentHTML('beforeend', '<div class="bpmn-error">Diagramm konnte nicht geladen werden: ' + _esc(e.message) + '</div>');
+    return;
+  }
+  cfg.cur = modellKey;
+  // Aufrufaktivitäten anklickbar machen; im Hauptmodell daraus die Ansicht-Knöpfe bauen
+  const reg = cfg.viewer.get('elementRegistry'), canvas = cfg.viewer.get('canvas');
+  const calls = [];
+  reg.filter(el => el.businessObject && el.businessObject.$type === 'bpmn:CallActivity').forEach(el => {
+    canvas.addMarker(el.id, 'pz-call');
+    const ziel = zielVonAufruf(el.businessObject);
+    if (ziel && !calls.some(c => c.key === ziel)) calls.push({ key: ziel, name: el.businessObject.name || MODELLE[ziel].name });
+  });
+  if (modellKey === cfg.haupt) cfg.calls = calls;
+  renderViews(key);
+  cfg.needsFit = true;
   fitView(key);
-  markView(key);
 }
 
 // Einpassen nur mit echter Größe (versteckter Reiter hat 0 px), sonst später nachholen.
 function fitView(key) {
   const cfg = PROC[key];
-  if (!cfg.viewer) return;
+  if (!cfg || !cfg.viewer) return;
   const el = document.getElementById('canvas-' + key);
   if (!el.clientWidth || !el.clientHeight) { cfg.needsFit = true; return; }
   const canvas = cfg.viewer.get('canvas');
@@ -631,36 +757,29 @@ function fitView(key) {
   catch (e) { cfg.needsFit = true; }
 }
 
-function openView(key, subId) {
-  const cfg = PROC[key];
-  if (!cfg.viewer) return;
-  const canvas = cfg.viewer.get('canvas'), reg = cfg.viewer.get('elementRegistry');
-  const root = subId ? reg.get(subId + '_plane') : (reg.get(cfg.main) || canvas.getRootElements()[0]);
-  if (root) canvas.setRootElement(root);
-  fitView(key);
+function dateiName(key, endung) {
+  const m = MODELLE[PROC[key].cur];
+  const basis = m && m.datei ? m.datei.split('/').pop().replace(/\.bpmn$/, '')
+    : String((m && m.name) || 'prozess').toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-');
+  return basis + endung;
 }
 
-function markView(key) {
-  const cfg = PROC[key];
-  const cur = cfg.viewer.get('canvas').getRootElement();
-  const curId = cur ? cur.id : '';
-  document.querySelectorAll('#views-' + key + ' button[data-view]').forEach(b => {
-    const want = b.dataset.view ? b.dataset.view + '_plane' : cfg.main;
-    b.classList.toggle('active', curId === want || (!b.dataset.view && !curId.endsWith('_plane')));
-  });
+function speichern(inhalt, typ, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([inhalt], { type: typ }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 async function saveSvg(key) {
-  const cfg = PROC[key];
-  const { svg } = await cfg.viewer.saveSVG();
-  const root = cfg.viewer.get('canvas').getRootElement().id;
-  const suffix = root.endsWith('_plane') ? '-' + root.replace('_plane', '') : '';
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = cfg.file.split('/').pop().replace('.bpmn', suffix + '.svg');
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  const { svg } = await PROC[key].viewer.saveSVG();
+  speichern(svg, 'image/svg+xml', dateiName(key, '.svg'));
+}
+
+function saveBpmn(key) {
+  const m = MODELLE[PROC[key].cur];
+  if (m && m.cache) speichern(m.cache.xml, 'application/xml', dateiName(key, '.bpmn'));
 }
 </script>
 
