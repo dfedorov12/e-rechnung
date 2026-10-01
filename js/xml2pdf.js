@@ -28,6 +28,20 @@ const _RA_LABEL = {
   '877': 'Schlussrechnung (Bau)',
 };
 
+/* Zeilenumbrueche in XML-Texten: CRLF, CR, LF sowie NEL, LS und PS (U+0085,
+   U+2028, U+2029). Per fromCharCode gebaut, damit keine Escape-Sequenz im
+   Quelltext zu einem rohen Steuerzeichen werden kann. */
+const _LB_CHARS = '\r\n' + String.fromCharCode(0x85, 0x2028, 0x2029);
+const _LINEBREAK = new RegExp('\r\n|[' + _LB_CHARS + ']');
+const _LINEBREAK_ALL = new RegExp('\r\n|[' + _LB_CHARS + ']', 'g');
+
+/* Elektronische Adresse (BT-34 / BT-49): oft eine E-Mail, manchmal eine
+   USt-IdNr. oder GLN. Ohne @ bekommt sie eine Beschriftung. */
+const _eAdr = s => (!s ? '' : s.includes('@') ? s : `E-Adresse: ${s}`);
+
+/* IBAN in Vierergruppen, egal wie sie in der XML formatiert ist */
+const _fmtIban = s => String(s || '').replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
+
 /**
  * Haupteinstieg: Datenobjekt → PDF-Bytes.
  * @param   {object} data  Ergebnis von parseInvoiceXML()
@@ -77,6 +91,8 @@ async function buildInvoicePdf(data) {
     .replace(/…/g, '...')
     .replace(/[‘’]/g, "'")
     .replace(/[“-„]/g, '"')
+    .replace(_LINEBREAK_ALL, ' ')   // einzeilige Ausgabe: Umbruch wird Leerzeichen
+    .replace(/\s/g, ' ')
     .replace(/[^\x20-\x7E\xA0-\xFF€]/g, '?');
 
   const text = (s, x, yy, opts = {}) => {
@@ -98,17 +114,21 @@ async function buildInvoicePdf(data) {
     page.drawLine({ start: { x: x1, y: yy }, end: { x: x2, y: yy }, thickness: 0.7, color: col });
   };
 
-  /** Text auf Breite umbrechen (einfacher Wort-Umbruch). */
+  /** Text auf Breite umbrechen (einfacher Wort-Umbruch). Zeilenumbrueche aus
+      der XML (z. B. in Positionstexten oder Zahlungsbedingungen) bleiben
+      erhalten, statt als "?" im PDF zu landen. */
   const wrap = (s, maxW, size = 9) => {
-    const words = enc(s).split(/\s+/);
     const lines = [];
-    let cur = '';
-    for (const wd of words) {
-      const probe = cur ? cur + ' ' + wd : wd;
-      if (font.widthOfTextAtSize(probe, size) <= maxW) { cur = probe; }
-      else { if (cur) lines.push(cur); cur = wd; }
+    for (const para of String(s ?? '').split(_LINEBREAK)) {
+      if (!para.trim()) continue;
+      let cur = '';
+      for (const wd of enc(para).split(/\s+/).filter(Boolean)) {
+        const probe = cur ? cur + ' ' + wd : wd;
+        if (font.widthOfTextAtSize(probe, size) <= maxW) { cur = probe; }
+        else { if (cur) lines.push(cur); cur = wd; }
+      }
+      if (cur) lines.push(cur);
     }
-    if (cur) lines.push(cur);
     return lines.length ? lines : [''];
   };
 
@@ -147,7 +167,7 @@ async function buildInvoicePdf(data) {
     [data.rechtsangaben || ''],
     [data.verkaeufkontakt    ? `Ansprechpartner: ${data.verkaeufkontakt}` : ''],
     [data.verkaeuftel        ? `Tel.: ${data.verkaeuftel}` : ''],
-    [data.verkaeuferemail || ''],
+    [_eAdr(data.verkaeuferemail)],
   ].filter(([s]) => s);
 
   const buyerLines = [
@@ -160,7 +180,7 @@ async function buildInvoicePdf(data) {
     [data.bestellnummer   ? `Bestellnummer: ${data.bestellnummer}` : ''],
     [data.projektreferenz ? `Projektreferenz: ${data.projektreferenz}` : ''],
     [data.vertragsnummer  ? `Vertragsnummer: ${data.vertragsnummer}` : ''],
-    [data.kaeufermail || ''],
+    [_eAdr(data.kaeufermail)],
   ].filter(([s]) => s);
 
   // Spaltenbreiten begrenzen und umbrechen, damit lange Zeilen (z. B. Rechtsform)
@@ -310,7 +330,7 @@ async function buildInvoicePdf(data) {
     text('ZAHLUNGSINFORMATIONEN', M, y, { size: 7.5, bold: true, color: gray });
     y -= 13;
     if (data.kontoinhaber)      { for (const l of wrap(`Kontoinhaber: ${data.kontoinhaber}`, W - 2 * M)) { text(l, M, y, { size: 9 }); y -= 12; } }
-    if (data.iban) { text(`IBAN: ${data.iban.replace(/(.{4})/g, '$1 ').trim()}`, M, y, { size: 9 }); y -= 13; }
+    if (data.iban) { text(`IBAN: ${_fmtIban(data.iban)}`, M, y, { size: 9 }); y -= 13; }
     if (data.bic)  { text(`BIC: ${data.bic}`, M, y, { size: 9 }); y -= 13; }
     if (data.zahlungsbedingungen) {
       for (const l of wrap(`Zahlungsbedingungen: ${data.zahlungsbedingungen}`, W - 2 * M)) {
