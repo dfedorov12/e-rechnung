@@ -1,0 +1,15 @@
+{
+  "hinweis": "Datei-Kennungen der Modelle im RMS (ISMS-Bibliothek, Prozesse/KONZERN). Nach dem Import gesetzt, bleiben beim Überschreiben gleich.",
+  "driveId": "b!mHt0ojDvMUO2CASB1CYZ7LZfHr-4oQxOpM8lU-BHkQAn6GWLTefSRpGSUcefMjhL",
+  "modelle": {
+    "intake": "01NH6NP5HCSYDEL23CFRHJT7LB7QUEENHF",
+    "neben": "01NH6NP5G7V3KZMFQIXJF23PZ25WTOJAXE",
+    "erfassen": "01NH6NP5HOJGTZLRKOSFF3DWOHRRV4CMOP",
+    "erzeugen": "01NH6NP5H2DLCLK76FEZD3NJGW55W4XJUW",
+    "umstellen": "01NH6NP5CJ56ANY7PSDBGJSCNFYTCNWSHF",
+    "preflight": "01NH6NP5CKDDMZSL7NZVBYST7STODAYBJC",
+    "eingang": "01NH6NP5FOMYJENOIZBVCJ3YRDMYS6TLCK",
+    "ausgang": "01NH6NP5FSQMZV7ICL5JB32KVHP6ORKJ7T",
+    "zahlung": "01NH6NP5C7Q2RGEMSK6NCYF7DLUYPIA525"
+  }
+}
