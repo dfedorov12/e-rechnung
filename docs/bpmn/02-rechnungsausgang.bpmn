@@ -8,7 +8,9 @@
   </bpmn:collaboration>
   <bpmn:process id="Process_ERechnung_Ausgang" name="E-Rechnung Rechnungsausgang" isExecutable="false">
     <bpmn:documentation>Ausgangsrechnungen der Werke ohne SAP entstehen im Konverter: PDF aus dem ERP laden, Daten prüfen, ZUGFeRD oder XRechnung erzeugen, in AR_&lt;Werk&gt; ablegen und an den Kunden senden. SAP-Werke laufen über EDIzone.
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Aus">
       <bpmn:lane id="LV" name="Versand / Lager"><bpmn:flowNodeRef>V_start</bpmn:flowNodeRef><bpmn:flowNodeRef>V_wa</bpmn:flowNodeRef></bpmn:lane>
       <bpmn:lane id="LF" name="Vertrieb / Fakturierung"><bpmn:flowNodeRef>F_fakt</bpmn:flowNodeRef><bpmn:flowNodeRef>F_gwSap</bpmn:flowNodeRef><bpmn:flowNodeRef>F_edi</bpmn:flowNodeRef><bpmn:flowNodeRef>F_endEdi</bpmn:flowNodeRef><bpmn:flowNodeRef>F_send</bpmn:flowNodeRef><bpmn:flowNodeRef>F_end</bpmn:flowNodeRef></bpmn:lane>

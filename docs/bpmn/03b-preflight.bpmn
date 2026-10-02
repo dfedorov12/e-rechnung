@@ -6,7 +6,9 @@
   <bpmn:process id="Process_Zahldatei_Preflight" name="Zahldatei-Preflight" isExecutable="false">
     <bpmn:documentation>Der Preflight prüft die fertige pain.001.001.09 auf die Gründe, an denen Banken ablehnen. Bei Auslandszahlungen (AXZ) kommen die Pflichtfelder der DK dazu.
 Eingebunden in: Zahlungsausgang (MC-Converter).
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#zahlung</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#zahlung
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Pre">
       <bpmn:lane id="LP" name="MC-Converter (Browser-App)"><bpmn:flowNodeRef>P_start</bpmn:flowNodeRef><bpmn:flowNodeRef>P_split</bpmn:flowNodeRef><bpmn:flowNodeRef>P_iban</bpmn:flowNodeRef><bpmn:flowNodeRef>P_bic</bpmn:flowNodeRef><bpmn:flowNodeRef>P_sum</bpmn:flowNodeRef><bpmn:flowNodeRef>P_txt</bpmn:flowNodeRef><bpmn:flowNodeRef>P_date</bpmn:flowNodeRef><bpmn:flowNodeRef>P_join</bpmn:flowNodeRef><bpmn:flowNodeRef>P_gwAxz</bpmn:flowNodeRef><bpmn:flowNodeRef>P_axz</bpmn:flowNodeRef><bpmn:flowNodeRef>P_gw</bpmn:flowNodeRef><bpmn:flowNodeRef>P_green</bpmn:flowNodeRef><bpmn:flowNodeRef>P_red</bpmn:flowNodeRef></bpmn:lane>
     </bpmn:laneSet>

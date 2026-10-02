@@ -6,7 +6,9 @@
   <bpmn:process id="Process_Zahldatei_Umstellen" name="Zahldatei auf pain.001.001.09 umstellen" isExecutable="false">
     <bpmn:documentation>Der MC-Converter erkennt die Dateiart am Inhalt. SEPA-Überweisungen (pain.001.003.03 oder 001.001.03) werden zu pain.001.001.09, DTAZV-Auslandszahlungen zu pain.001.001.09 AXZ nach DK-Schema GBIC_5.
 Eingebunden in: Zahlungsausgang (MC-Converter).
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#zahlung</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#zahlung
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Umst">
       <bpmn:lane id="LUM" name="MC-Converter (Browser-App)"><bpmn:flowNodeRef>U_start</bpmn:flowNodeRef><bpmn:flowNodeRef>U_ns</bpmn:flowNodeRef><bpmn:flowNodeRef>U_gw</bpmn:flowNodeRef><bpmn:flowNodeRef>U_stop</bpmn:flowNodeRef><bpmn:flowNodeRef>U_struct</bpmn:flowNodeRef><bpmn:flowNodeRef>U_strip</bpmn:flowNodeRef><bpmn:flowNodeRef>U_sum</bpmn:flowNodeRef><bpmn:flowNodeRef>U_clean</bpmn:flowNodeRef><bpmn:flowNodeRef>U_end</bpmn:flowNodeRef><bpmn:flowNodeRef>U_read</bpmn:flowNodeRef><bpmn:flowNodeRef>U_map</bpmn:flowNodeRef><bpmn:flowNodeRef>U_iban</bpmn:flowNodeRef><bpmn:flowNodeRef>U_adr</bpmn:flowNodeRef><bpmn:flowNodeRef>U_gwOrt</bpmn:flowNodeRef><bpmn:flowNodeRef>U_endAxz</bpmn:flowNodeRef></bpmn:lane>
       <bpmn:lane id="LUT" name="Treasury / Buchhaltung"><bpmn:flowNodeRef>U_ort</bpmn:flowNodeRef></bpmn:lane>

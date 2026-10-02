@@ -9,7 +9,9 @@
   </bpmn:collaboration>
   <bpmn:process id="Process_ERechnung_Eingang" name="E-Rechnung Rechnungseingang" isExecutable="false">
     <bpmn:documentation>Eingangsrechnungen kommen per Mail ins Werks-Postfach. Power Automate gibt jeden PDF- oder XML-Anhang an den Prüfdienst, legt Original und Prüfergebnis in ERAR_&lt;Werk&gt; ab und schlägt der Kreditorenbuchhaltung den Buchungsweg vor.
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Ein">
       <bpmn:lane id="LA" name="Werks-Postfach &amp; Power Automate"><bpmn:flowNodeRef>A_start</bpmn:flowNodeRef><bpmn:flowNodeRef>A_gw</bpmn:flowNodeRef><bpmn:flowNodeRef>A_move</bpmn:flowNodeRef><bpmn:flowNodeRef>A_endArch</bpmn:flowNodeRef><bpmn:flowNodeRef>A_att</bpmn:flowNodeRef><bpmn:flowNodeRef>A_gwErr</bpmn:flowNodeRef><bpmn:flowNodeRef>A_errMail</bpmn:flowNodeRef><bpmn:flowNodeRef>A_archSend</bpmn:flowNodeRef><bpmn:flowNodeRef>A_moveOrig</bpmn:flowNodeRef></bpmn:lane>
       <bpmn:lane id="LB" name="Prüfdienst (Azure)"><bpmn:flowNodeRef>B_intake</bpmn:flowNodeRef></bpmn:lane>

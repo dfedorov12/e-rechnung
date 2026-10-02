@@ -6,7 +6,9 @@
   <bpmn:process id="Process_ERechnung_Erfassen" name="E-Rechnung Erkennen und erfassen" isExecutable="false">
     <bpmn:documentation>Der Konverter liest das Rechnungs-PDF (bei Scans per Texterkennung), erkennt das Werk, befüllt die Felder vor und lässt den Vertrieb prüfen und ergänzen.
 Eingebunden in: E-Rechnung Rechnungsausgang.
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Erf">
       <bpmn:lane id="LKK" name="Konverter (Browser-App)"><bpmn:flowNodeRef>E_start</bpmn:flowNodeRef><bpmn:flowNodeRef>E_gwText</bpmn:flowNodeRef><bpmn:flowNodeRef>E_ocr</bpmn:flowNodeRef><bpmn:flowNodeRef>E_werk</bpmn:flowNodeRef><bpmn:flowNodeRef>E_fill</bpmn:flowNodeRef><bpmn:flowNodeRef>E_gwEU</bpmn:flowNodeRef><bpmn:flowNodeRef>E_vat</bpmn:flowNodeRef><bpmn:flowNodeRef>E_end</bpmn:flowNodeRef></bpmn:lane>
       <bpmn:lane id="LKV" name="Vertrieb / Fakturierung"><bpmn:flowNodeRef>E_check</bpmn:flowNodeRef><bpmn:flowNodeRef>E_fmt</bpmn:flowNodeRef></bpmn:lane>

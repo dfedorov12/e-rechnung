@@ -7,7 +7,9 @@
   </bpmn:collaboration>
   <bpmn:process id="Process_Zahlungsausgang_MC" name="Zahlungsausgang (MC-Converter)" isExecutable="false">
     <bpmn:documentation>Zahldateien aus ERP und MultiCash gehen durch den MC-Converter: SEPA-Überweisungen werden zu pain.001.001.09, Auslandszahlungen im DTAZV-Format zu pain.001.001.09 AXZ. Erst nach grünem Preflight lädt die Treasury hoch.
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#zahlung</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#zahlung
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Zahl">
       <bpmn:lane id="LE" name="ERP / MultiCash"><bpmn:flowNodeRef>Z_start</bpmn:flowNodeRef><bpmn:flowNodeRef>Z_vor</bpmn:flowNodeRef><bpmn:flowNodeRef>Z_exp</bpmn:flowNodeRef></bpmn:lane>
       <bpmn:lane id="LM" name="MC-Converter (Browser-App)"><bpmn:flowNodeRef>M_load</bpmn:flowNodeRef><bpmn:flowNodeRef>M_conv</bpmn:flowNodeRef><bpmn:flowNodeRef>M_pre</bpmn:flowNodeRef><bpmn:flowNodeRef>M_gw</bpmn:flowNodeRef><bpmn:flowNodeRef>M_dl</bpmn:flowNodeRef></bpmn:lane>

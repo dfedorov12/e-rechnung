@@ -7,7 +7,9 @@
   <bpmn:process id="Process_ERechnung_Erzeugen" name="E-Rechnung Prüfen und erzeugen" isExecutable="false">
     <bpmn:documentation>Vor dem Export prüft der Konverter Pflichtfelder, IBAN, Summen und USt-IdNr. Danach entsteht die XML nach EN 16931, wird zurückgelesen und als ZUGFeRD oder XRechnung mit Prüfpfad ausgegeben.
 Eingebunden in: E-Rechnung Rechnungsausgang.
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#ausgang
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Erz">
       <bpmn:lane id="LXK" name="Konverter (Browser-App)"><bpmn:flowNodeRef>X_start</bpmn:flowNodeRef><bpmn:flowNodeRef>X_pflicht</bpmn:flowNodeRef><bpmn:flowNodeRef>X_pre</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwHard</bpmn:flowNodeRef><bpmn:flowNodeRef>X_err1</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwSoft</bpmn:flowNodeRef><bpmn:flowNodeRef>X_xml</bpmn:flowNodeRef><bpmn:flowNodeRef>X_self</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwSelf</bpmn:flowNodeRef><bpmn:flowNodeRef>X_err2</bpmn:flowNodeRef><bpmn:flowNodeRef>X_gwFmt</bpmn:flowNodeRef><bpmn:flowNodeRef>X_zf</bpmn:flowNodeRef><bpmn:flowNodeRef>X_xr</bpmn:flowNodeRef><bpmn:flowNodeRef>X_audit</bpmn:flowNodeRef><bpmn:flowNodeRef>X_dl</bpmn:flowNodeRef><bpmn:flowNodeRef>X_end</bpmn:flowNodeRef></bpmn:lane>
       <bpmn:lane id="LXV" name="Vertrieb / Fakturierung"><bpmn:flowNodeRef>X_confirm</bpmn:flowNodeRef></bpmn:lane>

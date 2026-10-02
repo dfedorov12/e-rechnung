@@ -6,7 +6,9 @@
   <bpmn:process id="Process_ERechnung_Eingangspruefung" name="E-Rechnung Eingangsprüfung" isExecutable="false">
     <bpmn:documentation>Der Prüfdienst /api/intake prüft jeden Anhang: Art erkennen, PDF/A-Hülle und eingebettete XML (ZUGFeRD) oder XRechnung validieren, Kopfdaten lesen, Steuerkategorie und Abgleich PDF zu XML bewerten. Ergebnis ist ein JSON mit Buchungsweg und Prüf-Flags.
 Eingebunden in: E-Rechnung Rechnungseingang.
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Intake">
       <bpmn:lane id="LI" name="Prüfdienst (Azure)"><bpmn:flowNodeRef>I_start</bpmn:flowNodeRef><bpmn:flowNodeRef>I_norm</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwTyp</bpmn:flowNodeRef><bpmn:flowNodeRef>I_pdfa</bpmn:flowNodeRef><bpmn:flowNodeRef>I_extract</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwEinv</bpmn:flowNodeRef><bpmn:flowNodeRef>I_sonst</bpmn:flowNodeRef><bpmn:flowNodeRef>I_endSonst</bpmn:flowNodeRef><bpmn:flowNodeRef>I_zf</bpmn:flowNodeRef><bpmn:flowNodeRef>I_mustang</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwMin</bpmn:flowNodeRef><bpmn:flowNodeRef>I_rej</bpmn:flowNodeRef><bpmn:flowNodeRef>I_endRej</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwPdfa</bpmn:flowNodeRef><bpmn:flowNodeRef>I_fm</bpmn:flowNodeRef><bpmn:flowNodeRef>I_xr</bpmn:flowNodeRef><bpmn:flowNodeRef>I_kosit</bpmn:flowNodeRef><bpmn:flowNodeRef>I_daten</bpmn:flowNodeRef><bpmn:flowNodeRef>I_werk</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwSt</bpmn:flowNodeRef><bpmn:flowNodeRef>I_man</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwZf</bpmn:flowNodeRef><bpmn:flowNodeRef>I_abgl</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwMat</bpmn:flowNodeRef><bpmn:flowNodeRef>I_rf</bpmn:flowNodeRef><bpmn:flowNodeRef>I_gwRend</bpmn:flowNodeRef><bpmn:flowNodeRef>I_render</bpmn:flowNodeRef><bpmn:flowNodeRef>I_end</bpmn:flowNodeRef></bpmn:lane>
     </bpmn:laneSet>

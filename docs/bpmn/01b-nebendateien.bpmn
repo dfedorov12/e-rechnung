@@ -6,7 +6,9 @@
   <bpmn:process id="Process_ERechnung_Nebendateien" name="E-Rechnung Nebendateien ablegen" isExecutable="false">
     <bpmn:documentation>Neben dem Original legt der Flow je nach Prüfergebnis das lesbare PDF, den KoSIT-Prüfbericht und bei ZUGFeRD die XML separat in ERAR_&lt;Werk&gt; ab.
 Eingebunden in: E-Rechnung Rechnungseingang.
-Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang</bpmn:documentation>
+Anwender-Ansicht: https://e-rechnung.dihag-extern.com/prozess.html#eingang
+Im Einklang mit den Richtlinien: ISMS-Richtlinie Aufbewahrungsfristen und -pflichten
+[[rms:policies=119]]</bpmn:documentation>
     <bpmn:laneSet id="LaneSet_P_Neben">
       <bpmn:lane id="LN" name="SharePoint &amp; Monitoring"><bpmn:flowNodeRef>S_start</bpmn:flowNodeRef><bpmn:flowNodeRef>S_split</bpmn:flowNodeRef><bpmn:flowNodeRef>S_lesbar</bpmn:flowNodeRef><bpmn:flowNodeRef>S_kosit</bpmn:flowNodeRef><bpmn:flowNodeRef>S_xml</bpmn:flowNodeRef><bpmn:flowNodeRef>S_join</bpmn:flowNodeRef><bpmn:flowNodeRef>S_end</bpmn:flowNodeRef></bpmn:lane>
     </bpmn:laneSet>

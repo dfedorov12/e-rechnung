@@ -818,11 +818,19 @@ function artifactsSem(annotations, groups) {
   return x;
 }
 
-/** Prozess-Dokumentation: Einleitung, Herkunft, Link auf die Anwender-Ansicht. */
+/* Verknüpfte Richtlinien im RMS, so geschrieben wie das RMS es selbst tut
+   (Klartextzeile plus Marker [[rms:policies=…]]). */
+const RICHTLINIEN = [{ id: '119', titel: 'ISMS-Richtlinie Aufbewahrungsfristen und -pflichten' }];
+
+/** Prozess-Dokumentation: Einleitung, Herkunft, Link auf die Anwender-Ansicht, Richtlinien. */
 function processDoku(spec) {
   const zeilen = [spec.doku];
   if (spec.von) zeilen.push(`Eingebunden in: ${BY_KEY[spec.von].name}.`);
   zeilen.push(`Anwender-Ansicht: ${ANSICHT}#${spec.tab}`);
+  if (RICHTLINIEN.length) {
+    zeilen.push('Im Einklang mit den Richtlinien: ' + RICHTLINIEN.map(r => r.titel).join('; '));
+    zeilen.push(`[[rms:policies=${RICHTLINIEN.map(r => r.id).join(',')}]]`);
+  }
   return zeilen.join('\n');
 }
 
