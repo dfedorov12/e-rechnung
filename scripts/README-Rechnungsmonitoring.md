@@ -96,3 +96,22 @@ aggregiert die Listenelemente und zeigt:
 
 → Noch zu bauen (eigenes Repo, z. B. `dfedorov12/rechnungsmonitoring`, Custom Domain
 `rechnungsmonitoring.dihag-extern.com`) oder als Reiter in der E‑Rechnung‑App.
+
+### Umsatzgrenze 800.000 € (sonstige Rechnungen ab 2027)
+
+Für Leistungen 2027 dürfen nur Lieferanten mit höchstens 800.000 € Gesamtumsatz im Vorjahr
+noch Papier oder PDF schicken (§ 27 Abs. 38 UStG), ab 2028 niemand mehr. Den Umsatz kennen
+wir nicht, also schätzt die Buchhaltung ihn ein. Jede sonstige Rechnung im Eingang
+(Formatmangel) hat in der Spalte Buchung den Button **800k einschätzen**. Der Dialog zeigt
+die Regel für das Rechnungsjahr, nimmt die Einschätzung „vermutlich über“ oder „vermutlich
+bis 800.000 €“ auf und liefert die passende Mailvorlage an den Lieferanten (in Outlook
+öffnen oder kopieren). Kleinbeträge bis 250 € brutto brauchen keine Einschätzung. Die
+Kachel **800k-Einschätzung offen** filtert auf alles, was noch fehlt.
+
+Die Einschätzung gilt je Lieferant und steht in
+`Monitoring/lieferanten-umsatzgrenze.json` in der Standardbibliothek der Monitoring-Site
+(wer, wann, vorherige Einschätzungen). Schreiben braucht Bearbeitungsrechte auf der Site.
+Bei PDF ohne XML liest der Prüfdienst keinen Lieferanten aus, dann trägt man ihn im Dialog
+ein und die Rechnung wird über ihren Dateinamen zugeordnet. Maßgeblich wäre laut Gesetz
+der Leistungszeitpunkt, das Monitoring nimmt das Rechnungsdatum. Logik und Vorlagen:
+`js/umsatzgrenze.js`, Test: `node tests/umsatzgrenze.test.js`.

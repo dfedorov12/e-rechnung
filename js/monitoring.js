@@ -18,6 +18,7 @@ const MON = {
 };
 
 let _monRecords = [];
+let _monRows = [];     // aktuell angezeigte Zeilen (Index fuer Buttons in der Tabelle)
 const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', from: '', to: '', q: '', flag: '' };
 let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
@@ -84,6 +85,8 @@ async function loadMonitoring(accessList) {
     // XML + PDF + KoSIT-Bericht derselben Rechnung zu EINER Zeile zusammenfassen.
     _monRecords = _monGroup(recs);
     _monMarkDupes(_monRecords);   // echte Dubletten (Nummer + Aussteller) kennzeichnen
+    // Einschaetzungen zur 800k-Umsatzgrenze (js/umsatzgrenze.js); Fehler sind nicht fatal.
+    if (typeof ugLaden === 'function') await ugLaden(siteId, token);
     _monBuildFilterOptions(libs);
     _monApply();
 
@@ -326,7 +329,7 @@ function _monMatchBase(r, f, q) {
       && (!f.status   || r.status === f.status)
       && (!f.from     || (d && d >= f.from))
       && (!f.to       || (d && d <= f.to))
-      && (!q || (r.nummer + ' ' + r.steller + ' ' + r.empf).toLowerCase().includes(q));
+      && (!q || (r.nummer + ' ' + _monPartner(r) + ' ' + r.empf).toLowerCase().includes(q));
 }
 
 function _monMatchFlag(r, flag) {
@@ -337,6 +340,8 @@ function _monMatchFlag(r, flag) {
     case 'manuell':    return r.manuellePruefung || /manuell/i.test(r.buchung || '');
     case 'rueckfrage': return !!r.rueckfrage;
     case 'zurueck':    return /zur(?:ü|ue)ckgew/i.test(r.buchung || '');
+    case 'umsatz':     return typeof ugBraucht === 'function' && ugBraucht(r) && !ugFuer(r)
+                              && ugPhase(r.datum) !== 'pflicht';
     default:           return true;
   }
 }
@@ -356,7 +361,7 @@ function _monSortVal(r, key) {
     case 'werk':     return r.werk || '';
     case 'richtung': return r.richtung || '';
     case 'nummer':   return (r.nummer || '').toLowerCase();
-    case 'partner':  return ((r.richtung === 'Eingang' ? r.steller : r.empf) || '').toLowerCase();
+    case 'partner':  return _monPartner(r).toLowerCase();
     case 'brutto':   return r.brutto == null ? -Infinity : r.brutto;
     case 'faellig':  return (r.faelligkeit || '').slice(0, 10);
     case 'klass':    return _monKlass(r) || '';
@@ -378,6 +383,8 @@ function _monRenderKpis(rows) {
   const manuell    = rows.filter(r => _monMatchFlag(r, 'manuell')).length;
   const rueckfrage = rows.filter(r => r.rueckfrage).length;
   const zurueck    = rows.filter(r => _monMatchFlag(r, 'zurueck')).length;
+  // Sonstige Rechnungen ohne Einschaetzung zur 800k-Umsatzgrenze (js/umsatzgrenze.js).
+  const umsatz     = rows.filter(r => _monMatchFlag(r, 'umsatz')).length;
 
   // Klassifizierung (ZUGFeRD / XRechnung / PDF ohne E-Rechnung) als Übersichtsfelder.
   const klassCounts = {};
@@ -397,6 +404,7 @@ function _monRenderKpis(rows) {
     { id: 'flag:manuell',    label: 'Manuelle Prüfung',      val: manuell,    cls: manuell ? 'warn' : '' },
     { id: 'flag:rueckfrage', label: 'Zur Rückfrage',         val: rueckfrage, cls: rueckfrage ? 'bad' : '' },
     { id: 'flag:zurueck',    label: 'Zurückgewiesen',        val: zurueck,    cls: zurueck ? 'bad' : '' },
+    { id: 'flag:umsatz',     label: '800k-Einschätzung offen', val: umsatz,   cls: umsatz ? 'warn' : '' },
     ...klassKeys.map(k => ({ id: 'k:' + k, label: k, val: klassCounts[k], cls: 'klass' })),
   ];
   document.getElementById('mon-kpis').innerHTML = tiles.map(t => {
@@ -427,7 +435,8 @@ function _monTileClick(id) {
 
 function _monRenderTable(rows) {
   // Sortierung erfolgt zentral in _monSortRows (vor dem Rendern).
-  const body = rows.map(r => {
+  _monRows = rows;
+  const body = rows.map((r, idx) => {
     const betrag = r.brutto == null ? '' :
       r.brutto.toLocaleString('de-DE', { style: 'currency', currency: r.waehrung || 'EUR' });
     const datum = _monDate(r.datum);
@@ -457,8 +466,10 @@ function _monRenderTable(rows) {
     if (r.konvertiert)      _flags.push(['techn. konvertiert', '#334155', '#e2e8f0']);
     const _flagBadges = _flags.map(([t, c, bg]) =>
       `<div title="${_esc(t)}" style="display:inline-block;margin:3px 3px 0 0;font-size:11px;font-weight:600;color:${c};background:${bg};border-radius:3px;padding:1px 6px;">${_esc(t.length > 28 ? t.slice(0, 26) + '…' : t)}</div>`).join('');
+    const ugCell = typeof ugZelle === 'function' ? ugZelle(r, idx) : '';
     const buchungCell = (r.buchung ? `<span class="pill pill-status">${_esc(r.buchung)}</span>` : '')
-      + (_flagBadges ? `<div>${_flagBadges}</div>` : '') || '–';
+      + (_flagBadges ? `<div>${_flagBadges}</div>` : '')
+      + (ugCell ? `<div>${ugCell}</div>` : '') || '–';
     const extra = (r.dateien || [])
       .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`)
       .join(' · ');
@@ -474,7 +485,7 @@ function _monRenderTable(rows) {
       <td>${_esc(r.nummer)}${r.dublette
         ? `<div class="mon-dupe" title="${_esc(r.dubletteInfo || '')}" style="display:inline-block;margin-top:2px;font-size:11px;font-weight:600;color:#fff;background:#b40000;border-radius:3px;padding:1px 6px;">⚠ Dublette</div>`
         : ''}</td>
-      <td>${_esc(r.richtung === 'Eingang' ? r.steller : r.empf)}</td>
+      <td>${_monPartnerCell(r)}</td>
       <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
       <td>${faelligCell}</td>
       <td>${_esc(_monKlass(r))}</td>
@@ -490,6 +501,22 @@ function _monRenderTable(rows) {
     || `<tr><td colspan="13" style="text-align:center;color:var(--gray-500);padding:28px;">Keine Treffer für die aktuellen Filter.</td></tr>`;
   document.getElementById('mon-count').textContent =
     `${rows.length} von ${_monRecords.length} angezeigt`;
+}
+
+// Geschaeftspartner der Zeile: Eingang = Steller, Ausgang = Empfaenger. Bringt eine
+// sonstige Rechnung (PDF ohne XML) keinen Steller mit, gilt der Name aus der
+// 800k-Einschaetzung (js/umsatzgrenze.js).
+function _monPartner(r) {
+  if (r.richtung !== 'Eingang') return r.empf || '';
+  return r.steller || (typeof ugLieferantName === 'function' ? ugLieferantName(r) : '') || '';
+}
+
+function _monPartnerCell(r) {
+  const p = _monPartner(r);
+  if (r.richtung === 'Eingang' && p && !r.steller) {
+    return `<span title="Aus der 800k-Einschätzung, nicht aus der Rechnung gelesen" style="font-style:italic;">${_esc(p)}</span>`;
+  }
+  return _esc(p);
 }
 
 // Klartext-Hinweis zur Konformität. Nimmt einen bereits fertigen API-Hinweis
@@ -581,7 +608,8 @@ function _monRenderChips() {
   const f = _monFilter;
   const KONF = { gr: 'grün', gel: 'gelb', rot: 'rot' };
   const FLAG = { offen: 'Offen', fehler: 'Fehler / rot', dublette: 'Dubletten',
-                 manuell: 'Manuelle Prüfung', rueckfrage: 'Zur Rückfrage', zurueck: 'Zurückgewiesen' };
+                 manuell: 'Manuelle Prüfung', rueckfrage: 'Zur Rückfrage', zurueck: 'Zurückgewiesen',
+                 umsatz: '800k-Einschätzung offen' };
   const deDate = s => s.split('-').reverse().join('.');
   const chips = [];
   if (f.werk)     chips.push(['werk', 'Werk: ' + f.werk]);
@@ -668,6 +696,15 @@ function monInitFilterEvents() {
     _monFilter[btn.getAttribute('data-chip')] = '';
     _monSyncControls();
     _monApply();
+  });
+
+  // 800k-Einschaetzung: Button/Badge in der Buchungs-Spalte oeffnet den Dialog.
+  const tbody = document.getElementById('mon-tbody');
+  if (tbody) tbody.addEventListener('click', e => {
+    const btn = e.target.closest('[data-ug]');
+    if (!btn || typeof ugDialogOeffnen !== 'function') return;
+    const r = _monRows[Number(btn.getAttribute('data-ug'))];
+    if (r) ugDialogOeffnen(r, () => _monApply());
   });
 
   // Spalten sortieren (Klick auf Kopfzeile toggelt Richtung).

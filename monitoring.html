@@ -80,6 +80,58 @@
                 padding:36px; text-align:center; box-shadow:var(--shadow-sm); max-width:560px; margin:24px auto; }
     .mon-setup-card h3 { margin:12px 0 6px; color:var(--gray-800); }
     .mon-setup-card p  { color:var(--gray-500); font-size:14px; }
+
+    /* 800k-Umsatzgrenze (js/umsatzgrenze.js) */
+    .ug-btn, .ug-badge { display:inline-block; margin-top:4px; font-size:11px; font-weight:600; border-radius:4px;
+                padding:2px 7px; cursor:pointer; font-family:inherit; line-height:1.4; text-align:left; }
+    .ug-btn { border:1px solid var(--primary); background:#fff; color:var(--primary); }
+    .ug-btn:hover { background:var(--primary); color:#fff; }
+    .ug-badge { border:1px solid transparent; }
+    .ug-badge.ug-bis   { background:#e3f5e9; color:#0a6b2e; }
+    .ug-badge.ug-ueber { background:#e8f0fb; color:#134080; }
+    .ug-badge.ug-nicht { background:#ffe6cc; color:#8a3b00; }
+    .ug-badge.ug-klein { background:var(--gray-100); color:var(--gray-600); cursor:default; }
+    button.ug-badge:hover { border-color:currentColor; }
+
+    #ug-dialog { margin:auto; border:none; border-radius:12px; padding:0; width:min(680px, calc(100vw - 32px));
+                max-height:calc(100vh - 48px); box-shadow:0 20px 50px rgba(0,0,0,.25); }
+    #ug-dialog::backdrop { background:rgba(17,24,39,.45); }
+    .ug-form { padding:20px 22px; display:flex; flex-direction:column; gap:12px; }
+    .ug-kopf { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .ug-kopf h3 { margin:0; font-size:17px; color:var(--gray-900); }
+    .ug-x { border:none; background:none; font-size:16px; color:var(--gray-500); cursor:pointer; padding:2px 6px; }
+    .ug-regel { margin:0; font-size:13px; color:var(--gray-700); background:var(--gray-50); border-left:3px solid var(--primary);
+                padding:8px 10px; border-radius:4px; }
+    .ug-felder { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+    .ug-felder label, .ug-lbl { display:flex; flex-direction:column; gap:4px; font-size:12px; font-weight:600; color:var(--gray-600); }
+    .ug-felder input, .ug-lbl input, .ug-lbl textarea { font:inherit; font-size:13px; font-weight:400; color:var(--gray-900);
+                border:1px solid var(--gray-300); border-radius:6px; padding:7px 9px; width:100%; }
+    .ug-lbl textarea { resize:vertical; line-height:1.45; }
+    .ug-felder input:focus, .ug-lbl input:focus, .ug-lbl textarea:focus { outline:none; border-color:var(--primary);
+                box-shadow:0 0 0 3px rgba(23,80,158,.12); }
+    .ug-wahl { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .ug-opt { display:flex; flex-direction:column; gap:3px; text-align:left; padding:11px 13px; border:2px solid var(--gray-200);
+                border-radius:8px; background:#fff; cursor:pointer; font:inherit; }
+    .ug-opt strong { font-size:14px; color:var(--gray-900); }
+    .ug-opt span { font-size:12px; color:var(--gray-500); }
+    .ug-opt:hover { border-color:var(--gray-400); }
+    .ug-opt.an { border-color:var(--primary); background:var(--primary-light); }
+    .ug-bisher { margin:0; font-size:12px; color:var(--gray-600); }
+    .ug-folge { margin:0; font-size:13px; font-weight:600; }
+    .ug-folge:empty { display:none; }
+    .ug-folge.ok { color:#0a6b2e; }
+    .ug-folge.nicht { color:#8a3b00; }
+    .ug-hinweis { margin:0; font-size:12px; color:var(--gray-500); }
+    .ug-meldung { margin:0; font-size:13px; min-height:1px; }
+    .ug-meldung:empty { display:none; }
+    .ug-meldung.ok { color:#0a6b2e; }
+    .ug-meldung.nicht { color:var(--danger); }
+    .ug-aktionen { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+    .ug-aktionen button { height:36px; padding:0 14px; border-radius:8px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+    .ug-aktionen button:disabled { opacity:.45; cursor:not-allowed; }
+    .ug-sek { border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); }
+    .ug-prim { border:1px solid var(--primary); background:var(--primary); color:#fff; }
+    @media (max-width:600px) { .ug-felder, .ug-wahl { grid-template-columns:1fr; } }
   </style>
 </head>
 <body class="auth-guard">
@@ -178,10 +230,14 @@
 
 </div>
 
+<!-- 800k-Umsatzgrenze: Einschaetzung + Mailvorlage (js/umsatzgrenze.js) -->
+<dialog id="ug-dialog" aria-label="Umsatzgrenze 800.000 €"></dialog>
+
 <script src="js/vendor/msal-browser.min.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/access.js"></script>
 <script src="js/sharepoint.js"></script>
+<script src="js/umsatzgrenze.js"></script>
 <script src="js/monitoring.js"></script>
 
 <script>
