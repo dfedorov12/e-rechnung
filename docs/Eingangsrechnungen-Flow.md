@@ -134,6 +134,7 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       | `Richtung` | `Eingang` |
       | `Gesellschaft` | `body('HTTP')?['werk']` |
       | `Rechnungssteller` / `Rechnungsempfaenger` | `daten.steller` / `daten.empfaenger` |
+      | `RechnungsstellerUStID` | `daten.stellerVat` (USt-IdNr. des Lieferanten, BT-31). **Nicht** `daten.steller`, das ist der Name. |
       | `Rechnungsdatum` / `Faelligkeitsdatum` | `daten.datum` / `daten.faelligkeit` |
       | `Netto-/MwSt-/Bruttobetrag`, `Waehrung` | aus `daten` |
       | `Bestellnummer` / `Lieferscheinnummer` / `Kaeuferreferenz` | `daten.bestellnummer` / `…lieferscheinnummer` / `…leitwegid` |
