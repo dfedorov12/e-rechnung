@@ -5,3 +5,11 @@ local.settings.json
 scripts/
 test/
 *.md
+# pdfjs-dist: der Prüfdienst braucht nur legacy/build (Text lesen)
+node_modules/pdfjs-dist/build/
+node_modules/pdfjs-dist/web/
+node_modules/pdfjs-dist/types/
+node_modules/pdfjs-dist/image_decoders/
+node_modules/pdfjs-dist/legacy/web/
+node_modules/pdfjs-dist/legacy/image_decoders/
+node_modules/pdfjs-dist/**/*.map

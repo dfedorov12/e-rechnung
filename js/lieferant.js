@@ -235,13 +235,15 @@
   /**
    * Browser: Text eines PDFs mit pdf.js (globales pdfjsLib) zeilenweise lesen.
    * Textstücke mit gleicher Grundlinie werden zu einer Zeile zusammengefasst.
-   * @param {ArrayBuffer} daten
+   * Im Prüfdienst (Node) setzt api/src/kopfdaten.js pdfjsLib aus pdfjs-dist.
+   * @param {ArrayBuffer|Uint8Array} daten   wird kopiert, das Original bleibt unberührt
+   * @param {object} [optionen]             weitere Optionen für getDocument
    * @returns {Promise<string>}
    */
-  async function textAusPdf(daten) {
+  async function textAusPdf(daten, optionen) {
     const lib = global.pdfjsLib;
     if (!lib) throw new Error('pdf.js nicht geladen');
-    const doc = await lib.getDocument({ data: new Uint8Array(daten) }).promise;
+    const doc = await lib.getDocument(Object.assign({ data: new Uint8Array(daten) }, optionen || {})).promise;
     const zeilen = [];
     for (let p = 1; p <= Math.min(doc.numPages, 4); p++) {
       const inhalt = await (await doc.getPage(p)).getTextContent();
