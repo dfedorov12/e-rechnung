@@ -111,7 +111,11 @@ Kachel **800k-Einschätzung offen** filtert auf alles, was noch fehlt.
 Die Einschätzung gilt je Lieferant und steht in
 `Monitoring/lieferanten-umsatzgrenze.json` in der Standardbibliothek der Monitoring-Site
 (wer, wann, vorherige Einschätzungen). Schreiben braucht Bearbeitungsrechte auf der Site.
-Bei PDF ohne XML liest der Prüfdienst keinen Lieferanten aus, dann trägt man ihn im Dialog
-ein und die Rechnung wird über ihren Dateinamen zugeordnet. Maßgeblich wäre laut Gesetz
+Den Lieferanten liest der Prüfdienst bei einer PDF ohne XML aus dem Text (`js/lieferant.js`).
+Bei Rechnungen, die schon im Monitoring liegen, liest der Dialog die PDF selbst und belegt
+Lieferant, Nummer und Datum vor. Er nennt die USt-IdNr. und weist auf § 19 UStG oder einen
+Kleinbetrag hin. Nur bei einem Scan ohne Text trägt man den Lieferanten selbst ein. Die
+Einschätzung hängt am Lieferanten (Name und USt-IdNr.) und zusätzlich an der Rechnung
+(Dateiname). Maßgeblich wäre laut Gesetz
 der Leistungszeitpunkt, das Monitoring nimmt das Rechnungsdatum. Logik und Vorlagen:
 `js/umsatzgrenze.js`, Test: `node tests/umsatzgrenze.test.js`.

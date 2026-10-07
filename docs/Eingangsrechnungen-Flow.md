@@ -172,6 +172,26 @@ automatisch in eine XRechnung umgewandelt (zuverlässige Auto-Konvertierung beli
 Lieferanten-Layouts ist nicht seriös leistbar). Bei Bedarf manuell in der E-Rechnung-App
 umwandeln. Eine automatische OCR-Konvertierung wäre ein eigener, größerer Ausbau.
 
+Was sich aus dem Text sicher lesen lässt, liefert der Prüfdienst trotzdem in `daten`:
+Lieferant (`steller`), USt-IdNr. (`stellerVat`), Rechnungsnummer und -datum
+(`datenQuelle = 'pdf-text'`, Logik in `js/lieferant.js`). Unsichere Felder bleiben `null`,
+der Flow schreibt sie also wie bisher leer. Den Betrag aus dem Text gibt es nur im
+`hinweis`, weil ein falsch gelesener Kleinbetrag im Monitoring die 800k-Einschätzung
+ausblenden würde. `dateibasis` bleibt leer, der Dateiname kommt weiter aus dem Anhang.
+`kleinunternehmer = true`, wenn die Rechnung auf § 19 UStG verweist.
+
+## WGC und ZAI: was sich unterscheidet
+
+Bis zur Ablage in `ERAR_<Werk>` laufen beide Flows gleich. Danach übergeben sie
+unterschiedlich an die Buchhaltung:
+
+| | WGC | ZAI |
+|---|---|---|
+| Postfach | Rechnungspostfach WGC | `er-zaigler@dihag.com` |
+| Schleifenschutz am Anfang | nicht nötig | Mail vom eigenen Postfach = Archiv-Mail, nur nach „Verarbeitet“ |
+| Übergabe | Eintrag in der Eingangsrechnungsliste auf `gruppe_wgc`, Original und lesbares PDF als Anlage (bei grün oder gelb), Eintrag danach mit dem Prüfergebnis aktualisiert | Archiv-Mail mit lesbarem PDF an das eigene Postfach, Original-Mail nach „Verarbeitet“ |
+| Buchhaltung arbeitet in | der Liste auf `gruppe_wgc` | dem Postfachordner „Verarbeitet“ |
+
 ---
 
 ## Dubletten & Nummernkollisionen

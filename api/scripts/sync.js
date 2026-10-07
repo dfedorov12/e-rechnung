@@ -9,7 +9,7 @@ const path = require('path');
 
 const SRC = path.join(__dirname, '..', '..', 'js');   // e-rechnung/js
 const DST = path.join(__dirname, '..', 'vendor');     // e-rechnung/api/vendor
-const FILES = ['xmlinvoice.js', 'xml2pdf.js', 'zugferd.js', 'vendor/font-embed.js'];
+const FILES = ['xmlinvoice.js', 'xml2pdf.js', 'zugferd.js', 'lieferant.js', 'vendor/font-embed.js'];
 
 fs.mkdirSync(DST, { recursive: true });
 

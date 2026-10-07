@@ -160,6 +160,13 @@ function _monMap(it, f, lib) {
     intake:   !!lib.intake,
     richtung: (lib.richtung || f.Richtung || '').toString(),
     nummer,
+    // Für den Abruf der Datei (800k-Dialog liest den Lieferanten aus dem PDF)
+    listId:   lib.id,
+    itemId:   it.id,
+    // Spalte RechnungsstellerUStID trug bis zur Flow-Korrektur den Namen: nur echte USt-IdNr. nehmen
+    ustid:    /^[A-Z]{2}[0-9A-Z]{8,12}$/.test(String(f.RechnungsstellerUStID || '').replace(/\s+/g, ''))
+                ? String(f.RechnungsstellerUStID).replace(/\s+/g, '') : '',
+    datumAusRechnung: !!f.Rechnungsdatum,
     art:      (f.Rechnungsart || '').toString(),
     steller:  (f.Rechnungssteller || '').toString(),
     empf:     (f.Rechnungsempfaenger || '').toString(),
@@ -235,7 +242,7 @@ function _monGroup(recs) {
     primary.manuellePruefung = arr.some(r => r.manuellePruefung);
     primary.rueckfrage       = arr.some(r => r.rueckfrage);
     primary.konvertiert      = arr.some(r => r.konvertiert);
-    for (const k of ['buchung', 'manuellePruefungGrund', 'kreditorAktion']) {
+    for (const k of ['buchung', 'manuellePruefungGrund', 'kreditorAktion', 'ustid']) {
       if (!primary[k]) { const s = arr.find(r => r[k]); if (s) primary[k] = s[k]; }
     }
     // Ausgangsrechnungen erzeugt der geprüfte Konverter selbst (EN16931-konform,

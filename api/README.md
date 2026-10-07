@@ -244,6 +244,8 @@ POST /api/intake?werk=<Kuerzel>  -> Body = PDF|XML, Antwort = {
        bericht,                    // vollständiger KoSIT-Report (archivieren)
        pdfa,                       // veraPDF (nur bei PDF)
        daten,                      // nummer, datum, steller, stellerVat, empfaenger, betraege, …
+       datenQuelle,                // 'pdf-text' bei PDF ohne XML: Kopfdaten aus dem Text (js/lieferant.js)
+       kleinunternehmer,           // true, wenn die PDF auf § 19 UStG verweist
        dateibasis,                 // <Nummer>_<StellerVat> — kollisions-/dublettensicherer Dateiname
        xml,                        // extrahierte/empfangene E-Rechnungs-XML
        lesbarPdfBase64 }           // nur bei reiner XML: gerendertes PDF/A

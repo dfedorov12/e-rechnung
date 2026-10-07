@@ -177,11 +177,13 @@ async function ugLaden(siteId, token) {
   }
 }
 
-/** Einschätzung einer Rechnung (über Rechnungsschlüssel, sonst Lieferantenname). */
+/** Einschätzung einer Rechnung: über Rechnungsschlüssel, USt-IdNr. oder Lieferantenname. */
 function ugFuer(r) {
   const d = _ug.daten;
   const zu = d.rechnungen[ugRechnungKey(r)];
-  const key = (zu && zu.lieferant) || ugKey(r.steller);
+  let key = (zu && zu.lieferant) || '';
+  if (!key && r.ustid) key = Object.keys(d.lieferanten).find(k => d.lieferanten[k].vat === r.ustid) || '';
+  if (!key) key = ugKey(r.steller);
   return key && d.lieferanten[key] ? Object.assign({ key }, d.lieferanten[key]) : null;
 }
 
@@ -196,17 +198,18 @@ function ugLieferantName(r) {
  * Einschätzung speichern: Eintrag mergen und mit If-Match schreiben. Hat jemand
  * anderes zwischendurch gespeichert (412), neu laden und einmal wiederholen.
  */
-async function ugSpeichern(r, name, vermutung) {
+async function ugSpeichern(r, name, vermutung, vat, nummer) {
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
   const key = ugKey(name);
   if (!key) throw new Error('Bitte den Lieferanten angeben.');
   const eintrag = {
     name: String(name).trim(),
+    vat: vat || (_ug.daten.lieferanten[key] && _ug.daten.lieferanten[key].vat) || r.ustid || '',
     vermutung,
     am: new Date().toISOString(),
     von: user.username || '',
     vonName: user.name || user.username || '',
-    rechnung: r.nummer || '',
+    rechnung: nummer || r.nummer || '',
   };
   const zuordnung = { lieferant: key, am: eintrag.am, von: eintrag.von };
 
@@ -273,20 +276,48 @@ function ugZelle(r, idx) {
 
 let _ugAktuell = null;
 
+/** TT.MM.JJJJ -> JJJJ-MM-TT (sonst leer). */
+function _ugIso(de) {
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(String(de || '').trim());
+  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : '';
+}
+
 function ugDialogOeffnen(r, onGespeichert) {
   const dlg = document.getElementById('ug-dialog');
   if (!dlg) return;
   const e = ugFuer(r);
-  const phase = ugPhase(r.datum);
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
-  _ugAktuell = { r, onGespeichert, vermutung: e ? e.vermutung : '', phase, absender: user.name || '' };
+  _ugAktuell = {
+    r, onGespeichert, bisher: e,
+    vermutung: e ? e.vermutung : '',
+    name: ugLieferantName(r),
+    nr: r.nummer || '',
+    datum: _monDate(r.datum),
+    vat: r.ustid || (e && e.vat) || '',
+    phase: ugPhase(r.datum),
+    absender: user.name || '',
+    bearbeitet: {},          // Felder, die jemand selbst geändert hat, überschreibt das Lesen nicht
+    gelesen: null,           // Ergebnis aus dem PDF-Text
+    lesen: '',               // '' | 'laeuft' | 'fertig' | 'scan' | 'fehler'
+  };
+  _ugRender();
+  if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+  const nameEl = dlg.querySelector('#ug-name');
+  if (!nameEl.value) nameEl.focus();
+  _ugAusRechnungLesen(r);
+}
 
-  const jahr = Number(String(r.datum || '').slice(0, 4)) || new Date().getFullYear();
+function _ugRender() {
+  const a = _ugAktuell;
+  const dlg = document.getElementById('ug-dialog');
+  const phase = a.phase;
+  const jahr = Number((a.datum.match(/(\d{4})$/) || [])[1]) || new Date().getFullYear();
   const regel = {
     uebergang: `Rechnung aus ${jahr}: Bis Ende 2026 darf jeder Lieferant noch Papier oder PDF schicken. Die Einschätzung bereitet 2027 vor.`,
     grenze: 'Rechnung aus 2027: Sonstige Rechnungen sind nur zulässig, wenn der Gesamtumsatz des Lieferanten 2026 höchstens 800.000 € betrug.',
     pflicht: `Rechnung aus ${jahr}: Seit 2028 gilt die E-Rechnungspflicht für alle Lieferanten. Eine Einschätzung ist nicht mehr nötig.`,
   }[phase];
+  const e = a.bisher;
 
   dlg.innerHTML = `
     <form method="dialog" class="ug-form">
@@ -296,11 +327,12 @@ function ugDialogOeffnen(r, onGespeichert) {
       </div>
       <p class="ug-regel">${_esc(regel)}</p>
       <div class="ug-felder">
-        <label>Lieferant<input id="ug-name" list="ug-namen" value="${_esc(ugLieferantName(r))}" placeholder="Name wie auf der Rechnung" autocomplete="off"></label>
-        <label>Rechnungsnr.<input id="ug-nr" value="${_esc(r.nummer || '')}"></label>
-        <label>Datum<input id="ug-datum" value="${_esc(_monDate(r.datum))}"></label>
+        <label>Lieferant<input id="ug-name" list="ug-namen" value="${_esc(a.name)}" placeholder="Name wie auf der Rechnung" autocomplete="off"></label>
+        <label>Rechnungsnr.<input id="ug-nr" value="${_esc(a.nr)}"></label>
+        <label>Datum<input id="ug-datum" value="${_esc(a.datum)}" placeholder="TT.MM.JJJJ"></label>
       </div>
       <datalist id="ug-namen">${Object.values(_ug.daten.lieferanten).map(l => `<option value="${_esc(l.name)}">`).join('')}</datalist>
+      <p class="ug-gelesen" id="ug-gelesen" role="status"></p>
       ${phase === 'pflicht' ? '' : `
       <div class="ug-wahl" role="radiogroup" aria-label="Einschätzung">
         <button type="button" class="ug-opt" data-ug-v="ueber" role="radio">
@@ -328,23 +360,103 @@ function ugDialogOeffnen(r, onGespeichert) {
     </form>`;
 
   dlg.querySelectorAll('[data-ug-v]').forEach(b => b.addEventListener('click', () => {
-    _ugAktuell.vermutung = b.getAttribute('data-ug-v');
+    a.vermutung = b.getAttribute('data-ug-v');
     _ugWahlZeigen();
     _ugVorlageNeu();
   }));
-  ['ug-nr', 'ug-datum'].forEach(id => dlg.querySelector('#' + id).addEventListener('input', _ugVorlageNeu));
-  dlg.querySelector('#ug-name').addEventListener('input', _ugKnoepfe);
+  const feld = (id, key, nachher) => dlg.querySelector('#' + id).addEventListener('input', ev => {
+    a[key] = ev.target.value;
+    a.bearbeitet[key] = true;
+    nachher();
+  });
+  feld('ug-name', 'name', _ugKnoepfe);
+  feld('ug-nr', 'nr', _ugVorlageNeu);
+  feld('ug-datum', 'datum', _ugVorlageNeu);
+  // Ein anderes Rechnungsjahr kann die Regel ändern: dann neu aufbauen
+  dlg.querySelector('#ug-datum').addEventListener('change', () => {
+    const iso = _ugIso(a.datum);
+    if (iso && ugPhase(iso) !== a.phase) { a.phase = ugPhase(iso); _ugRender(); }
+  });
   dlg.querySelector('[data-ug-zu]').addEventListener('click', () => dlg.close());
   dlg.querySelector('[data-ug-kopie]').addEventListener('click', _ugKopieren);
   const nur = dlg.querySelector('[data-ug-nur]');
   if (nur) nur.addEventListener('click', () => _ugAbschliessen(false));
   dlg.querySelector('[data-ug-mail]').addEventListener('click', () => _ugAbschliessen(true));
 
+  _ugGelesenZeigen();
   _ugWahlZeigen();
   _ugVorlageNeu();
-  if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
-  const nameEl = dlg.querySelector('#ug-name');
-  if (!nameEl.value) nameEl.focus();
+}
+
+/**
+ * Lieferant, USt-IdNr., Nummer, Datum und Betrag aus dem PDF lesen (js/lieferant.js).
+ * Nur wenn etwas fehlt und die Datei ein PDF ist. Was jemand schon selbst
+ * eingetragen hat, bleibt stehen.
+ */
+async function _ugAusRechnungLesen(r) {
+  const a = _ugAktuell;
+  const fehlt = !r.steller || !r.ustid || r.nummer === r.baseKey || !r.datumAusRechnung || r.brutto == null;
+  if (!fehlt || r.ext !== 'pdf' || !r.listId || !r.itemId || !_ug.siteId
+      || typeof textAusPdf !== 'function' || typeof lieferantAusText !== 'function' || !window.pdfjsLib) return;
+  a.lesen = 'laeuft';
+  _ugGelesenZeigen();
+  try {
+    const token = await acquireToken(SP.scopes);
+    if (!token) throw new Error('nicht angemeldet');
+    const resp = await fetch(`${SP.graphBase}/sites/${_ug.siteId}/lists/${r.listId}/items/${r.itemId}/driveItem/content`,
+      { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!resp.ok) throw new Error(`Datei (${resp.status})`);
+    const l = lieferantAusText(await textAusPdf(await resp.arrayBuffer()));
+    if (_ugAktuell !== a) return;                      // Dialog inzwischen zu oder andere Rechnung
+    a.gelesen = l;
+    a.lesen = l.lesbar ? 'fertig' : 'scan';
+    if (!l.lesbar) { _ugGelesenZeigen(); return; }
+    const vorher = a.phase;
+    if (l.name && !a.bearbeitet.name && !r.steller) a.name = l.name;
+    if (l.vat && !a.vat) a.vat = l.vat;
+    if (l.nummer && !a.bearbeitet.nr && r.nummer === r.baseKey) a.nr = l.nummer;
+    if (l.datum && !a.bearbeitet.datum && !r.datumAusRechnung) { a.datum = _monDate(l.datum); a.phase = ugPhase(l.datum); }
+    if (l.kleinunternehmer && !a.vermutung) a.vermutung = 'bis';
+    if (a.phase !== vorher) { _ugRender(); return; }
+    const dlg = document.getElementById('ug-dialog');
+    const setze = (id, v) => { const el = dlg.querySelector('#' + id); if (el) el.value = v; };
+    setze('ug-name', a.name); setze('ug-nr', a.nr); setze('ug-datum', a.datum);
+    _ugGelesenZeigen();
+    _ugWahlZeigen();
+    _ugVorlageNeu();
+  } catch (e) {
+    if (_ugAktuell !== a) return;
+    a.lesen = 'fehler';
+    a.lesenFehler = e.message || String(e);
+    _ugGelesenZeigen();
+  }
+}
+
+function _ugGelesenZeigen() {
+  const a = _ugAktuell;
+  const el = document.getElementById('ug-gelesen');
+  if (!el) return;
+  el.className = 'ug-gelesen';
+  if (a.lesen === 'laeuft') { el.textContent = 'Rechnung wird gelesen…'; return; }
+  if (a.lesen === 'scan') { el.textContent = 'Die Rechnung ist ein Scan ohne Text. Bitte den Lieferanten selbst eintragen.'; return; }
+  if (a.lesen === 'fehler') { el.textContent = `Rechnung konnte nicht gelesen werden (${a.lesenFehler}). Bitte den Lieferanten selbst eintragen.`; return; }
+  const l = a.gelesen;
+  if (a.lesen !== 'fertig' || !l) { el.textContent = a.vat ? `USt-IdNr. ${a.vat}` : ''; return; }
+  const teile = [];
+  if (l.name) teile.push(l.name);
+  if (l.vat) teile.push('USt-IdNr. ' + l.vat);
+  if (l.nummer) teile.push('Nr. ' + l.nummer);
+  if (l.datum) teile.push('vom ' + _monDate(l.datum));
+  if (l.brutto != null) teile.push('Betrag ' + l.brutto.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }));
+  let text = teile.length ? 'Aus der Rechnung gelesen: ' + teile.join(', ') + '.' : 'In der Rechnung war kein Lieferant zu finden. Bitte selbst eintragen.';
+  if (l.kleinunternehmer) {
+    text += ' Die Rechnung verweist auf § 19 UStG (Kleinunternehmer): keine E-Rechnungspflicht, keine Mail nötig.';
+    el.className = 'ug-gelesen ok';
+  } else if (l.brutto != null && Math.abs(l.brutto) <= UG.kleinbetrag) {
+    text += ' Stimmt der Betrag, ist es ein Kleinbetrag bis 250 €: keine E-Rechnungspflicht, keine Mail nötig.';
+    el.className = 'ug-gelesen ok';
+  }
+  el.textContent = text;
 }
 
 function _ugWahlZeigen() {
@@ -421,7 +533,7 @@ async function _ugAbschliessen(mitMail) {
   dlg.querySelectorAll('.ug-aktionen button').forEach(b => { b.disabled = true; });
   _ugMeldung('Wird gespeichert…');
   try {
-    await ugSpeichern(a.r, name, a.vermutung);
+    await ugSpeichern(a.r, name, a.vermutung, a.vat, a.nr);
     if (mitMail) _ugMailOeffnen();
     dlg.close();
     if (typeof a.onGespeichert === 'function') a.onGespeichert();
