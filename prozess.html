@@ -302,13 +302,14 @@
         <div>
           <h4 class="box-title">Schritt für Schritt</h4>
           <ol class="steps">
-            <li><span class="chip a-extern">Lieferant</span>schickt die Rechnung an das Rechnungspostfach seines Werks, zum Beispiel er-zaigler@dihag.com. Damit steht das Werk schon fest.</li>
-            <li><span class="chip a-auto">Power Automate</span>schaut sich jede neue Mail an. Kommt sie vom eigenen Postfach, ist es eine Archiv-Mail. Sie wird nur in den Unterordner „Verarbeitet“ gelegt (Schleifenschutz). Alle anderen Mails laufen weiter, und zwar für jeden PDF- und XML-Anhang einzeln.</li>
-            <li><span class="chip a-api">Prüfdienst</span>erkennt die Art (ZUGFeRD, XRechnung oder sonstige Rechnung), prüft mit Mustang oder KoSIT, liest die Kopfdaten und wendet das 8-Punkte-Regelwerk an. Heraus kommen der Buchungsweg, Prüf-Flags, ein Prüfbericht und bei Bedarf ein lesbares PDF.</li>
+            <li><span class="chip a-extern">Lieferant</span>schickt die Rechnung an das Rechnungspostfach seines Werks. Damit steht das Werk schon fest. Jedes Werk hat einen eigenen Flow, heute WGC und ZAI.</li>
+            <li><span class="chip a-auto">Power Automate</span>schaut sich jede neue Mail an. Bei ZAI kommt zuerst der Schleifenschutz: Eine Mail vom eigenen Postfach ist eine Archiv-Mail und wird nur in den Unterordner „Verarbeitet“ gelegt. Alle anderen Mails laufen weiter, und zwar für jeden PDF- und XML-Anhang einzeln.</li>
+            <li><span class="chip a-api">Prüfdienst</span>erkennt die Art (ZUGFeRD, XRechnung oder sonstige Rechnung), prüft mit Mustang oder KoSIT, liest die Kopfdaten und wendet das 8-Punkte-Regelwerk an. Bei einer PDF ohne XML liest er Lieferant, USt-IdNr., Nummer und Datum aus dem Text. Heraus kommen der Buchungsweg, Prüf-Flags, ein Prüfbericht und bei Bedarf ein lesbares PDF.</li>
             <li><span class="chip a-archiv">SharePoint</span>bekommt das Original in ERAR_&lt;Werk&gt;. Der Dateiname aus Rechnungsnummer und USt-IdNr verhindert, dass sich zwei Lieferanten gegenseitig überschreiben. Daneben liegen lesbares PDF, Prüfbericht und XML, alle Metadaten sind gesetzt.</li>
-            <li><span class="chip a-auto">Power Automate</span>meldet rote Ergebnisse oder ein falsches Werk an die Werks-Adresse aus den Einstellungen und schickt die lesbare Fassung als Archiv-Mail ins eigene Postfach.</li>
-            <li><span class="chip a-mensch">Buchhaltung</span>arbeitet nach dem Buchungsweg aus der Tabelle rechts. Berichtigung, Rückfrage oder Zurückweisung gehen per Kreditor-Mail an den Lieferanten.</li>
-            <li><span class="chip a-archiv">Monitoring</span>zeigt alles auf einen Blick: Kennzahlen, Schnellfilter, Dubletten und überfällige Rechnungen.</li>
+            <li><span class="chip a-auto">Power Automate</span>meldet rote Ergebnisse oder ein falsches Werk an die Werks-Adresse aus den Einstellungen.</li>
+            <li><span class="chip a-auto">Power Automate</span>übergibt an die Buchhaltung des Werks. WGC legt einen Eintrag in der Eingangsrechnungsliste auf gruppe_wgc an und hängt Original und lesbares PDF an. ZAI schickt die lesbare Fassung als Archiv-Mail ins eigene Postfach und verschiebt die Original-Mail nach „Verarbeitet“.</li>
+            <li><span class="chip a-mensch">Buchhaltung</span>arbeitet nach dem Buchungsweg aus der Tabelle rechts. Bei einer sonstigen Rechnung schätzt sie im Monitoring ein, ob der Lieferant über oder bis 800.000 € Umsatz liegt, und nimmt die passende Mailvorlage. Berichtigung, Rückfrage oder Zurückweisung gehen per Kreditor-Mail an den Lieferanten.</li>
+            <li><span class="chip a-archiv">Monitoring</span>zeigt alles auf einen Blick: Kennzahlen, Schnellfilter, Dubletten, überfällige Rechnungen und offene 800k-Einschätzungen.</li>
           </ol>
         </div>
         <div class="side-box">
@@ -316,7 +317,7 @@
           <table class="rules">
             <tr><td><span class="chip t-ok">Automatik</span></td><td>Echte E-Rechnung, konform, normaler Inlandsumsatz. Direkt aus der XML buchen.</td></tr>
             <tr><td><span class="chip t-man">Manuell</span></td><td>Reverse-Charge, innergemeinschaftlich, Ausfuhr, steuerfrei oder nicht steuerbar (AE, K, G, E, O). Erst Vier-Augen-Prüfung, dann buchen.</td></tr>
-            <tr><td><span class="chip t-warn">Unter Vorbehalt</span></td><td>PDF ohne E-Rechnung, fremde XML wie openTRANS oder PDF/A-3 fehlt. Als sonstige Rechnung buchen und Berichtigung anfordern.</td></tr>
+            <tr><td><span class="chip t-warn">Unter Vorbehalt</span></td><td>PDF ohne E-Rechnung, fremde XML wie openTRANS oder PDF/A-3 fehlt. Als sonstige Rechnung buchen, im Monitoring über oder bis 800.000 € einschätzen und mit der Vorlage Berichtigung anfordern.</td></tr>
             <tr><td><span class="chip t-err">Zurückgewiesen</span></td><td>Profil MINIMUM oder BASIC-WL. Das ist keine E-Rechnung, also nicht buchen und zurückweisen.</td></tr>
             <tr><td><span class="chip t-warn">Rückfrage</span></td><td>Das sichtbare PDF weicht bei Steuer, Betrag oder Nummer von der XML ab. Gebucht wird aus der XML, der Lieferant bekommt eine Rückfrage.</td></tr>
             <tr><td><span class="chip t-plan">Nur Hinweis</span></td><td>Rein formale Fehler, etwa eine fehlende Leitweg-ID. Kein Abwerten, nur ein Vermerk im Monitoring.</td></tr>
@@ -452,7 +453,7 @@
       </div>
       <div class="card-body">
         <ul class="status-list">
-          <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Rechnungseingang je Werk über Power Automate (u. a. WGC und ZAI) mit Prüfdienst, Regelwerk, Ablage und Archiv-Mail.</span></li>
+          <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Rechnungseingang je Werk über Power Automate mit Prüfdienst, Regelwerk und Ablage. WGC übergibt über die Eingangsrechnungsliste, ZAI über die Archiv-Mail.</span></li>
           <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> Konverter für Ausgangsrechnungen (WGC, SHB, ZAI) mit Vorab- und Selbstprüfung, Ablage und Mail-Entwurf.</span></li>
           <li><span class="status-dot dot-live"></span><span><strong>Live:</strong> MC-Converter für SEPA und Auslandszahlungen (DTAZV zu AXZ) mit Preflight, Monitoring mit Schnellfiltern.</span></li>
           <li><span class="status-dot dot-plan"></span><span><strong>Geplant:</strong> automatischer Versand der Kreditor-Mails.</span></li>
