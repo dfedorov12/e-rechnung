@@ -9,12 +9,13 @@
  * die Belegidentitaet veraendern — nicht bei Rundungs-/Darstellungsdifferenzen
  * (vgl. UStAE 14c.1 Abs. 4a).
  *
- * Wir extrahieren den PDF-Text (pdf-parse), lesen die dort gedruckten Betraege
+ * Wir extrahieren den PDF-Text (src/pdftext.js: pdf.js 3, pdf-parse als Rueckfall),
+ * lesen die dort gedruckten Betraege
  * und vergleichen sie mit den XML-Werten (Steuerbetrag, Bruttobetrag) mit einer
  * Rundungstoleranz. Konservativ: ohne verlaesslich lesbaren Text/Betrag -> Status
  * "nicht-pruefbar" statt Fehlalarm.
  */
-const pdfParse = require('pdf-parse');
+const { pdfText } = require('./pdftext');
 
 const TOLERANZ = 0.02;   // Cent-Rundung tolerieren (keine materielle Abweichung)
 
@@ -29,8 +30,7 @@ async function pdfXmlAbgleich(pdfBuf, daten) {
 
   let text = '';
   try {
-    const r = await pdfParse(pdfBuf);
-    text = String(r.text || '');
+    text = (await pdfText(pdfBuf)).text;
   } catch (e) {
     return { status: 'nicht-pruefbar', pruefbar: false, materiell: false, hinweis: '',
              fehler: e && e.message ? e.message : String(e) };
@@ -91,14 +91,24 @@ async function pdfXmlAbgleich(pdfBuf, daten) {
   return { status: 'ok', pruefbar: true, materiell: false, hinweis: '' };
 }
 
-/** Alle gedruckten Geldbetraege aus dem Text als Zahlenmenge (auf 2 NK gerundet). */
+/**
+ * Alle gedruckten Geldbetraege aus dem Text als Zahlenmenge (auf 2 NK gerundet).
+ * Zwei Durchgaenge: einmal mit Leerzeichen als Tausendertrenner („1 035,18"),
+ * einmal ohne. Sonst verschmilzt eine Menge vor dem Betrag („1 869,90") zu einer
+ * falschen Zahl und der echte Betrag fehlt in der Menge.
+ */
 function _amounts(text) {
   const set = new Set();
-  const re = /-?\d{1,3}(?:[.\s]\d{3})+[.,]\d{2}|-?\d+[.,]\d{2}/g;
-  let m;
-  while ((m = re.exec(text))) {
-    const v = _num(m[0]);
-    if (v != null) set.add(Math.round(v * 100) / 100);
+  const muster = [
+    /-?\d{1,3}(?:[.\s]\d{3})+[.,]\d{2}|-?\d+[.,]\d{2}/g,
+    /-?\d{1,3}(?:\.\d{3})+,\d{2}|-?\d{1,3}(?:,\d{3})+\.\d{2}|-?\d+[.,]\d{2}/g,
+  ];
+  for (const re of muster) {
+    let m;
+    while ((m = re.exec(text))) {
+      const v = _num(m[0]);
+      if (v != null) set.add(Math.round(v * 100) / 100);
+    }
   }
   return set;
 }

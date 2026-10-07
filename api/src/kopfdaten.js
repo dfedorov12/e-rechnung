@@ -8,32 +8,14 @@
  * wie im Monitoring). Das Ergebnis ist ein Vorschlag: es steuert keine
  * Buchung, es füllt nur die Spalten, die sonst leer blieben.
  *
- * Den Text holt pdf.js 3.11.174, dieselbe Version wie im Browser, damit
- * Prüfdienst und Monitoring dieselben Zeilen sehen. pdf-parse (älteres pdf.js)
- * scheitert an manchen PDFs, etwa solchen aus pdf-lib, und ist nur Rückfall.
- *
- * Scans ohne Textebene liefern null.
+ * Den Text liefert src/pdftext.js. Scans ohne Textebene liefern null.
  */
 const path = require('path');
-const pdfParse = require('pdf-parse');
+const { pdfText } = require('./pdftext');
 
 let lieferant = null;
 try { lieferant = require(path.join(__dirname, '..', 'vendor', 'lieferant.js')); }
 catch (e) { /* vendor nicht synchronisiert: dann ohne Kopfdaten */ }
-
-let pdfjs = null;
-try { pdfjs = require('pdfjs-dist/legacy/build/pdf.js'); }
-catch (e) { /* ohne pdfjs-dist nur pdf-parse */ }
-
-async function _text(pdfBuf) {
-  if (pdfjs && lieferant && lieferant.textAusPdf) {
-    globalThis.pdfjsLib = pdfjs;
-    try {
-      return await lieferant.textAusPdf(pdfBuf, { verbosity: 0, isEvalSupported: false, disableFontFace: true, useSystemFonts: false });
-    } catch (e) { /* weiter mit pdf-parse */ }
-  }
-  return String((await pdfParse(pdfBuf)).text || '');
-}
 
 /**
  * @param {Buffer} pdfBuf
@@ -42,7 +24,7 @@ async function _text(pdfBuf) {
 async function kopfdatenAusPdf(pdfBuf) {
   if (!lieferant) return null;
   let text = '';
-  try { text = await _text(pdfBuf); }
+  try { text = (await pdfText(pdfBuf)).text; }
   catch (e) { return null; }
   const l = lieferant.lieferantAusText(text);
   if (!l.lesbar || (!l.name && !l.vat && !l.nummer)) return null;
