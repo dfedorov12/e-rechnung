@@ -33,8 +33,8 @@ Alle neun Modelle bestehen die Prüfung des RMS (`prozessSchemaPruefen`) ohne Be
 ein Auslöser, benannte Ergebnisse, nur 👤 Mensch, ⚙ Automatik oder ✋ Handgriff, jeder
 Knoten in einer Bahn, beschriftete Entscheidungen, nichts hängt lose, Aufgaben enden auf
 einem Verb, Unterprozesse als ⊞ mit Marker `[[rms:modell=<Kennung>]]`. Externe Partner
-(Lieferant, Kunde, Bank) sind geschlossene Pools. Offen bleibt R9: Eine Richtlinie wird im
-RMS am Modell verknüpft.
+(Lieferant, Kunde, Bank) sind geschlossene Pools. Alle Modelle nennen die Richtlinie 119
+(Aufbewahrungsfristen und -pflichten), damit ist auch R9 erfüllt.
 
 ## Farben
 
@@ -65,4 +65,14 @@ node scripts/bpmn/generate-bpmn.js
 
 Danach müssen die Dateien wieder ins RMS (gleicher Name in Prozesse/KONZERN ergibt eine neue
 Version derselben Datei, die Kennungen bleiben). Vorsicht: Das überschreibt Änderungen, die
-seit dem letzten Import im RMS gemacht wurden.
+seit dem letzten Import im RMS gemacht wurden. Deshalb vorher die aktuelle Fassung lesen und
+mit der letzten eigenen Version vergleichen (Elemente, Positionen, Dokumentation). Was im RMS
+gepflegt wird, kommt mit hinüber: Status, Prozesseigner, Priorität, Reifegrad und Kennzahlen
+(`[[rms:pm=…]]`, `[[rms:kpi=…]]`), Richtlinien und Anlagen. Das RMS schreibt diese Angaben
+beim Speichern im Editor in die Dokumentation der Kollaboration, der Import in die des
+Prozesses. Beides muss erhalten bleiben (`procXmlDokuNeu` für den Prozess, die
+Kollaborations-Doku unverändert übernehmen).
+
+Letzte Übernahme: 07.10.2026 (Rechnungseingang, Eingangsprüfung, Preflight). Vorher hatte
+„Admin DIHAG“ am Eingang und an der Eingangsprüfung nur die Prozessmanagement-Angaben ergänzt,
+die sind übernommen.
