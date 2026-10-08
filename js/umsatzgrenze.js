@@ -20,9 +20,35 @@ const UG = {
   grenze: 800000,
   kleinbetrag: 250,
   datei: 'Monitoring/lieferanten-umsatzgrenze.json',
+  // Mailaufträge an Lieferanten (Liste auf der Monitoring-Site). Der Flow
+  // „Kreditor-Mail senden“ verschickt sie aus dem Postfach des Werks,
+  // siehe docs/Kreditor-Mail-Flow.md.
+  mailListe: 'KreditorMails',
 };
 
-const _ug = { siteId: null, itemId: null, eTag: null, daten: { version: 1, lieferanten: {}, rechnungen: {} }, geladen: false, fehler: '' };
+/** Art des Mailauftrags je Vorlage (Spalte Art der Liste KreditorMails). */
+const UG_MAIL_ART = {
+  'ueber-ruecksendung': '800k Variante 1 Ruecksendung',
+  'bis-akzeptanz': '800k Variante 2 Akzeptanz',
+  'ueber-ankuendigen': '800k Ankuendigung 2027',
+  'bis-hinweis': '800k Hinweis 2028',
+  'pflicht': 'E-Rechnungspflicht 2028',
+};
+
+/** Plausible Mailadresse? */
+function ugMailOk(s) {
+  return /^[^\s@,;]+@[^\s@,;]+\.[A-Za-z]{2,}$/.test(String(s || '').trim());
+}
+
+/** Mailtext als einfaches HTML für den Flow: maskiert, Absätze und Zeilenumbrüche erhalten. */
+function ugMailHtml(text) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(text || '').split(_UG_NL + _UG_NL)
+    .map(abs => '<p>' + esc(abs).split(_UG_NL).join('<br>') + '</p>').join('');
+}
+
+const _ug = { siteId: null, itemId: null, eTag: null, daten: { version: 1, lieferanten: {}, rechnungen: {} }, geladen: false, fehler: '',
+  mailListId: null, mails: {} };
 const _UG_NL = String.fromCharCode(10);
 
 /* ── Reine Logik (auch in tests/umsatzgrenze.test.js) ────────────────── */
@@ -271,6 +297,92 @@ async function ugSpeichern(r, name, vermutung, vat, nummer) {
   throw new Error('Speichern fehlgeschlagen: Das Register wurde gleichzeitig geändert. Bitte erneut versuchen.');
 }
 
+/* ── Mailaufträge (Liste KreditorMails, Versand über den Flow) ────────── */
+
+/**
+ * Liste KreditorMails finden und ihre Einträge laden. Fehlt die Liste, bleibt
+ * der Versand aus dem Werks-Postfach aus und der Dialog öffnet Outlook wie bisher.
+ */
+async function ugMailsLaden(siteId, token, listen) {
+  _ug.mailListId = null;
+  _ug.mails = {};
+  const l = (listen || []).find(x => x.name === UG.mailListe || x.displayName === UG.mailListe);
+  if (!l) return;
+  _ug.mailListId = l.id;
+  try {
+    let url = `${SP.graphBase}/sites/${siteId}/lists/${l.id}/items?$expand=fields($select=Title,An,Werk,Art,Status,GesendetAm,Fehlermeldung,RechnungKey,AngefordertVon,Created)&$top=500`;
+    for (let seiten = 0; url && seiten < 10; seiten++) {
+      const seite = await _get(url, token);
+      for (const it of seite.value || []) {
+        const f = it.fields || {};
+        if (!f.RechnungKey) continue;
+        (_ug.mails[f.RechnungKey] = _ug.mails[f.RechnungKey] || []).push({
+          betreff: f.Title || '', an: f.An || '', art: f.Art || '', status: f.Status || '',
+          gesendetAm: f.GesendetAm || '', fehler: f.Fehlermeldung || '', von: f.AngefordertVon || '',
+          am: f.Created || it.createdDateTime || '',
+        });
+      }
+      url = seite['@odata.nextLink'] || null;
+    }
+    for (const k of Object.keys(_ug.mails)) _ug.mails[k].sort((a, b) => String(b.am).localeCompare(String(a.am)));
+  } catch (e) {
+    console.warn('[Umsatzgrenze] Mailaufträge nicht lesbar:', e.message || e);
+  }
+}
+
+/** Mailaufträge zu einer Rechnung, neueste zuerst. */
+function ugMailsFuer(r) {
+  return _ug.mails[ugRechnungKey(r)] || [];
+}
+
+/** Kann der Dialog aus dem Werks-Postfach senden? (Liste vorhanden, echtes Werk) */
+function ugKannSenden(r) {
+  return !!_ug.mailListId && /^[A-Z]{2,4}$/.test(String(r.werk || ''));
+}
+
+/** Mailauftrag anlegen. Der Flow „Kreditor-Mail senden“ verschickt ihn und setzt den Status. */
+async function ugMailBeauftragen(r, m) {
+  const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
+  const token = await acquireToken(SP.scopes);
+  if (!token) throw new Error('Nicht angemeldet.');
+  const fields = {
+    Title: String(m.betreff || '').slice(0, 255),
+    An: String(m.an || '').trim(),
+    Werk: r.werk,
+    Art: UG_MAIL_ART[m.vorlage] || m.vorlage || '',
+    MailText: m.text,
+    MailHtml: ugMailHtml(m.text),
+    Rechnung: String(m.nummer || r.nummer || '').slice(0, 255),
+    RechnungKey: ugRechnungKey(r),
+    Lieferant: String(m.lieferant || '').slice(0, 255),
+    RechnungUrl: r.url || '',
+    Status: 'Wartet',
+    AngefordertVon: user.username || '',
+  };
+  const resp = await fetch(`${SP.graphBase}/sites/${_ug.siteId}/lists/${_ug.mailListId}/items`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  });
+  if (!resp.ok) {
+    if (resp.status === 403 || resp.status === 401) throw new Error('Keine Schreibrechte auf die Liste KreditorMails.');
+    const t = await resp.text();
+    throw new Error(`Mailauftrag nicht angelegt (${resp.status}): ${t.slice(0, 200)}`);
+  }
+  const eintrag = { betreff: fields.Title, an: fields.An, art: fields.Art, status: 'Wartet', gesendetAm: '', fehler: '',
+    von: fields.AngefordertVon, am: new Date().toISOString() };
+  (_ug.mails[fields.RechnungKey] = _ug.mails[fields.RechnungKey] || []).unshift(eintrag);
+  return eintrag;
+}
+
+/** Kurztext zum letzten Mailauftrag einer Rechnung ('' = keiner). */
+function _ugMailStand(m) {
+  if (!m) return '';
+  if (m.status === 'Gesendet') return `Mail an ${m.an} gesendet${m.gesendetAm ? ' am ' + _monDate(m.gesendetAm) : ''}`;
+  if (m.status === 'Fehler') return `Versand an ${m.an} fehlgeschlagen${m.fehler ? ': ' + m.fehler : ''}`;
+  return `Mail an ${m.an} wartet auf den Versand (beauftragt am ${_monDate(m.am)})`;
+}
+
 /* ── Anzeige in der Tabelle ──────────────────────────────────────────── */
 
 const _UG_LABEL = { ueber: 'über 800k', bis: 'bis 800k' };
@@ -283,14 +395,19 @@ function ugZelle(r, idx) {
   }
   const e = ugFuer(r);
   const phase = ugPhase(r.datum);
+  const mail = ugMailsFuer(r)[0];
+  const mailBadge = mail
+    ? `<div><span class="ug-badge ug-mail-${mail.status === 'Gesendet' ? 'ok' : mail.status === 'Fehler' ? 'fehler' : 'wartet'}" title="${_esc(_ugMailStand(mail))}">`
+      + `${mail.status === 'Gesendet' ? 'Mail gesendet' : mail.status === 'Fehler' ? 'Mail fehlgeschlagen' : 'Mail wartet'}</span></div>`
+    : '';
   if (!e) {
     const label = phase === 'pflicht' ? 'E-Rechnung anfordern' : '800k einschätzen';
-    return `<button type="button" class="ug-btn" data-ug="${idx}" title="Lieferant über oder bis 800.000 € Umsatz? Mit Mailvorlage">${label}</button>`;
+    return `<button type="button" class="ug-btn" data-ug="${idx}" title="Lieferant über oder bis 800.000 € Umsatz? Mit Mailvorlage">${label}</button>${mailBadge}`;
   }
   const folge = ugFolge(e.vermutung, phase);
   const tip = `${_UG_LABEL[e.vermutung] || e.vermutung} vermutet von ${e.vonName || e.von} am ${_monDate(e.am)}. ${folge.folge}`;
   return `<button type="button" class="ug-badge ug-${e.vermutung}${folge.zulaessig ? '' : ' ug-nicht'}" data-ug="${idx}" title="${_esc(tip)}">`
-    + `${_esc(_UG_LABEL[e.vermutung] || e.vermutung)}${folge.zulaessig ? '' : ' · E-Rechnung fehlt'}</button>`;
+    + `${_esc(_UG_LABEL[e.vermutung] || e.vermutung)}${folge.zulaessig ? '' : ' · E-Rechnung fehlt'}</button>${mailBadge}`;
 }
 
 /* ── Dialog ──────────────────────────────────────────────────────────── */
@@ -317,6 +434,8 @@ function ugDialogOeffnen(r, onGespeichert) {
     vat: r.ustid || (e && e.vat) || '',
     phase: ugPhase(r.datum),
     absender: user.name || '',
+    an: r.absenderMail || ((ugMailsFuer(r)[0] || {}).an) || '',
+    kannSenden: ugKannSenden(r),
     bearbeitet: {},          // Felder, die jemand selbst geändert hat, überschreibt das Lesen nicht
     gelesen: null,           // Ergebnis aus dem PDF-Text
     lesen: '',               // '' | 'laeuft' | 'fertig' | 'scan' | 'fehler'
@@ -353,6 +472,11 @@ function _ugRender() {
         <label>Datum<input id="ug-datum" value="${_esc(a.datum)}" placeholder="TT.MM.JJJJ"></label>
       </div>
       <datalist id="ug-namen">${Object.values(_ug.daten.lieferanten).map(l => `<option value="${_esc(l.name)}">`).join('')}</datalist>
+      <label class="ug-lbl">An (Mailadresse des Lieferanten)<input id="ug-an" type="email" value="${_esc(a.an)}" placeholder="rechnung@lieferant.de" autocomplete="off"></label>
+      <p class="ug-mailstand">${a.kannSenden
+        ? `Senden geht aus dem Rechnungspostfach des Werks ${_esc(a.r.werk)}.${a.r.absenderMail ? ' Die Adresse ist der Absender der Rechnungsmail, bitte prüfen.' : ''}`
+        : 'Der Versand aus dem Werks-Postfach ist hier nicht eingerichtet. Die Mail öffnet sich in Outlook.'}</p>
+      ${ugMailsFuer(a.r).length ? `<ul class="ug-mails">${ugMailsFuer(a.r).slice(0, 3).map(m => `<li class="${m.status === 'Fehler' ? 'nicht' : m.status === 'Gesendet' ? 'ok' : ''}">${_esc(_ugMailStand(m))}</li>`).join('')}</ul>` : ''}
       <p class="ug-gelesen" id="ug-gelesen" role="status"></p>
       ${phase === 'pflicht' ? '' : `
       <div class="ug-wahl" role="radiogroup" aria-label="Einschätzung">
@@ -375,8 +499,12 @@ function _ugRender() {
       <p class="ug-meldung" id="ug-meldung" role="status"></p>
       <div class="ug-aktionen">
         <button type="button" class="ug-sek" data-ug-kopie disabled>Text kopieren</button>
-        ${phase === 'pflicht' ? '' : '<button type="button" class="ug-sek" data-ug-nur disabled>Nur speichern</button>'}
-        <button type="button" class="ug-prim" data-ug-mail disabled>${phase === 'pflicht' ? 'In Outlook öffnen' : 'Speichern und Mail öffnen'}</button>
+        ${a.kannSenden
+          ? `<button type="button" class="ug-sek" data-ug-mail disabled>In Outlook öffnen</button>
+             ${phase === 'pflicht' ? '' : '<button type="button" class="ug-sek" data-ug-nur disabled>Nur speichern</button>'}
+             <button type="button" class="ug-prim" data-ug-senden disabled>${phase === 'pflicht' ? 'Senden' : 'Speichern und senden'}</button>`
+          : `${phase === 'pflicht' ? '' : '<button type="button" class="ug-sek" data-ug-nur disabled>Nur speichern</button>'}
+             <button type="button" class="ug-prim" data-ug-mail disabled>${phase === 'pflicht' ? 'In Outlook öffnen' : 'Speichern und Mail öffnen'}</button>`}
       </div>
     </form>`;
 
@@ -393,6 +521,7 @@ function _ugRender() {
   feld('ug-name', 'name', _ugKnoepfe);
   feld('ug-nr', 'nr', _ugVorlageNeu);
   feld('ug-datum', 'datum', _ugVorlageNeu);
+  feld('ug-an', 'an', _ugKnoepfe);
   // Ein anderes Rechnungsjahr kann die Regel ändern: dann neu aufbauen
   dlg.querySelector('#ug-datum').addEventListener('change', () => {
     const iso = _ugIso(a.datum);
@@ -401,8 +530,10 @@ function _ugRender() {
   dlg.querySelector('[data-ug-zu]').addEventListener('click', () => dlg.close());
   dlg.querySelector('[data-ug-kopie]').addEventListener('click', _ugKopieren);
   const nur = dlg.querySelector('[data-ug-nur]');
-  if (nur) nur.addEventListener('click', () => _ugAbschliessen(false));
-  dlg.querySelector('[data-ug-mail]').addEventListener('click', () => _ugAbschliessen(true));
+  if (nur) nur.addEventListener('click', () => _ugAbschliessen('nur'));
+  dlg.querySelector('[data-ug-mail]').addEventListener('click', () => _ugAbschliessen('outlook'));
+  const senden = dlg.querySelector('[data-ug-senden]');
+  if (senden) senden.addEventListener('click', () => _ugAbschliessen('senden'));
 
   _ugGelesenZeigen();
   _ugWahlZeigen();
@@ -521,7 +652,10 @@ function _ugKnoepfe() {
   dlg.querySelector('[data-ug-kopie]').disabled = !hatWahl;
   const nur = dlg.querySelector('[data-ug-nur]');
   if (nur) nur.disabled = !(hatWahl && hatName);
-  dlg.querySelector('[data-ug-mail]').disabled = !(hatWahl && (hatName || a.phase === 'pflicht'));
+  const nameOk = hatName || a.phase === 'pflicht';
+  dlg.querySelector('[data-ug-mail]').disabled = !(hatWahl && nameOk);
+  const senden = dlg.querySelector('[data-ug-senden]');
+  if (senden) senden.disabled = !(hatWahl && nameOk && ugMailOk(a.an));
 }
 
 function _ugMeldung(text, art) {
@@ -542,29 +676,50 @@ function _ugMailOeffnen() {
   const dlg = document.getElementById('ug-dialog');
   const crlf = String.fromCharCode(13, 10);
   const text = dlg.querySelector('#ug-text').value.split(_UG_NL).join(crlf);
-  window.location.href = 'mailto:?subject=' + encodeURIComponent(dlg.querySelector('#ug-betreff').value)
+  const an = ugMailOk(_ugAktuell.an) ? encodeURIComponent(_ugAktuell.an.trim()) : '';
+  window.location.href = 'mailto:' + an + '?subject=' + encodeURIComponent(dlg.querySelector('#ug-betreff').value)
     + '&body=' + encodeURIComponent(text);
 }
 
-async function _ugAbschliessen(mitMail) {
+/**
+ * Abschließen: 'nur' speichert die Einschätzung, 'outlook' speichert und öffnet
+ * die Mail in Outlook, 'senden' speichert und legt einen Mailauftrag an, den der
+ * Flow aus dem Werks-Postfach verschickt. Ab 2028 gibt es nichts zu speichern.
+ */
+async function _ugAbschliessen(modus) {
   const a = _ugAktuell;
   const dlg = document.getElementById('ug-dialog');
-  if (a.phase === 'pflicht') { if (mitMail) _ugMailOeffnen(); return; }
-  const name = dlg.querySelector('#ug-name').value.trim();
+  if (modus === 'senden') {
+    const an = String(a.an || '').trim();
+    const frueher = ugMailsFuer(a.r).find(m => m.status !== 'Fehler');
+    const frage = (frueher ? `Für diese Rechnung gibt es schon eine Mail (${_ugMailStand(frueher)}). ` : '')
+      + `Mail an ${an} aus dem Rechnungspostfach des Werks ${a.r.werk} senden?`;
+    if (!window.confirm(frage)) return;
+  }
   dlg.querySelectorAll('.ug-aktionen button').forEach(b => { b.disabled = true; });
-  _ugMeldung('Wird gespeichert…');
   try {
-    await ugSpeichern(a.r, name, a.vermutung, a.vat, a.nr);
-    if (mitMail) _ugMailOeffnen();
+    if (a.phase !== 'pflicht') {
+      _ugMeldung('Wird gespeichert…');
+      await ugSpeichern(a.r, dlg.querySelector('#ug-name').value.trim(), a.vermutung, a.vat, a.nr);
+    }
+    if (modus === 'outlook') _ugMailOeffnen();
+    if (modus === 'senden') {
+      _ugMeldung('Mailauftrag wird angelegt…');
+      await ugMailBeauftragen(a.r, {
+        an: a.an, betreff: dlg.querySelector('#ug-betreff').value, text: dlg.querySelector('#ug-text').value,
+        vorlage: ugFolge(a.vermutung, a.phase).vorlage, nummer: a.nr, lieferant: dlg.querySelector('#ug-name').value.trim(),
+      });
+    }
     dlg.close();
     if (typeof a.onGespeichert === 'function') a.onGespeichert();
   } catch (e) {
     _ugMeldung(e.message || String(e), 'nicht');
     _ugKnoepfe();
-    if (mitMail && /Schreibrechte/.test(e.message || '')) _ugMailOeffnen();
+    if (modus === 'outlook' && /Schreibrechte/.test(e.message || '')) _ugMailOeffnen();
   }
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { UG, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage };
+  module.exports = { UG, UG_MAIL_ART, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage,
+    ugMailOk, ugMailHtml };
 }

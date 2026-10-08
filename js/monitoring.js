@@ -87,6 +87,8 @@ async function loadMonitoring(accessList) {
     _monMarkDupes(_monRecords);   // echte Dubletten (Nummer + Aussteller) kennzeichnen
     // Einschaetzungen zur 800k-Umsatzgrenze (js/umsatzgrenze.js); Fehler sind nicht fatal.
     if (typeof ugLaden === 'function') await ugLaden(siteId, token);
+    // Mailaufträge an Lieferanten (Liste KreditorMails, Versand über den Flow)
+    if (typeof ugMailsLaden === 'function') await ugMailsLaden(siteId, token, listsRes.value || []);
     _monBuildFilterOptions(libs);
     _monApply();
 
@@ -167,6 +169,8 @@ function _monMap(it, f, lib) {
     ustid:    /^[A-Z]{2}[0-9A-Z]{8,12}$/.test(String(f.RechnungsstellerUStID || '').replace(/\s+/g, ''))
                 ? String(f.RechnungsstellerUStID).replace(/\s+/g, '') : '',
     datumAusRechnung: !!f.Rechnungsdatum,
+    // Absender der Rechnungsmail (Eingangs-Flow) = Empfänger einer Kreditor-Mail
+    absenderMail: (f.AbsenderMail || '').toString().trim(),
     art:      (f.Rechnungsart || '').toString(),
     steller:  (f.Rechnungssteller || '').toString(),
     empf:     (f.Rechnungsempfaenger || '').toString(),
@@ -242,7 +246,7 @@ function _monGroup(recs) {
     primary.manuellePruefung = arr.some(r => r.manuellePruefung);
     primary.rueckfrage       = arr.some(r => r.rueckfrage);
     primary.konvertiert      = arr.some(r => r.konvertiert);
-    for (const k of ['buchung', 'manuellePruefungGrund', 'kreditorAktion', 'ustid']) {
+    for (const k of ['buchung', 'manuellePruefungGrund', 'kreditorAktion', 'ustid', 'absenderMail']) {
       if (!primary[k]) { const s = arr.find(r => r[k]); if (s) primary[k] = s[k]; }
     }
     // Ausgangsrechnungen erzeugt der geprüfte Konverter selbst (EN16931-konform,

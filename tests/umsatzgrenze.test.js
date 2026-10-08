@@ -50,4 +50,16 @@ ok(ug.ugVorlage('ueber-ruecksendung', {}).text.includes('Das vorliegende PDF-Dok
 ok(ug.ugVorlage('bis-akzeptanz', {}).text.includes('Entsprechend werden wir Ihre Rechnung weiterverarbeiten.'), 'Variante 2 wörtlich');
 ok(!/ vom /.test(ug.ugVorlage('pflicht', {}).betreff), 'ohne Datum kein "vom"');
 
+// Mailauftrag
+ok(ug.ugMailOk('rechnung@lieferant.de'), 'Mailadresse gueltig');
+ok(ug.ugMailOk('  a.b-c@sub.firma.co.uk '), 'Mailadresse mit Leerraum');
+ok(!ug.ugMailOk('rechnung@lieferant'), 'ohne Domainendung ungueltig');
+ok(!ug.ugMailOk('a@b.de; c@d.de'), 'nur eine Adresse');
+ok(!ug.ugMailOk(''), 'leer ungueltig');
+const NL = String.fromCharCode(10);
+ok(ug.ugMailHtml('Hallo <Welt> & Co' + NL + 'Zeile 2' + NL + NL + 'Absatz 2') === '<p>Hallo &lt;Welt&gt; &amp; Co<br>Zeile 2</p><p>Absatz 2</p>', 'HTML maskiert, Absaetze');
+for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', 'bis-hinweis', 'pflicht']) {
+  ok(ug.UG_MAIL_ART[art] && ug.UG_MAIL_ART[art].length < 40, art + ': Art fuer die Liste');
+}
+
 console.log(`umsatzgrenze: ${n} Pruefungen gruen`);

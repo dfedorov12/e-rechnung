@@ -180,6 +180,10 @@ der Flow schreibt sie also wie bisher leer. Den Betrag aus dem Text gibt es nur 
 ausblenden würde. `dateibasis` bleibt leer, der Dateiname kommt weiter aus dem Anhang.
 `kleinunternehmer = true`, wenn die Rechnung auf § 19 UStG verweist.
 
+Für Kreditor-Mails aus dem Werks-Postfach schreibt jeder Eingangs-Flow zusätzlich den
+Absender der Rechnungsmail in die Spalte `AbsenderMail` (`triggerOutputs()?['body/from']`),
+siehe [Kreditor-Mail-Flow.md](Kreditor-Mail-Flow.md).
+
 ## WGC und ZAI: was sich unterscheidet
 
 Bis zur Ablage in `ERAR_<Werk>` laufen beide Flows gleich. Danach übergeben sie

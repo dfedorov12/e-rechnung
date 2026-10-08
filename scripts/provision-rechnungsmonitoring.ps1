@@ -58,6 +58,12 @@ param(
   [string]   $EingangsBibliothek = 'Rechnungseingang',
   [switch]   $OhneEingangsstufe,
 
+  # Liste fuer Mailauftraege an Lieferanten (Kreditor-Mails). Das Monitoring legt
+  # dort Auftraege an, der Flow "Kreditor-Mail senden" verschickt sie aus dem
+  # Postfach des Werks (docs/Kreditor-Mail-Flow.md).
+  [string]   $MailListe = 'KreditorMails',
+  [switch]   $OhneMailListe,
+
   # Nur anzeigen, nichts anlegen.
   [switch]   $WhatIfOnly
 )
@@ -82,6 +88,7 @@ $Felder = @(
   @{ Name='Rechnungssteller';    Titel='Rechnungssteller';           Typ='Text' }   # js/sharepoint.js
   @{ Name='RechnungsstellerUStID'; Titel='USt-IdNr. Rechnungssteller'; Typ='Text' }
   @{ Name='Rechnungsempfaenger'; Titel='Rechnungsempfaenger';        Typ='Text' }   # js/sharepoint.js
+  @{ Name='AbsenderMail';        Titel='Absender der Rechnungsmail'; Typ='Text' }   # Eingangs-Flow: triggerOutputs()?['body/from'], Empfaenger der Kreditor-Mail
   @{ Name='Waehrung';            Titel='Waehrung';                   Typ='Text' }
   @{ Name='Nettobetrag';         Titel='Nettobetrag';                Typ='Currency' } # js/sharepoint.js
   @{ Name='MwStBetrag';          Titel='MwSt-Betrag';                Typ='Currency' } # js/sharepoint.js
@@ -276,6 +283,47 @@ if (-not $OhneEingangsstufe) {
     Set-PnPField -List $EingangsBibliothek -Identity 'Verarbeitungsstatus' -Values @{ DefaultValue = 'Eingegangen' } -ErrorAction SilentlyContinue | Out-Null
   }
   $intakeAngelegt = 1
+}
+
+# --- Mailauftraege an Lieferanten (Liste) ---------------------------------------
+if (-not $OhneMailListe) {
+  Write-Host ""
+  Write-Host "== Liste: $MailListe (Mailauftraege an Lieferanten) ==" -ForegroundColor Cyan
+  $liste = Get-PnPList -Identity $MailListe -ErrorAction SilentlyContinue
+  if (-not $liste) {
+    if ($WhatIfOnly) {
+      Write-Host "   (wuerde angelegt) [WhatIf]" -ForegroundColor Yellow
+    } else {
+      New-PnPList -Title $MailListe -Template GenericList | Out-Null
+      Set-PnPList -Identity $MailListe -Description 'Mailauftraege an Lieferanten aus dem Monitoring; der Flow "Kreditor-Mail senden" verschickt sie aus dem Werks-Postfach' -EnableVersioning $true | Out-Null
+      Set-PnPField -List $MailListe -Identity 'Title' -Values @{ Title = 'Betreff' } | Out-Null
+      Write-Host "   Liste angelegt (Versionierung an)." -ForegroundColor Green
+    }
+  } else {
+    Write-Host "   Liste existiert bereits." -ForegroundColor DarkGray
+  }
+  $MailFelder = @(
+    @{ Name='An';             Titel='An (Lieferant)';                 Typ='Text' }
+    @{ Name='Werk';           Titel='Werk';                           Typ='Text' }
+    @{ Name='Art';            Titel='Art';                            Typ='Choice'; FillIn=$true; Choices=@('800k Variante 1 Ruecksendung','800k Variante 2 Akzeptanz','800k Ankuendigung 2027','800k Hinweis 2028','E-Rechnungspflicht 2028','Berichtigung','Zurueckweisung','Rueckfrage') }
+    @{ Name='Status';         Titel='Status';                         Typ='Choice'; Choices=@('Wartet','Gesendet','Fehler') }
+    @{ Name='MailText';       Titel='Mailtext';                       Typ='Note' }
+    @{ Name='MailHtml';       Titel='Mailtext (HTML fuer den Flow)';  Typ='Note' }
+    @{ Name='Rechnung';       Titel='Rechnungsnummer';                Typ='Text' }
+    @{ Name='RechnungKey';    Titel='Rechnungsschluessel (Monitoring)'; Typ='Text' }
+    @{ Name='Lieferant';      Titel='Lieferant';                      Typ='Text' }
+    @{ Name='RechnungUrl';    Titel='Rechnung (URL)';                 Typ='Note' }
+    @{ Name='AngefordertVon'; Titel='Angefordert von';                Typ='Text' }
+    @{ Name='GesendetAm';     Titel='Gesendet am';                    Typ='DateTime' }
+    @{ Name='Fehlermeldung';  Titel='Fehlermeldung';                  Typ='Note' }
+  )
+  Write-Host "   Spalten:"
+  foreach ($f in $MailFelder) { Ensure-Field -Liste $MailListe -Spec $f }
+  if (-not $WhatIfOnly) {
+    Set-PnPField -List $MailListe -Identity 'Status' -Values @{ DefaultValue = 'Wartet' } -ErrorAction SilentlyContinue | Out-Null
+  }
+  Write-Host "   Hinweis: Schreibrechte auf $MailListe nur fuer die Buchhaltung vergeben. Wer hier" -ForegroundColor Yellow
+  Write-Host "   einen Eintrag anlegen darf, kann ueber den Flow aus dem Werks-Postfach senden." -ForegroundColor Yellow
 }
 
 Write-Host ""

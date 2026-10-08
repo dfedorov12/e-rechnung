@@ -108,7 +108,13 @@ bis 800.000 €“ auf und liefert die passende Mailvorlage an den Lieferanten (
 öffnen oder kopieren). Für Rechnungen aus 2027 sind das die Vorlagen der Buchhaltung aus
 E-Rechnungsprüfung.docx, wörtlich: Variante 1 „Rücksendung der Rechnung“ (über 800.000 €)
 und Variante 2 „Akzeptanz der Rechnung“ (bis 800.000 €). Für 2026 und ab 2028 gibt es Texte
-im selben Ton. Kleinbeträge bis 250 € brutto brauchen keine Einschätzung. Die
+im selben Ton.
+
+Mit **„Speichern und senden“** geht die Mail ohne Outlook direkt aus dem Rechnungspostfach des
+Werks raus: Das Monitoring legt einen Auftrag in der Liste `KreditorMails` an, der Flow
+„Kreditor-Mail senden“ verschickt ihn und setzt den Status. An der Rechnung steht danach „Mail
+wartet“, „Mail gesendet“ oder „Mail fehlgeschlagen“. Einrichtung: `docs/Kreditor-Mail-Flow.md`.
+Ohne die Liste bleibt es beim Weg über Outlook. Kleinbeträge bis 250 € brutto brauchen keine Einschätzung. Die
 Kachel **800k-Einschätzung offen** filtert auf alles, was noch fehlt.
 
 Die Einschätzung gilt je Lieferant und steht in
