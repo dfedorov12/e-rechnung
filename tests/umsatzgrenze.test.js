@@ -23,7 +23,8 @@ ok(ug.ugBraucht(Object.assign({}, pdf, { brutto: 250.01 })), 'ueber 250 braucht 
 
 // Folgen
 ok(!ug.ugFolge('ueber', 'grenze').zulaessig, '2027 ueber 800k nicht zulaessig');
-ok(ug.ugFolge('ueber', 'grenze').vorlage === 'ueber-anfordern', '2027 ueber -> anfordern');
+ok(ug.ugFolge('ueber', 'grenze').vorlage === 'ueber-ruecksendung', '2027 ueber -> Variante 1 Ruecksendung');
+ok(ug.ugFolge('bis', 'grenze').vorlage === 'bis-akzeptanz', '2027 bis -> Variante 2 Akzeptanz');
 ok(ug.ugFolge('bis', 'grenze').zulaessig, '2027 bis 800k zulaessig');
 ok(ug.ugFolge('ueber', 'uebergang').vorlage === 'ueber-ankuendigen', '2026 ueber -> ankuendigen');
 ok(ug.ugFolge('bis', 'uebergang').vorlage === 'bis-hinweis', '2026 bis -> Hinweis 2028');
@@ -35,7 +36,7 @@ ok(ug.ugKey('MÜLLER GmbH & Co.KG') === 'müller gmbh co kg', 'gleiche Firma, gl
 ok(ug.ugRechnungKey({ richtung: 'Eingang', baseKey: 'Scan_123' }) === 'e|scan_123', 'Rechnungsschluessel ohne Werk');
 
 // Vorlagen
-for (const art of ['ueber-anfordern', 'ueber-ankuendigen', 'bis-hinweis', 'pflicht']) {
+for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', 'bis-hinweis', 'pflicht']) {
   const v = ug.ugVorlage(art, { nummer: 'R-77', datum: '03.02.2027', jahr: 2027, absender: 'Denis Fedorov' });
   ok(v.betreff.length > 10, art + ': Betreff');
   ok(v.text.startsWith('Sehr geehrte Damen und Herren,'), art + ': Anrede');
@@ -44,8 +45,9 @@ for (const art of ['ueber-anfordern', 'ueber-ankuendigen', 'bis-hinweis', 'pflic
   ok(![...v.text].some(c => c.charCodeAt(0) < 32 && c.charCodeAt(0) !== 10), art + ': keine Steuerzeichen');
   ok(/XRechnung/.test(v.text), art + ': nennt die Formate');
 }
-ok(/R-77 vom 03\.02\.2027/.test(ug.ugVorlage('ueber-anfordern', { nummer: 'R-77', datum: '03.02.2027', jahr: 2027 }).text), 'Nr und Datum im Text');
-ok(/Gesamtumsatz 2026/.test(ug.ugVorlage('ueber-anfordern', { jahr: 2027 }).text), 'Vorjahr aus Rechnungsjahr');
+ok(/R-77 vom 03\.02\.2027/.test(ug.ugVorlage('ueber-ruecksendung', { nummer: 'R-77', datum: '03.02.2027', jahr: 2027 }).betreff), 'Nr und Datum im Betreff');
+ok(ug.ugVorlage('ueber-ruecksendung', {}).text.includes('Das vorliegende PDF-Dokument können wir aus diesem Grund leider nicht als Eingangsrechnung akzeptieren.'), 'Variante 1 wörtlich');
+ok(ug.ugVorlage('bis-akzeptanz', {}).text.includes('Entsprechend werden wir Ihre Rechnung weiterverarbeiten.'), 'Variante 2 wörtlich');
 ok(!/ vom /.test(ug.ugVorlage('pflicht', {}).betreff), 'ohne Datum kein "vom"');
 
 console.log(`umsatzgrenze: ${n} Pruefungen gruen`);

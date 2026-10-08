@@ -105,7 +105,10 @@ wir nicht, also schätzt die Buchhaltung ihn ein. Jede sonstige Rechnung im Eing
 (Formatmangel) hat in der Spalte Buchung den Button **800k einschätzen**. Der Dialog zeigt
 die Regel für das Rechnungsjahr, nimmt die Einschätzung „vermutlich über“ oder „vermutlich
 bis 800.000 €“ auf und liefert die passende Mailvorlage an den Lieferanten (in Outlook
-öffnen oder kopieren). Kleinbeträge bis 250 € brutto brauchen keine Einschätzung. Die
+öffnen oder kopieren). Für Rechnungen aus 2027 sind das die Vorlagen der Buchhaltung aus
+E-Rechnungsprüfung.docx, wörtlich: Variante 1 „Rücksendung der Rechnung“ (über 800.000 €)
+und Variante 2 „Akzeptanz der Rechnung“ (bis 800.000 €). Für 2026 und ab 2028 gibt es Texte
+im selben Ton. Kleinbeträge bis 250 € brutto brauchen keine Einschätzung. Die
 Kachel **800k-Einschätzung offen** filtert auf alles, was noch fehlt.
 
 Die Einschätzung gilt je Lieferant und steht in

@@ -72,77 +72,98 @@ function ugBraucht(r) {
 function ugFolge(vermutung, phase) {
   if (phase === 'pflicht') {
     return { zulaessig: false, vorlage: 'pflicht',
-      folge: 'Seit 2028 gilt die E-Rechnungspflicht für alle Lieferanten. E-Rechnung anfordern, bis dahin unter Vorbehalt.' };
+      folge: 'Seit 2028 gilt die E-Rechnungspflicht für alle Lieferanten. Die PDF wird nicht als Eingangsrechnung akzeptiert, E-Rechnung anfordern.' };
   }
   if (phase === 'grenze') {
     return vermutung === 'ueber'
-      ? { zulaessig: false, vorlage: 'ueber-anfordern',
-          folge: 'Die Rechnung hätte als E-Rechnung kommen müssen. E-Rechnung anfordern, bis dahin unter Vorbehalt.' }
-      : { zulaessig: true, vorlage: 'bis-hinweis',
-          folge: 'Die sonstige Rechnung ist 2027 zulässig. Der Vorbehalt kann aufgelöst werden. Hinweis auf 2028 an den Lieferanten.' };
+      ? { zulaessig: false, vorlage: 'ueber-ruecksendung',
+          folge: 'Vorlage Variante 1, Rücksendung der Rechnung: Die PDF wird nicht als Eingangsrechnung akzeptiert. Der Lieferant soll eine E-Rechnung schicken oder seinen Umsatz schriftlich bestätigen.' }
+      : { zulaessig: true, vorlage: 'bis-akzeptanz',
+          folge: 'Vorlage Variante 2, Akzeptanz der Rechnung: Die Rechnung wird weiterverarbeitet. Der Lieferant soll künftig E-Rechnungen schicken, ab 2028 geht keine PDF mehr.' };
   }
   return vermutung === 'ueber'
     ? { zulaessig: true, vorlage: 'ueber-ankuendigen',
-        folge: 'Bis Ende 2026 darf jeder Lieferant sonstige Rechnungen stellen. Lieferanten auf die Pflicht ab 2027 hinweisen.' }
+        folge: 'Bis Ende 2026 darf jeder Lieferant noch PDF-Rechnungen stellen. Der Lieferant wird auf die Pflicht ab 2027 hingewiesen.' }
     : { zulaessig: true, vorlage: 'bis-hinweis',
-        folge: 'Bis Ende 2027 sind sonstige Rechnungen dieses Lieferanten zulässig. Hinweis auf 2028 an den Lieferanten.' };
+        folge: 'Bis Ende 2027 sind PDF-Rechnungen dieses Lieferanten zulässig. Der Lieferant wird auf 2028 hingewiesen.' };
 }
 
 /**
- * Mailvorlage an den Lieferanten.
- * @param {string} art   'ueber-anfordern' | 'ueber-ankuendigen' | 'bis-hinweis' | 'pflicht'
+ * Mailvorlage an den Lieferanten. Für Rechnungen aus 2027 gelten die Vorlagen
+ * der Buchhaltung (E-Rechnungsprüfung.docx): Variante 1 „Rücksendung der
+ * Rechnung“ und Variante 2 „Akzeptanz der Rechnung“, wörtlich übernommen.
+ * Für 2026 (Ankündigung) und ab 2028 (Pflicht für alle) gibt es Texte im
+ * selben Ton.
+ * @param {string} art   'ueber-ruecksendung' | 'bis-akzeptanz' | 'ueber-ankuendigen' | 'bis-hinweis' | 'pflicht'
  * @param {object} p     { nummer, datum (TT.MM.JJJJ), jahr, absender }
  * @returns {{betreff:string, text:string}}
  */
 function ugVorlage(art, p) {
   const nr = p.nummer ? ' ' + p.nummer : '';
   const vom = p.datum ? ' vom ' + p.datum : '';
-  const vorjahr = p.jahr ? String(p.jahr - 1) : 'des Vorjahres';
-  const formate = 'XRechnung oder ZUGFeRD/Factur-X (Profil EN 16931 oder höher)';
+  const formate = 'entweder als XRechnung (XML-Datensatz) oder im ZUGFeRD-Format';
   const gruss = ['Mit freundlichen Grüßen', p.absender || ''].join(_UG_NL).trim();
   const absaetze = [];
   let betreff;
 
   switch (art) {
-    case 'ueber-anfordern':
-      betreff = `Rechnung${nr}${vom}: bitte als E-Rechnung senden`;
+    case 'ueber-ruecksendung':      // Variante 1: Rücksendung der Rechnung
+      betreff = `Ihre Rechnung${nr}${vom}: bitte als elektronische Rechnung senden`;
       absaetze.push(
-        `Ihre Rechnung${nr}${vom} haben wir erhalten, allerdings als PDF bzw. auf Papier und nicht als E-Rechnung.`,
-        'Für Leistungen ab dem 1. Januar 2027 dürfen Unternehmen, deren Gesamtumsatz im Vorjahr über 800.000 Euro lag, '
-          + 'anderen Unternehmen im Inland nur noch E-Rechnungen stellen (§ 14 und § 27 Abs. 38 UStG). '
-          + 'Nach unserer Einschätzung gilt das auch für Sie.',
-        `Bitte senden Sie uns die Rechnung noch einmal als ${formate} an die bekannte Rechnungsadresse.`,
-        `Lag Ihr Gesamtumsatz ${vorjahr} bei höchstens 800.000 Euro, genügt uns eine kurze Rückmeldung. `
-          + 'Dann verarbeiten wir die Rechnung so, wie sie ist.');
+        'seit dem 1. Januar 2027 besteht die Pflicht zur Ausstellung einer elektronischen Rechnung. '
+          + 'Wir haben von Ihnen eine Rechnung als reines PDF-Dokument erhalten. Dies ist als Übergangslösung '
+          + 'nur dann erlaubt, solange Ihre Umsätze die Schwelle von € 800.000 nicht erreichen. In Ihrem Fall '
+          + 'müssen wir davon ausgehen, dass diese Voraussetzung nicht erfüllt ist.',
+        'Das vorliegende PDF-Dokument können wir aus diesem Grund leider nicht als Eingangsrechnung akzeptieren. '
+          + 'Wir hoffen auf Ihr Verständnis und möchten Sie bitten, uns eine elektronische Rechnung '
+          + `${formate} zu übersenden.`,
+        'Sollten Ihre Vorjahresumsätze die Schwelle von € 800.000 tatsächlich nicht erreichen, bitten wir um '
+          + 'entsprechende schriftliche Bestätigung.');
       break;
-    case 'ueber-ankuendigen':
-      betreff = 'Ihre Rechnungen an uns ab 1. Januar 2027 als E-Rechnung';
+    case 'bis-akzeptanz':           // Variante 2: Akzeptanz der Rechnung
+      betreff = `Ihre Rechnung${nr}${vom}: künftig als elektronische Rechnung`;
       absaetze.push(
-        `vielen Dank für Ihre Rechnung${nr}${vom}. Wir verarbeiten sie wie gewohnt.`,
-        'Ab dem 1. Januar 2027 dürfen Unternehmen, deren Gesamtumsatz im Vorjahr über 800.000 Euro lag, '
-          + 'anderen Unternehmen im Inland nur noch E-Rechnungen stellen. Nach unserer Einschätzung betrifft das auch Sie.',
-        `Bitte stellen Sie Ihre Rechnungen an uns bis dahin auf ${formate} um. `
-          + 'Gern auch früher, wir können E-Rechnungen schon heute empfangen.',
-        'Falls Ihr Gesamtumsatz 2026 höchstens 800.000 Euro beträgt, geben Sie uns bitte kurz Bescheid. '
-          + 'Dann haben Sie bis Ende 2027 Zeit.');
+        'seit dem 1. Januar 2027 besteht die Pflicht zur Ausstellung einer elektronischen Rechnung. '
+          + 'Wir haben von Ihnen eine Rechnung als reines PDF-Dokument erhalten. Dies ist als Übergangslösung '
+          + 'erlaubt, solange Ihre Vorjahresumsätze die Schwelle von € 800.000 nicht erreichen. Wir gehen davon '
+          + 'aus, dass diese Voraussetzung in Ihrem Fall erfüllt ist. Entsprechend werden wir Ihre Rechnung '
+          + 'weiterverarbeiten.',
+        'Wir möchten Sie jedoch bitten, uns zukünftig eine elektronische Rechnung '
+          + `${formate} zu übersenden, sobald Ihnen dies möglich ist. Vorsorglich weisen wir darauf hin, `
+          + 'dass wir reine PDF-Rechnungen ab dem 1. Januar 2028 nicht mehr akzeptieren dürfen.');
       break;
-    case 'bis-hinweis':
-      betreff = 'Ihre Rechnungen an uns ab 1. Januar 2028 als E-Rechnung';
+    case 'ueber-ankuendigen':       // 2026, vermutlich über 800.000 €
+      betreff = 'Ihre Rechnungen an uns ab 1. Januar 2027 als elektronische Rechnung';
       absaetze.push(
-        `vielen Dank für Ihre Rechnung${nr}${vom}. Wir verarbeiten sie wie gewohnt.`,
-        'Wir gehen davon aus, dass Ihr Jahresumsatz nicht über 800.000 Euro liegt. '
-          + 'Dann dürfen Sie uns bis Ende 2027 noch Rechnungen auf Papier oder als PDF schicken. '
-          + 'Ab dem 1. Januar 2028 gilt die E-Rechnungspflicht für alle Unternehmen.',
-        `Bitte stellen Sie Ihre Rechnungen an uns bis dahin auf ${formate} um. `
-          + 'Gern auch früher, wir können E-Rechnungen schon heute empfangen.');
+        `vielen Dank für Ihre Rechnung${nr}${vom}, die wir wie gewohnt weiterverarbeiten.`,
+        'Ab dem 1. Januar 2027 besteht die Pflicht zur Ausstellung einer elektronischen Rechnung. Reine '
+          + 'PDF-Dokumente sind dann nur noch als Übergangslösung erlaubt, solange die Vorjahresumsätze die '
+          + 'Schwelle von € 800.000 nicht erreichen. In Ihrem Fall müssen wir davon ausgehen, dass diese '
+          + 'Voraussetzung nicht erfüllt ist.',
+        `Wir möchten Sie deshalb bitten, uns ab dem 1. Januar 2027 eine elektronische Rechnung ${formate} `
+          + 'zu übersenden. Sollten Ihre Vorjahresumsätze die Schwelle von € 800.000 tatsächlich nicht '
+          + 'erreichen, bitten wir um entsprechende schriftliche Bestätigung.');
       break;
-    default: // 'pflicht'
-      betreff = `Rechnung${nr}${vom}: bitte als E-Rechnung senden`;
+    case 'bis-hinweis':             // 2026, vermutlich bis 800.000 €
+      betreff = 'Ihre Rechnungen an uns als elektronische Rechnung';
       absaetze.push(
-        `Ihre Rechnung${nr}${vom} haben wir erhalten, allerdings als PDF bzw. auf Papier und nicht als E-Rechnung.`,
-        'Seit dem 1. Januar 2028 müssen Unternehmen anderen Unternehmen im Inland E-Rechnungen stellen. '
-          + 'Ausgenommen sind nur Kleinbetragsrechnungen bis 250 Euro und Rechnungen von Kleinunternehmern.',
-        `Bitte senden Sie uns die Rechnung noch einmal als ${formate} an die bekannte Rechnungsadresse.`);
+        `vielen Dank für Ihre Rechnung${nr}${vom}, die wir wie gewohnt weiterverarbeiten.`,
+        'Ab dem 1. Januar 2027 besteht die Pflicht zur Ausstellung einer elektronischen Rechnung. Reine '
+          + 'PDF-Dokumente sind als Übergangslösung weiter erlaubt, solange Ihre Vorjahresumsätze die Schwelle '
+          + 'von € 800.000 nicht erreichen. Wir gehen davon aus, dass diese Voraussetzung in Ihrem Fall erfüllt ist.',
+        `Wir möchten Sie jedoch bitten, uns zukünftig eine elektronische Rechnung ${formate} zu übersenden, `
+          + 'sobald Ihnen dies möglich ist. Vorsorglich weisen wir darauf hin, dass wir reine PDF-Rechnungen '
+          + 'ab dem 1. Januar 2028 nicht mehr akzeptieren dürfen.');
+      break;
+    default:                        // 'pflicht', ab 2028
+      betreff = `Ihre Rechnung${nr}${vom}: bitte als elektronische Rechnung senden`;
+      absaetze.push(
+        'seit dem 1. Januar 2028 besteht für alle Unternehmen die Pflicht zur Ausstellung einer elektronischen '
+          + 'Rechnung. Wir haben von Ihnen eine Rechnung als reines PDF-Dokument erhalten.',
+        'Das vorliegende PDF-Dokument können wir aus diesem Grund leider nicht als Eingangsrechnung akzeptieren. '
+          + 'Wir hoffen auf Ihr Verständnis und möchten Sie bitten, uns eine elektronische Rechnung '
+          + `${formate} zu übersenden.`,
+        'Ausgenommen sind nur Kleinbetragsrechnungen bis € 250 und Rechnungen von Kleinunternehmern.');
   }
 
   const text = ['Sehr geehrte Damen und Herren,', ...absaetze, gruss].join(_UG_NL + _UG_NL);
@@ -337,11 +358,11 @@ function _ugRender() {
       <div class="ug-wahl" role="radiogroup" aria-label="Einschätzung">
         <button type="button" class="ug-opt" data-ug-v="ueber" role="radio">
           <strong>Vermutlich über 800.000 €</strong>
-          <span>Größerer Lieferant, Konzern, bekannte Marke</span>
+          <span>${phase === 'grenze' ? 'Vorlage Variante 1: Rücksendung der Rechnung' : 'Größerer Lieferant, Konzern, bekannte Marke'}</span>
         </button>
         <button type="button" class="ug-opt" data-ug-v="bis" role="radio">
           <strong>Vermutlich bis 800.000 €</strong>
-          <span>Handwerker, kleiner Händler, Einzelunternehmen</span>
+          <span>${phase === 'grenze' ? 'Vorlage Variante 2: Akzeptanz der Rechnung' : 'Handwerker, kleiner Händler, Einzelunternehmen'}</span>
         </button>
       </div>`}
       ${e ? `<p class="ug-bisher">Bisher: ${_esc(_UG_LABEL[e.vermutung] || e.vermutung)}, eingeschätzt von ${_esc(e.vonName || e.von)} am ${_esc(_monDate(e.am))}${e.rechnung ? ' (Rechnung ' + _esc(e.rechnung) + ')' : ''}.</p>` : ''}
