@@ -67,7 +67,8 @@ fehlt es, wird das Werk aus dem Empfänger abgeleitet). Antwort = JSON:
 | `konform` / `konformLabel` | KoSIT-Urteil `gruen`/`gelb`/`rot` bzw. `Ungeprueft` |
 | `accepted`, `errorCount`, `warningCount`, `meldungen[]` | KoSIT-Details |
 | `meldungenText` | alle KoSIT-Befunde als **fertiger Text** (kein Array-Join im Flow nötig) |
-| `hinweis` | **Ein-Satz-Klartext**, *warum* nicht konform (häufigste Ursache zuerst) → in `ValidierungsMeldung` schreiben |
+| `hinweis` | **Ein-Satz-Klartext**, *warum* nicht konform (häufigste Ursache zuerst) → in `ValidierungsMeldung` schreiben. Höchstens **255 Zeichen**, passt also auch in eine Spalte „Eine Textzeile“. Längere Hinweise kürzt die API am Satzende und hängt „…“ an. |
+| `hinweisLang` | derselbe Hinweis ungekürzt, für Spalten mit mehreren Textzeilen |
 | `profilFallback` | gesetzt, wenn gegen **EN16931** statt XRechnung geprüft (Factur-X/ZUGFeRD BASIC/EXTENDED) |
 | `bericht` | **vollständiger KoSIT-Prüfbericht** (String) → archivieren |
 | `pdfa` | veraPDF-Ergebnis der PDF/A-Hülle (nur bei PDF-Eingang) |
@@ -139,7 +140,7 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       | `Netto-/MwSt-/Bruttobetrag`, `Waehrung` | aus `daten` |
       | `Bestellnummer` / `Lieferscheinnummer` / `Kaeuferreferenz` | `daten.bestellnummer` / `…lieferscheinnummer` / `…leitwegid` |
       | `Konformitaet` | `body('HTTP')?['konformLabel']` |
-      | `ValidierungsMeldung` | `body('HTTP')?['hinweis']` (fertiger Klartext-Satz) — **nicht** `join(meldungen)`, das ergäbe „[object Object]". Alternativ `meldungenText` (alle Befunde). |
+      | `ValidierungsMeldung` | `body('HTTP')?['hinweis']` (fertiger Klartext-Satz, höchstens 255 Zeichen). **Nicht** `join(meldungen)`, das ergäbe „[object Object]". Ist die Spalte mehrzeilig, geht auch `hinweisLang` (ungekürzt) oder `meldungenText` (alle Befunde). |
       | `PDFAStatus` | aus `pdfa.konform`: ok→`PDF/A-3b ok` · fehler→`PDF/A Fehler` · xml→`n/a (nur XML)` · sonst `Ungeprueft` |
       | `KoSITBerichtUrl` / `LesbarPdfUrl` | WebUrl der Sidecars aus Schritt d |
       | `Verarbeitungsstatus` | `if(equals(body('HTTP')?['konform'],'rot'),'Fehler','Validiert')` |

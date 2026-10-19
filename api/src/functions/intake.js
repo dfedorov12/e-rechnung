@@ -22,6 +22,8 @@
  *     zielbibliothek:  'ERAR_<Werk>' (Eingang) | 'AR_<Werk>' (Ausgang) — fertig fuer den Flow,
  *     werkMismatch:    true, wenn Eingang und ?werk= != werkErkannt (moegliche Fehlleitung),
  *     konform:         'gruen'|'gelb'|'rot'|'ungeprueft',
+ *     hinweis:         Klartext, hoechstens 255 Zeichen (passt in "Eine Textzeile"),
+ *     hinweisLang:     derselbe Hinweis ungekuerzt (fuer Spalten mit mehreren Zeilen),
  *     konformLabel, accepted, errorCount, warningCount, meldungen[],
  *     bericht:         <roher KoSIT-Pruefbericht als String>  (Archiv/GoBD),
  *     berichtHtml?:    <HTML-Darstellung, falls eingebettet>,
@@ -53,6 +55,7 @@ const { detectWerkFromBuyer, detectWerkFromSeller } = require('../werk');
 const { normalizeBody } = require('../httpbody');
 const { pdfXmlAbgleich } = require('../pdfabgleich');
 const { kopfdatenAusPdf } = require('../kopfdaten');
+const { feldGrenzen } = require('../feldlaenge');
 
 // Standardtext fuer die Berichtigungs-Aufforderung an den Kreditor (Punkte 1/2:
 // fehlendes PDF/A-3 bzw. fehlende eingebettete XML -> "sonstige Rechnung", nicht
@@ -166,33 +169,35 @@ app.http('intake', {
         grund: embeddedUnsupported ? 'fremdformat-xml' : 'keine-xml',
         text: TEXT_BERICHTIGUNG_FORMAT,
       };
+      // Reihenfolge nach Wichtigkeit: wird der Hinweis auf 255 Zeichen gekürzt
+      // (feldGrenzen), fällt der Betrag zuerst weg.
+      const vorbehalt = ' Als sonstige Rechnung unter Vorbehalt gebucht, Berichtigung angefordert'
+        + ' (UStAE 14.1 Abs. 2, 15.2a Abs. 1a).';
       res.hinweis = embeddedUnsupported
-        ? 'Eingebettete XML ist kein EN16931-Format (z. B. openTRANS/BMEcat), keine ZUGFeRD/Factur-X-'
-          + 'Rechnung — als sonstige Rechnung unter Vorbehalt gebucht, Berichtigung (echte E-Rechnung) '
-          + 'angefordert (UStAE 14.1 Abs. 2 / 15.2a Abs. 1a).'
-        : 'Keine eingebettete E-Rechnungs-XML — als sonstige Rechnung unter '
-          + 'Vorbehalt gebucht, Berichtigung angefordert (UStAE 14.1 Abs. 2 / 15.2a Abs. 1a).';
+        ? 'Eingebettete XML ist keine E-Rechnung nach EN 16931 (z. B. openTRANS/BMEcat).'
+        : 'Keine E-Rechnungs-XML eingebettet.';
       // Lieferant und Kopfdaten aus dem PDF-Text (Vorschlag). Felder, die nicht
       // sicher lesbar sind, bleiben null, damit der Flow sie wie bisher leer laesst.
       // dateibasis bleibt leer: der Dateiname kommt weiter aus dem Anhang.
-      if (isPdf) {
-        const k = await kopfdatenAusPdf(buf).catch(() => null);
-        if (k) {
-          // Betrag bewusst nicht: ein falsch gelesener Kleinbetrag würde im Monitoring
-          // die 800k-Einschätzung ausblenden. Er steht nur im Hinweis.
-          res.daten = Object.assign(_leereDaten(), {
-            nummer: k.nummer, datum: k.datum, steller: k.steller, stellerVat: k.stellerVat,
-          });
-          res.datenQuelle = 'pdf-text';
-          res.kleinunternehmer = k.kleinunternehmer;
-          res.hinweis += ' Lieferant und Kopfdaten aus dem PDF-Text gelesen, bitte prüfen.'
-            + (k.brutto != null ? ` Betrag laut Text: ${k.brutto.toFixed(2).replace('.', ',')} €.` : '')
-            + (k.kleinunternehmer ? ' Die Rechnung verweist auf § 19 UStG (Kleinunternehmer): keine E-Rechnungspflicht.' : '');
-        }
+      const k = isPdf ? await kopfdatenAusPdf(buf).catch(() => null) : null;
+      if (k) {
+        // Betrag bewusst nicht: ein falsch gelesener Kleinbetrag würde im Monitoring
+        // die 800k-Einschätzung ausblenden. Er steht nur im Hinweis.
+        res.daten = Object.assign(_leereDaten(), {
+          nummer: k.nummer, datum: k.datum, steller: k.steller, stellerVat: k.stellerVat,
+        });
+        res.datenQuelle = 'pdf-text';
+        res.kleinunternehmer = k.kleinunternehmer;
+        res.hinweis += (k.kleinunternehmer ? ' Verweis auf § 19 UStG (Kleinunternehmer), keine E-Rechnungspflicht.' : '')
+          + vorbehalt
+          + ' Lieferant und Kopfdaten aus dem PDF-Text, bitte prüfen.'
+          + (k.brutto != null ? ` Betrag laut Text: ${k.brutto.toFixed(2).replace('.', ',')} €.` : '');
+      } else {
+        res.hinweis += vorbehalt;
       }
       res.richtung = 'Eingang';
       res.zielbibliothek = werkHinweis ? `ERAR_${werkHinweis}` : '';
-      return { status: 200, jsonBody: res };
+      return { status: 200, jsonBody: feldGrenzen(res) };
     }
 
     res.xml = xml;
@@ -329,7 +334,7 @@ app.http('intake', {
       }
     }
 
-    return { status: 200, jsonBody: res };
+    return { status: 200, jsonBody: feldGrenzen(res) };
   },
 });
 
