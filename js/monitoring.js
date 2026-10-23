@@ -2,8 +2,9 @@
  * Rechnungsmonitoring
  * ===================
  * Liest ALLE Rechnungsbibliotheken (ERAR_<Werk> = Eingang, AR_<Werk> = Ausgang)
- * einer eigenen SharePoint-Site aus, aggregiert die Positionen und zeigt
- * KPI-Kacheln + filterbare Tabelle. Nutzt die vorhandene Auth/Graph-Infrastruktur
+ * einer eigenen SharePoint-Site aus, nacheinander und seitenweise, aggregiert die
+ * Positionen und zeigt KPI-Kacheln + filterbare Tabelle (200 Zeilen je Seite).
+ * Nutzt die vorhandene Auth/Graph-Infrastruktur
  * (auth.js, sharepoint.js: acquireToken, SP, _get).
  *
  * Provisionierung der Bibliotheken: scripts/provision-rechnungsmonitoring.ps1
@@ -15,10 +16,15 @@ const MON = {
   libRe: /^(ERAR|AR)_(.+)$/i,   // ERAR_WGC, AR_SHB, ...
   intakeRe: /^Rechnungseingang$/i, // zentrale Eingangsstufe (werkuebergreifend)
   maxPagesPerLib: 30,            // Sicherheitslimit: 30 x 200 = 6000 Items je Bibliothek
+  tabelleSeite: 200,             // so viele Zeilen zeichnet die Tabelle auf einmal
 };
 
 let _monRecords = [];
 let _monRows = [];     // aktuell angezeigte Zeilen (Index fuer Buttons in der Tabelle)
+let _monZeigen = MON.tabelleSeite;  // gezeichnete Zeilen, waechst mit „Weitere anzeigen“
+let _monAnsicht = '';               // Filter + Sortierung beim letzten Zeichnen
+let _monLadeLauf = 0;               // laufender Ladevorgang (ein neuer bricht den alten ab)
+let _monLaedt = false;
 const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', from: '', to: '', q: '', flag: '' };
 let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
@@ -76,29 +82,87 @@ async function loadMonitoring(accessList) {
         + '(bzw. keine, auf die Sie Zugriff haben). Provisionierungsskript ausführen.');
     }
 
-    // Positionen aller Bibliotheken einsammeln — parallel (je Bibliothek ein
-    // eigener, intern seitenweiser Abruf). Beschleunigt das Laden bei vielen
-    // Werken deutlich gegenüber der früheren sequenziellen Schleife.
-    const recsArrays = await Promise.all(libs.map(lib => _monFetchLib(siteId, lib, token)));
-    const recs = recsArrays.flat();
-
-    // XML + PDF + KoSIT-Bericht derselben Rechnung zu EINER Zeile zusammenfassen.
-    _monRecords = _monGroup(recs);
-    _monMarkDupes(_monRecords);   // echte Dubletten (Nummer + Aussteller) kennzeichnen
-    // Einschaetzungen zur 800k-Umsatzgrenze (js/umsatzgrenze.js); Fehler sind nicht fatal.
+    // Einschaetzungen zur 800k-Umsatzgrenze (js/umsatzgrenze.js) und Mailaufträge
+    // (Liste KreditorMails) zuerst: beide sind klein, und die Zeilen zeigen Badges und
+    // Lieferantennamen dann schon beim ersten Zeichnen. Fehler sind nicht fatal.
     if (typeof ugLaden === 'function') await ugLaden(siteId, token);
-    // Mailaufträge an Lieferanten (Liste KreditorMails, Versand über den Flow)
     if (typeof ugMailsLaden === 'function') await ugMailsLaden(siteId, token, listsRes.value || []);
-    _monBuildFilterOptions(libs);
-    _monApply();
 
-    if (sub) sub.textContent =
-      `${_monRecords.length} Rechnung(en) (${recs.length} Datei(en)) aus ${libs.length} Bibliothek(en) · Stand ${new Date().toLocaleString('de-DE')}`;
+    // Bibliotheken NACHEINANDER und seitenweise laden, nicht alle parallel. So läuft
+    // immer nur ein Abruf, SharePoint drosselt nicht, und die Tabelle füllt sich
+    // schon während des Ladens. Eine Bibliothek mit Fehler hält die anderen nicht auf.
+    const lauf = ++_monLadeLauf;
+    const recs = [];
+    const fehlerLibs = [];
+    _monRecords = [];
+    _monLaedt = true;
+    _monBuildFilterOptions(libs);
     const setup = document.getElementById('mon-setup');
     if (setup) setup.style.display = 'none';
     document.getElementById('mon-body').style.display = '';
+    _monApply();
+
+    for (let i = 0; i < libs.length; i++) {
+      const lib = libs[i];
+      if (sub) sub.textContent = `Lade ${lib.name} (${i + 1} von ${libs.length}) · ${recs.length} Datei(en) bisher…`;
+      try {
+        await _monFetchLib(siteId, lib, token, seite => {
+          if (lauf !== _monLadeLauf) return false;   // neuer Ladevorgang -> diesen abbrechen
+          recs.push(...seite);
+          _monUpdate(recs);
+          if (sub) sub.textContent = `Lade ${lib.name} (${i + 1} von ${libs.length}) · ${recs.length} Datei(en) bisher…`;
+          return true;
+        });
+      } catch (e) {
+        fehlerLibs.push(lib.name);
+        console.warn('Monitoring: Bibliothek nicht geladen:', lib.name, e);
+      }
+      if (lauf !== _monLadeLauf) return;
+      // Typ, Buchung und Status kommen erst mit den Daten, Auswahl bleibt erhalten.
+      _monBuildFilterOptions(libs);
+      _monSyncControls();
+    }
+
+    _monLaedt = false;
+    if (fehlerLibs.length === libs.length) {
+      return _monShowSetup('Fehler beim Laden',
+        `Keine Bibliothek ließ sich lesen (${fehlerLibs.join(', ')}). Details in der Browser-Konsole.`);
+    }
+    _monUpdate(recs);
+    if (sub) sub.textContent =
+      `${_monRecords.length} Rechnung(en) (${recs.length} Datei(en)) aus ${libs.length - fehlerLibs.length} Bibliothek(en) · Stand ${new Date().toLocaleString('de-DE')}`
+      + (fehlerLibs.length ? ` · nicht geladen: ${fehlerLibs.join(', ')}` : '');
   } catch (e) {
+    _monLaedt = false;
     _monShowSetup('Fehler beim Laden', e.message || String(e));
+  }
+}
+
+// Geladene Dateien zu Rechnungen zusammenfassen und neu zeichnen. Läuft nach jeder
+// Seite: XML + PDF + KoSIT-Bericht derselben Rechnung werden EINE Zeile, echte
+// Dubletten (Nummer + Aussteller) gekennzeichnet.
+function _monUpdate(recs) {
+  _monRecords = _monGroup(recs);
+  _monMarkDupes(_monRecords);
+  _monApply();
+}
+
+// Graph-GET mit Wiederholung bei Drosselung (429) oder kurzzeitig nicht verfügbar
+// (503): wartet Retry-After ab, sonst 2, 4, 8, 16 Sekunden.
+async function _monGet(url, token) {
+  for (let versuch = 0; ; versuch++) {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+    });
+    if (resp.ok) return resp.json();
+    if ((resp.status === 429 || resp.status === 503) && versuch < 4) {
+      const s = Number(resp.headers.get('Retry-After'));
+      const warten = (s > 0 ? Math.min(s, 60) : 2 ** (versuch + 1)) * 1000;
+      await new Promise(res => setTimeout(res, warten));
+      continue;
+    }
+    const msg = await resp.text();
+    throw new Error(`Graph GET (${resp.status}): ${msg.slice(0, 300)}`);
   }
 }
 
@@ -108,30 +172,32 @@ async function loadMonitoring(accessList) {
 // zuerst) die neuen abzuschneiden. $orderby verlangt jenseits von 5000 Items eine
 // indizierte Created-Spalte (Provisioning: provision-rechnungsmonitoring.ps1).
 // Wird die Sortierung abgelehnt (noch nicht indiziert), wird ungeordnet geladen.
-async function _monFetchLib(siteId, lib, token) {
+// Jede Seite geht sofort an onSeite(datensaetze). Gibt onSeite false zurück, endet
+// der Abruf (neuer Ladevorgang gestartet).
+async function _monFetchLib(siteId, lib, token, onSeite) {
   const base = `${SP.graphBase}/sites/${siteId}/lists/${lib.id}/items?$expand=fields&$top=200`;
   let url = `${base}&$orderby=fields/Created desc`;
   let ordered = true;
-  const out = [];
   let pages = 0;
   while (url && pages < MON.maxPagesPerLib) {
     let page;
     try {
-      page = await _get(url, token);
+      page = await _monGet(url, token);
     } catch (e) {
       // Sortierung nicht möglich (unindiziert) -> einmalig ungeordnet neu starten.
       if (ordered && pages === 0) { ordered = false; url = base; continue; }
       throw e;
     }
+    const seite = [];
     for (const it of (page.value || [])) {
       const f = it.fields || {};
       if (!f.FileLeafRef && !f.Title) continue;             // Ordner / Leerzeilen überspringen
-      out.push(_monMap(it, f, lib));
+      seite.push(_monMap(it, f, lib));
     }
+    if (onSeite(seite) === false) return;
     url = page['@odata.nextLink'] || null;
     pages++;
   }
-  return out;
 }
 
 function _monMap(it, f, lib) {
@@ -221,12 +287,15 @@ function _monGroup(recs) {
   const out = [];
   for (const arr of groups.values()) {
     const primaries = arr.filter(r => !r.sidecar);
-    const primary = _monBestPrimary(primaries.length ? primaries : arr);
+    // Kopie: das Zusammenfassen läuft beim Laden nach jeder Seite erneut und darf die
+    // Dateien selbst nicht verändern, sonst gewinnt beim nächsten Mal eine andere.
+    const best = _monBestPrimary(primaries.length ? primaries : arr);
+    const primary = Object.assign({}, best);
 
     // Verknüpfte Dateien der Rechnung (die anderen Repräsentationen + Bericht).
     primary.dateien = [];
     for (const r of arr) {
-      if (r === primary || !r.url) continue;
+      if (r === best || !r.url) continue;
       const label = r.sidecar === 'kosit' ? 'KoSIT-Bericht'
                   : r.sidecar === 'lesbar' ? 'Lesbares PDF'
                   : (r.ext ? r.ext.toUpperCase() : 'Datei');
@@ -323,6 +392,10 @@ function _monApply() {
   // selbst auf 0 kürzt. Die Tabelle wird zusätzlich per flag eingeengt.
   const base = _monRecords.filter(r => _monMatchBase(r, f, q));
   const rows = f.flag ? base.filter(r => _monMatchFlag(r, f.flag)) : base;
+  // Neue Filter oder Sortierung: wieder mit der ersten Seite der Tabelle beginnen.
+  // Nachladen und Speichern im Dialog lassen „Weitere anzeigen“ stehen.
+  const ansicht = JSON.stringify([f, _monSort]);
+  if (ansicht !== _monAnsicht) { _monAnsicht = ansicht; _monZeigen = MON.tabelleSeite; }
   _monSortRows(rows);
   _monRenderKpis(base);
   _monRenderTable(rows);
@@ -445,9 +518,11 @@ function _monTileClick(id) {
 }
 
 function _monRenderTable(rows) {
-  // Sortierung erfolgt zentral in _monSortRows (vor dem Rendern).
+  // Sortierung erfolgt zentral in _monSortRows (vor dem Rendern). Gezeichnet werden
+  // nur die ersten _monZeigen Zeilen, der Index bleibt der in _monRows.
   _monRows = rows;
-  const body = rows.map((r, idx) => {
+  const sicht = rows.slice(0, _monZeigen);
+  const body = sicht.map((r, idx) => {
     const betrag = r.brutto == null ? '' :
       r.brutto.toLocaleString('de-DE', { style: 'currency', currency: r.waehrung || 'EUR' });
     const datum = _monDate(r.datum);
@@ -508,10 +583,18 @@ function _monRenderTable(rows) {
     </tr>`;
   }).join('');
 
-  document.getElementById('mon-tbody').innerHTML = body
-    || `<tr><td colspan="13" style="text-align:center;color:var(--gray-500);padding:28px;">Keine Treffer für die aktuellen Filter.</td></tr>`;
+  const rest = rows.length - sicht.length;
+  const mehr = rest > 0
+    ? `<tr><td colspan="13" class="mon-mehr"><button type="button" data-mehr>Weitere ${Math.min(rest, MON.tabelleSeite)} anzeigen</button>`
+      + `<span>noch ${rest} Treffer</span></td></tr>`
+    : '';
+  const leer = _monLaedt ? 'Rechnungen werden geladen…' : 'Keine Treffer für die aktuellen Filter.';
+  document.getElementById('mon-tbody').innerHTML = (body + mehr)
+    || `<tr><td colspan="13" style="text-align:center;color:var(--gray-500);padding:28px;">${leer}</td></tr>`;
   document.getElementById('mon-count').textContent =
-    `${rows.length} von ${_monRecords.length} angezeigt`;
+    (rest > 0 ? `${sicht.length} von ${rows.length} Treffern angezeigt (${_monRecords.length} gesamt)`
+              : `${rows.length} von ${_monRecords.length} angezeigt`)
+    + (_monLaedt ? ' · lädt…' : '');
 }
 
 // Geschaeftspartner der Zeile: Eingang = Steller, Ausgang = Empfaenger. Bringt eine
@@ -712,6 +795,12 @@ function monInitFilterEvents() {
   // 800k-Einschaetzung: Button/Badge in der Buchungs-Spalte oeffnet den Dialog.
   const tbody = document.getElementById('mon-tbody');
   if (tbody) tbody.addEventListener('click', e => {
+    // Nächste Seite der Tabelle zeichnen (die Daten sind schon geladen).
+    if (e.target.closest('[data-mehr]')) {
+      _monZeigen += MON.tabelleSeite;
+      _monRenderTable(_monRows);
+      return;
+    }
     const btn = e.target.closest('[data-ug]');
     if (!btn || typeof ugDialogOeffnen !== 'function') return;
     const r = _monRows[Number(btn.getAttribute('data-ug'))];
