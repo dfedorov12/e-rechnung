@@ -120,6 +120,63 @@ gleich(Math.round(r.positionen[0].menge * r.positionen[0].einzelpreis * 100) / 1
 gleich(/Metallteuerungszuschlag/.test(r.positionen[0].details), true, 'Zuschläge in der Positionsbeschreibung');
 gleich(/Seite 2/.test(r.notiz), false, 'Seitenkopf nicht im Hinweis');
 
+// 4) Drittland, englisch: Schlussrechnung mit Anzahlung, Ansprechpartner ohne Durchwahl
+const kopfEn = (titel, nr) => [
+  'DIHAG Gienanth GmbH | Ramsener Str. 1 | 67304 Eisenberg (Pfalz)',
+  'account number at recipient (2) notices of receipt and processing (3) delivery note no.',
+  'invoice address (4) dispatch date',
+  'Beispiel Casting Co., Ltd.', '1 Sample Road', titel, 'SAMPLETOWN 690-0000 no.', 'JAPAN ' + nr, 'date', '09.07.2026',
+  'customer number at Gienanth your VAT-ID Page1 / 2', '1066666',
+  '(10) your reference (11) order no date (12) your contact (13) direct dial (14) our order number',
+];
+const schluss = [
+  ...kopfEn('Invoice', '90166666'),
+  'IPD-026-099 Mustermann Jörg', '6173', '25.03.2026',
+  'free (20) not free (15) Incoterms (19) disp.type (21) packing type (22) disp.character (23) gross total (24) net',
+  'Free Carrier Eisenberg weight', 'X 0 0',
+  '(25) shipping-address (26) receiving-/unloading pt terms of payment',
+  '1066666 Beispiel Casting Co., Ltd. 6900000 Sampletown 60 days net after date of invoice',
+  '1 Sample Road Due date: 07.09.2026',
+  '(27) (28)order no./suppl.ref.no. (29) order description (30) quantity U (32) price (34)total EUR',
+  'Pos. (21) packing type M (18) unit EUR',
+  '010 MODELL HF 5 pairs of moulding boxes 1 1 175.000,00 175.000,00', '/ 1 PC', '70% final payment after release for production',
+  'Total Amount Before Tax 175.000,00', 'German VAT 0,00 0,00', 'Total Amount 175.000,00',
+  'payments received until date of final invoice', 'invoice no./date % net value VAT Final amount',
+  '90165555/10.04.2026 0,00 52.500,00 0,00 52.500,00', 'total amount 0,00 52.500,00 0,00 52.500,00',
+  'remaining amount net 122.500,00', 'VAT 0,00 %', 'due remaining amount 122.500,00',
+  ...FUSS,
+  'Invoice Nr. 90166666 from 09.07.2026 Page 2 / 2', 'Tax-Exempt Export',
+  'Country of origin: Federal Republic of Germany', '----------------------------------', 'signat',
+  ...FUSS,
+].join(NL);
+r = ctx.eis(schluss);
+gleich([r.rechnungsart, r.rechnungsnummer, r.kaeuferland, r.steuerkategorie], ['380', '90166666', 'JP', 'G'], 'Drittland, Ausfuhr');
+gleich([r.bestellnummer, r.verkaeufkontakt, r.verkaeuftel], ['IPD-026-099', 'Mustermann Jörg', '+49 6351 408-0'], 'Kontakt ohne Durchwahl, Zentrale');
+gleich(r.verkaeuferemail, 'joerg.mustermann@dihag-gienanth.com', 'Kontakt-Mail auch ohne Durchwahl');
+gleich([r.gezahlt, r.vorrechnungsnummer, r.vorrechnungsdatum], [52500, '90165555', '2026-04-10'], 'Anzahlung als bereits gezahlt (BT-113)');
+gleich(/Anzahlungen: 90165555 vom 10.04.2026 über 52500,00 EUR/.test(r.notiz), true, 'Anzahlung im Hinweis');
+gleich(/remaining|due remaining|total amount 0,00/i.test(r.notiz), false, 'Restbetragszeilen nicht im Hinweis');
+gleich(/Country of origin/.test(r.notiz) && !/signat/.test(r.notiz), true, 'Ursprungsangabe im Hinweis, Unterschriftszeile nicht');
+
+// 5) Gutschrift ins Drittland ohne Zahlungsziel, Durchwahl über zwei Zeilen
+const gsEn = [
+  ...kopfEn('Credit Memo', '90166667'),
+  '95001460 Muster Hans (0) 6351 408', '34000262', '21.04.2026 262',
+  'free (20) not free (15) Incoterms (19) disp.type (21) packing type (22) disp.character (23) gross total (24) net',
+  'weight', 'X 0 0',
+  '(25) shipping-address (26) receiving-/unloading pt terms of payment',
+  '1066666 Beispiel Casting Co., Ltd. 6900000 Sampletown', '1 Sample Road Due date:',
+  '(27) (28)order no./suppl.ref.no. (29) order description (30) quantity U (32) price (34)total EUR',
+  'Pos. (21) packing type M (18) unit EUR',
+  '010 99999QUHF Quality cost reimbursement 1 1 4.596,32 4.596,32', 'Code-No 84099900 / 1 PC',
+  'Total Amount Before Tax 4.596,32', 'German VAT 0,00 0,00', 'Total Amount 4.596,32',
+  ...FUSS,
+].join(NL);
+r = ctx.eis(gsEn);
+gleich([r.rechnungsart, r.faelligkeitsdatum], ['381', undefined], 'Gutschrift ohne Fälligkeit');
+gleich(/^Zahlungsbedingung: Gutschrift$/m.test(r.notiz), true, 'Zahlungshinweis für BR-CO-25');
+gleich(r.verkaeuftel, '(0) 6351 408 262', 'Durchwahl aus zwei Zeilen');
+
 // Kontakt-Mail und Umfang
 gleich(ctx.mail('Müller Anna'), 'anna.mueller@dihag-gienanth.com', 'Umlaut');
 gleich(ctx.mail('Mustermann Jörg'), 'joerg.mustermann@dihag-gienanth.com', 'ö');

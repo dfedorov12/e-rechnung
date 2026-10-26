@@ -346,6 +346,11 @@ function _extraCII(trans, agreement, delivery, settle, r) {
 
   // Referenzen
   push('Referenzen', 'Auftragsnr. Verkäufer', _t(agreement, 'SellerOrderReferencedDocument', 'IssuerAssignedID'));
+  for (const d of _all(agreement, 'AdditionalReferencedDocument')) {
+    if (_t(d, 'TypeCode') !== '916') continue;
+    const name = _t(d, 'Name'), id = _t(d, 'IssuerAssignedID');
+    push('Referenzen', 'Anlage (BG-24)', name && name !== id ? `${name} (${id})` : id);
+  }
   // Lieferschein: Lieferschein-Referenz, sonst Versandavis (BT-16), das der Konverter schreibt
   const lieferschein = (_t(delivery, 'DeliveryNoteReferencedDocument', 'IssuerAssignedID') || '').trim();
   const versandavis = (_t(delivery, 'DespatchAdviceReferencedDocument', 'IssuerAssignedID') || '').trim();

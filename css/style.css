@@ -1357,6 +1357,15 @@ body.auth-guard { visibility: hidden; }
   word-break: break-word;
 }
 
+/* Anlagen (BG-24) */
+.anlagen-liste { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.anlagen-liste li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 8px; align-items: center;
+  font-size: 12px; padding: 6px 8px; border: 1px solid var(--gray-200, #e2e8f0); border-radius: 6px; background: #f8fafc; }
+.anlagen-liste .anl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anlagen-liste input { font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid var(--gray-300, #cbd5e1); border-radius: 4px; }
+.anlagen-liste button { border: none; background: none; color: var(--danger, #b91c1c); cursor: pointer; font-size: 14px; }
+@media (max-width: 600px) { .anlagen-liste li { grid-template-columns: 1fr auto; } .anlagen-liste input { grid-column: 1 / -1; } }
+
 /* Positionsdetails (BT-154 / BT-127 / BT-132) */
 .positions-table .pos-details-toggle { margin-top: 4px; border: none; background: none; padding: 0; font-size: 11px;
   color: var(--primary, #17509E); cursor: pointer; }

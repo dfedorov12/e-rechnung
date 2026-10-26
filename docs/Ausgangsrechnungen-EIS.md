@@ -8,7 +8,19 @@ Die Belege von DIHAG Gienanth kommen als PDF aus SAP, im Formular mit den nummer
 
 Umgewandelt werden Rechnungen an Kunden mit Rechnungsadresse im Inland. Dazu zählen auch steuerfreie innergemeinschaftliche Lieferungen an Kunden mit Sitz in Deutschland (zum Beispiel Rechnungsadresse in Deutschland, Lieferung nach Rumänien). Für diese Kunden gilt die E-Rechnungspflicht nach § 14 UStG.
 
-Kunden mit Anschrift im EU-Ausland oder im Drittland bekommen die Rechnung wie bisher als PDF. Drittlandrechnungen müssen wegen der Präferenzangaben unterschrieben sein, ein aus Daten erzeugtes PDF hätte diese Unterschrift nicht. Lädt jemand einen solchen Beleg, weist der Konverter darauf hin und fragt beim Export nach.
+Kunden mit Anschrift im EU-Ausland bekommen die Rechnung wie bisher als PDF. Lädt jemand einen solchen Beleg, weist der Konverter darauf hin und fragt beim Export nach.
+
+## Drittland
+
+Drittlandrechnungen sind vorbereitet und lassen sich umwandeln, eine Pflicht gibt es dafür nicht. Weil sie wegen der Präferenzangaben unterschrieben sein müssen, das aus Daten erzeugte PDF aber keine Unterschrift trägt, kommt das unterschriebene Original als Anlage (BG-24) in die E-Rechnung:
+
+1. Das SAP-PDF (mit Text) in den Konverter laden. Daraus kommen die Rechnungsdaten.
+2. Unter „Anlagen" den eingescannten, unterschriebenen Beleg wählen. Die Beschreibung lautet bei Drittland „Unterschriebene Rechnung (Präferenzangaben)".
+3. Exportieren. Bei XRechnung steckt die Datei im XML, bei ZUGFeRD hängt sie als Datei am PDF und das XML nennt sie.
+
+Lädt jemand einen Drittlandbeleg, erinnert der Konverter an die Anlage. Ohne Anlage fragt der Export nach. Ein eingescannter Beleg allein (ohne Text) taugt nicht als Datenquelle.
+
+Schlussrechnungen ziehen die erhaltenen Anzahlungen ab: Der Block „payments received until date of final invoice" (deutsch „erhaltene Anzahlungen") wird als „bereits gezahlt" (BT-113) übernommen, der Zahlbetrag ist der Rest. Die Anzahlungsrechnung steht als Bezug (BT-25) und im Hinweis. Das Feld „Bereits gezahlt" lässt sich im Formular auch von Hand füllen. Gutschriften ohne Zahlungsziel bekommen die Zahlungsbedingung „Gutschrift", weil EN 16931 Fälligkeit oder Zahlungsbedingung verlangt. Steht auf dem Beleg kein Ansprechpartner (zum Beispiel bei der Anzahlung), meldet das Formular das Feld als fehlend. Trägt man den Namen ein, folgt die Mail dem Schema unten.
 
 ## Was aus dem PDF übernommen wird
 
@@ -42,10 +54,11 @@ Die Kunden-Nummern und Rechnungsmails aus „Vorgaben Fakturierung" lassen sich 
 ## Prüfung
 
 - Alle 14 Musterbelege mit Text liest der Parser vollständig. Der Beleg „FINR - AB - A" ist ein unterschriebener Scan ohne Text.
-- Die daraus erzeugten XRechnungen hat der KoSIT-Validator geprüft: Alle Inlands- und EU-Belege sind ohne Fehler und ohne Warnung. Nicht konform sind nur Anzahlung und Gutschrift ins Drittland, weil dort kein Ansprechpartner und keine Fälligkeit gedruckt sind. Die werden nicht umgewandelt.
-- Test im Repo: `node tests/eis-ausgang.test.js` (erfundene Belege im SAP-Layout).
+- Die daraus erzeugten XRechnungen hat der KoSIT-Validator geprüft: Alle Inlands- und EU-Belege sind ohne Fehler und ohne Warnung. Im Drittland sind Rechnung und Gutschrift grün, auch mit dem 1 MB großen Scan als Anlage im XML. Eine nach dem Scan nachgebaute Schlussrechnung (175.000 EUR, Anzahlung 52.500 EUR, Zahlbetrag 122.500 EUR) ist grün. Die Anzahlungsanforderung ist erst grün, wenn ein Ansprechpartner eingetragen ist. Für den Code 386 meldet XRechnung eine Warnung, er ist aber zulässig.
+- Test im Repo: `node tests/eis-ausgang.test.js` (erfundene Belege im SAP-Layout, auch Drittland, Schlussrechnung und Gutschrift ohne Zahlungsziel).
 
 ## Grenzen
 
-- Schlussrechnungen mit abgezogenen Anzahlungen (BT-113) unterstützt der Konverter noch nicht. In den Mustern kam das nur ins Drittland vor.
+- Die Schlussrechnung lag nur als Scan vor. Das Lesen des Anzahlungsblocks ist an einem nachgebauten Text geprüft und am ersten echten SAP-PDF noch einmal anzusehen.
+- Die lesbare PDF-Ansicht von XML-Dateien nennt Anlagen erst nach dem nächsten Deploy der Function App.
 - Hat das Feld (10) Ihr Zeichen einen Wert, steht er vor der Bestellnummer in derselben Zeile. Das kam in den Mustern nicht vor und ist im Formular zu prüfen.

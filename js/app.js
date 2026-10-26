@@ -31,6 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDateDefaults();
   setupBuyerEmailToggle();
   setupRequiredFieldToggles();
+  setupAnlagen();
+  setupKontaktMail();
+  document.getElementById('gezahlt').addEventListener('input', updateTotals);
   document.getElementById('btn-add-row').addEventListener('click', addPositionRow);
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
@@ -201,9 +204,13 @@ async function autoFillFromPDF() {
     const count = fillFormFromExtracted(data);
     await _kundenMailVorschlagen(data);
     showLoading(false);
-    if (_nurInlandAusland(data.gesellschaft, data.kaeuferland)) {
-      showToast(`Kunde im Ausland (${data.kaeuferland}): Für ${data.gesellschaft} gibt es dafür keine E-Rechnungspflicht. `
-        + 'Die Rechnung geht wie bisher als PDF, ins Drittland unterschrieben.', 'info');
+    const umfang = _umfang(data.gesellschaft, data.kaeuferland);
+    if (umfang === 'eu') {
+      showToast(`Kunde im EU-Ausland (${data.kaeuferland}): Für ${data.gesellschaft} gibt es dafür keine E-Rechnungspflicht, `
+        + 'die Rechnung geht wie bisher als PDF.', 'info');
+    } else if (umfang === 'drittland') {
+      showToast(`Kunde im Drittland (${data.kaeuferland}): Bitte das unterschriebene Original unter „Anlagen“ beifügen, `
+        + 'sonst fehlt die Unterschrift zu den Präferenzangaben.', 'info');
     }
     if (count > 0) {
       showAutofillBanner(count);
@@ -224,8 +231,10 @@ async function autoFillFromPDF() {
 function fillFormFromExtracted(data) {
   let count = 0;
   // Werte einer vorher geladenen Rechnung dürfen nicht stehen bleiben (z. B. Bezug einer Storno)
+  _anlagen = [];
+  _anlagenZeigen();
   ['bestellnummer', 'lieferscheinnummer', 'kundennummer', 'lieferantennummer', 'vorrechnungsnummer',
-    'vorrechnungsdatum', 'steuerbetrag-original', 'kaeufer-email'].forEach(id => {
+    'vorrechnungsdatum', 'steuerbetrag-original', 'kaeufer-email', 'gezahlt'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = ''; el.classList.remove('autofilled'); }
   });
@@ -277,6 +286,7 @@ function fillFormFromExtracted(data) {
     'vorrechnungsnummer':  data.vorrechnungsnummer,
     'vorrechnungsdatum':   data.vorrechnungsdatum,
     'steuerbetrag-original': data.steuerbetrag != null ? String(data.steuerbetrag) : '',
+    'gezahlt':             data.gezahlt ? String(data.gezahlt) : '',
   };
 
   for (const [id, val] of Object.entries(map)) {
@@ -304,9 +314,81 @@ function fillFormFromExtracted(data) {
   return count;
 }
 
-/** Kunde im Ausland bei einem Werk, das nur Inlandsrechnungen umwandelt? */
-function _nurInlandAusland(werk, land) {
-  return typeof werkNurInland === 'function' && werkNurInland(werk) && !!land && land.toUpperCase() !== 'DE';
+const _EU_LAENDER = new Set(['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'GR', 'EL', 'HU', 'IE', 'IT',
+  'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE']);
+
+/**
+ * Bei Werken mit _nurInland (EIS): 'inland', 'eu' oder 'drittland' nach dem Land des
+ * Kunden. Für alle anderen Werke immer 'inland' (keine Hinweise, keine Nachfrage).
+ */
+function _umfang(werk, land) {
+  if (typeof werkNurInland !== 'function' || !werkNurInland(werk)) return 'inland';
+  const l = String(land || 'DE').toUpperCase();
+  if (l === 'DE') return 'inland';
+  return _EU_LAENDER.has(l) ? 'eu' : 'drittland';
+}
+
+/**
+ * EIS: Trägt jemand den Ansprechpartner selbst ein (Beleg ohne „Ihr Kontakt"),
+ * folgt die Mail dem Schema vorname.nachname@dihag-gienanth.com. Eine von Hand
+ * geänderte Mail bleibt stehen.
+ */
+function setupKontaktMail() {
+  const kontakt = document.getElementById('verkaeufer-kontakt');
+  const mail = document.getElementById('verkaeufer-email');
+  if (!kontakt || !mail) return;
+  let abgeleitet = '';
+  kontakt.addEventListener('input', () => {
+    if (v('gesellschaft') !== 'EIS' || typeof _eisKontaktMail !== 'function') return;
+    if (mail.value.trim() && mail.value.trim() !== abgeleitet) return;
+    abgeleitet = _eisKontaktMail(kontakt.value);
+    mail.value = abgeleitet;
+  });
+}
+
+/* ── Anlagen (BG-24) ── */
+let _anlagen = [];   // [{ name, mime, bytes, base64, beschreibung }]
+
+function setupAnlagen() {
+  const feld = document.getElementById('anlage-datei');
+  if (!feld) return;
+  feld.addEventListener('change', async () => {
+    const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+    for (const f of [...feld.files]) {
+      const mime = MIME[(f.name.split('.').pop() || '').toLowerCase()];
+      if (!mime) { showToast(`${f.name}: nur PDF, PNG oder JPG sind als Anlage erlaubt.`, 'error'); continue; }
+      if (f.size > 10 * 1024 * 1024) { showToast(`${f.name} ist größer als 10 MB und zu groß für eine E-Rechnung.`, 'error'); continue; }
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const drittland = _umfang(v('gesellschaft'), v('kaeufer-land')) === 'drittland';
+      _anlagen.push({ name: f.name, mime, bytes, base64: _base64(bytes),
+        beschreibung: drittland ? 'Unterschriebene Rechnung (Präferenzangaben)' : 'Anlage zur Rechnung' });
+    }
+    feld.value = '';
+    _anlagenZeigen();
+  });
+}
+
+function _anlagenZeigen() {
+  const liste = document.getElementById('anlagen-liste');
+  if (!liste) return;
+  liste.innerHTML = _anlagen.map((a, i) => `<li>
+      <span class="anl-name" title="${escHTML(a.name)}">📎 ${escHTML(a.name)} (${Math.max(1, Math.round(a.bytes.length / 1024))} KB)</span>
+      <input type="text" value="${escHTML(a.beschreibung)}" data-anl="${i}" aria-label="Beschreibung der Anlage">
+      <button type="button" data-anl-weg="${i}" title="Anlage entfernen">✕</button>
+    </li>`).join('');
+  liste.querySelectorAll('[data-anl]').forEach(el => el.addEventListener('input', () => {
+    _anlagen[+el.dataset.anl].beschreibung = el.value;
+  }));
+  liste.querySelectorAll('[data-anl-weg]').forEach(el => el.addEventListener('click', () => {
+    _anlagen.splice(+el.dataset.anlWeg, 1);
+    _anlagenZeigen();
+  }));
+}
+
+function _base64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
 }
 
 /* ── Rechnungsadresse je Kunde (BT-49): vorschlagen und merken, js/kundenmail.js ── */
@@ -645,6 +727,11 @@ function updateTotals() {
   });
 
   document.getElementById('total-brutto').textContent = formatDE(grossTotal) + ' €';
+  const gezahlt = parseFloat(v('gezahlt')) || 0;
+  document.getElementById('total-gezahlt-zeile').hidden = !gezahlt;
+  document.getElementById('total-zahlbetrag-zeile').hidden = !gezahlt;
+  document.getElementById('total-gezahlt').textContent = '−' + formatDE(gezahlt) + ' €';
+  document.getElementById('total-zahlbetrag').textContent = formatDE(grossTotal - gezahlt) + ' €';
 }
 
 /* ── Form Setup ── */
@@ -713,6 +800,8 @@ function collectFormData() {
     vorrechnungsnummer: v('vorrechnungsnummer'), // BT-25
     vorrechnungsdatum: v('vorrechnungsdatum'),   // BT-26
     steuerbetrag:      v('steuerbetrag-original'),   // MwSt laut Original (BT-110)
+    gezahlt:           parseFloat(v('gezahlt')) || 0,  // BT-113
+    anlagen:           _anlagen.map(a => ({ ...a })),  // BG-24
     gesellschaft:      v('gesellschaft') || 'WGC',
     // Steuerbefreiung (bei 0%-Positionen): UNTDID 5305 + BT-120
     steuerkategorie:   v('steuerkategorie') || 'Z',
@@ -783,10 +872,18 @@ async function exportInvoice(format) {
     return;
   }
 
-  // Werke wie EIS wandeln nur Rechnungen an Kunden im Inland um (Pflicht nach § 14 UStG)
-  if (_nurInlandAusland(data.gesellschaft, data.kaeuferland)
-    && !window.confirm(`Der Kunde hat eine Anschrift im Ausland (${data.kaeuferland}). Für ${data.gesellschaft} werden nur `
-      + 'Rechnungen an Kunden im Inland als E-Rechnung verschickt, ins Ausland geht wie bisher das PDF. Trotzdem exportieren?')) {
+  // Werke wie EIS: Pflicht ist die E-Rechnung nur im Inland (§ 14 UStG). EU-Ausland
+  // bleibt PDF; Drittland geht nur mit dem unterschriebenen Original als Anlage.
+  const umfang = _umfang(data.gesellschaft, data.kaeuferland);
+  if (umfang === 'eu'
+    && !window.confirm(`Der Kunde hat eine Anschrift im EU-Ausland (${data.kaeuferland}). Für ${data.gesellschaft} geht die Rechnung `
+      + 'dorthin wie bisher als PDF. Trotzdem als E-Rechnung exportieren?')) {
+    return;
+  }
+  if (umfang === 'drittland' && !(data.anlagen || []).length
+    && !window.confirm(`Drittlandrechnung ohne Anlage: Das unterschriebene Original mit den Präferenzangaben fehlt. `
+      + 'Trotzdem exportieren?')) {
+    document.getElementById('anlage-datei').focus();
     return;
   }
 
@@ -1205,6 +1302,9 @@ async function _buildZugferdPdf(data, totals, xml, ust) {
       mimeType: 'text/plain',
       description: 'Qualifizierte USt-IdNr-Bestätigung (' + (ust.quelle || '') + ')',
     });
+  }
+  for (const a of (data.anlagen || [])) {
+    extras.push({ bytes: a.bytes, filename: a.name, mimeType: a.mime, description: a.beschreibung || a.name });
   }
   return await embedXMLIntoPDF(basePdf, xml, 'zugferd', extras);
 }

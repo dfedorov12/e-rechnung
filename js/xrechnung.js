@@ -54,6 +54,7 @@ function buildXML(data, profile = 'xrechnung') {
   const netTotal = Object.values(vatGroups).reduce((s, g) => s + g.base, 0);
   const vatTotal = Object.values(vatGroups).reduce((s, g) => s + g.amount, 0);
   const grossTotal = netTotal + vatTotal;
+  const gezahlt = Math.round((parseFloat(data.gezahlt) || 0) * 100) / 100;   // BT-113 bereits gezahlt (Anzahlungen)
 
   const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -258,6 +259,7 @@ function buildXML(data, profile = 'xrechnung') {
       ${data.bestellnummer ? `<ram:BuyerOrderReferencedDocument>
         <ram:IssuerAssignedID>${esc(data.bestellnummer)}</ram:IssuerAssignedID>
       </ram:BuyerOrderReferencedDocument>` : ''}
+      ${_anlagenXML(data.anlagen, profile)}
     </ram:ApplicableHeaderTradeAgreement>
 
     <ram:ApplicableHeaderTradeDelivery>
@@ -304,7 +306,8 @@ function buildXML(data, profile = 'xrechnung') {
         <ram:TaxBasisTotalAmount>${fmt(netTotal)}</ram:TaxBasisTotalAmount>
         <ram:TaxTotalAmount currencyID="EUR">${fmt(vatTotal)}</ram:TaxTotalAmount>
         <ram:GrandTotalAmount>${fmt(grossTotal)}</ram:GrandTotalAmount>
-        <ram:DuePayableAmount>${fmt(grossTotal)}</ram:DuePayableAmount>
+        ${gezahlt ? `<ram:TotalPrepaidAmount>${fmt(gezahlt)}</ram:TotalPrepaidAmount>` : ''}
+        <ram:DuePayableAmount>${fmt(grossTotal - gezahlt)}</ram:DuePayableAmount>
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
       ${data.vorrechnungsnummer ? `<ram:InvoiceReferencedDocument>
         <ram:IssuerAssignedID>${esc(data.vorrechnungsnummer)}</ram:IssuerAssignedID>
@@ -314,6 +317,22 @@ function buildXML(data, profile = 'xrechnung') {
   </rsm:SupplyChainTradeTransaction>
 
 </rsm:CrossIndustryInvoice>`;
+}
+
+/**
+ * Anlagen (BG-24, BT-122 bis BT-125), z. B. das unterschriebene Original einer
+ * Drittlandrechnung. In der XRechnung steckt die Datei selbst im XML; bei ZUGFeRD
+ * hängt sie als Datei am PDF (js/app.js), das XML nennt sie nur.
+ * anlagen: [{ name, mime, base64, beschreibung }]
+ */
+function _anlagenXML(anlagen, profile) {
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return (anlagen || []).filter(a => a && a.name).map(a => `<ram:AdditionalReferencedDocument>
+        <ram:IssuerAssignedID>${esc(a.name)}</ram:IssuerAssignedID>
+        <ram:TypeCode>916</ram:TypeCode>
+        <ram:Name>${esc(a.beschreibung || a.name)}</ram:Name>
+        ${profile !== 'zugferd' && a.base64 ? `<ram:AttachmentBinaryObject mimeCode="${esc(a.mime || 'application/pdf')}" filename="${esc(a.name)}">${a.base64}</ram:AttachmentBinaryObject>` : ''}
+      </ram:AdditionalReferencedDocument>`).join('\n      ');
 }
 
 function mapUnit(einheit) {

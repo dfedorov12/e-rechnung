@@ -998,16 +998,20 @@ function extractEis(fullText) {
   if (i10 >= 0 && i20 > i10) {
     const block = z.slice(i10 + 1, i20).filter(l => !/^Auftragsnummer$/i.test(l));
     const erste = block[0] || '';
-    const m = erste.match(/^(\S+)\s+(.+?)\s+((?:\(0\)\s*)?\d[\d\/\- ]{4,})$/);
+    // „Bestellnummer Nachname Vorname Durchwahl", die Durchwahl kann fehlen
+    const m = erste.match(/^(\S+)\s+([A-Za-zÄÖÜäöüß][^\d]*?)(?:\s+((?:\(0\)\s*)?\d[\d\/\- ]{4,}))?$/);
     if (m) {
       r.bestellnummer = m[1];
-      r.verkaeufkontakt = m[2];
-      r.verkaeuftel = m[3].trim();
+      r.verkaeufkontakt = m[2].trim();
+      if (m[3]) r.verkaeuftel = m[3].trim();
     } else if (/^\S+$/.test(erste)) r.bestellnummer = erste;
     block.slice(1).forEach(l => {
-      const d = l.match(/^(\d{2}\.\d{2}\.\d{4})(?:\s+\d+)?$/);
-      if (d && !bestelldatum) bestelldatum = d[1];
-      else if (/^\d{3,10}$/.test(l) && !auftrag) auftrag = l;
+      const d = l.match(/^(\d{2}\.\d{2}\.\d{4})(?:\s+(\d+))?$/);
+      if (d && !bestelldatum) {
+        bestelldatum = d[1];
+        // Englisches Formular: der Rest der Durchwahl rutscht hinter das Bestelldatum
+        if (d[2] && r.verkaeuftel && /\d$/.test(r.verkaeuftel)) r.verkaeuftel += ' ' + d[2];
+      } else if (/^\d{3,10}$/.test(l) && !auftrag) auftrag = l;
     });
   }
 
@@ -1092,9 +1096,21 @@ function extractEis(fullText) {
   // ── Summen und Hinweise nach den Positionen ──────────────────────────────
   let netto = null, satz = null;
   const notiz = [];
+  const anzahlungen = [];
+  let imAnzahlung = false;
   for (let i = iSumme >= 0 ? iSumme : z.length; i < z.length; i++) {
     const l = z[i];
     let m;
+    // Schlussrechnung: Block der erhaltenen Anzahlungen (BT-113)
+    if (/^(?:payments received until|erhaltene Anzahlungen|Anzahlungen bis)/i.test(l)) { imAnzahlung = true; continue; }
+    if (imAnzahlung) {
+      if ((m = l.match(/^(\d{6,10})\s*\/\s*(\d{2}\.\d{2}\.\d{4})\s+[\d,]+\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})$/))) {
+        anzahlungen.push({ nr: m[1], datum: m[2], netto: _parseDE(m[3]), steuer: _parseDE(m[4]), brutto: _parseDE(m[5]) });
+        continue;
+      }
+      if (/^(?:invoice no\.?\s*\/\s*date|Rechnungs?-?\s*Nr\.?\s*\/\s*Datum|total amount\s+[\d,]+\s|Summe\s+[\d,]+\s|remaining amount|Restbetrag|VAT\s+[\d,]+\s*%|MwSt\.?\s+[\d,]+\s*%|due remaining|fälliger Restbetrag)/i.test(l)) continue;
+      imAnzahlung = false;
+    }
     if ((m = l.match(/^(?:Summe Positionen|Total Amount Before Tax)\s+(-?[\d.]+,\d{2})$/i))) { netto = _parseDE(m[1]); continue; }
     if ((m = l.match(/^(?:Umsatzsteuer|German VAT)\s+(\d{1,2},\d{2})\s*%?\s+(-?[\d.]+,\d{2})$/i))) {
       satz = _parseDE(m[1]); r.steuerbetrag = _parseDE(m[2]); continue;
@@ -1104,6 +1120,15 @@ function extractEis(fullText) {
     notiz.push(l);
   }
   const mwst = satz !== null ? satz : 19;
+
+  // Schlussrechnung: bereits gezahlte Anzahlungen abziehen
+  if (anzahlungen.length) {
+    r.gezahlt = Math.round(anzahlungen.reduce((s, a) => s + a.brutto, 0) * 100) / 100;
+    notiz.unshift('Anzahlungen: ' + anzahlungen.map(a => `${a.nr} vom ${a.datum} über ${a.brutto.toFixed(2).replace('.', ',')} EUR`).join('; '));
+    if (!r.vorrechnungsnummer && anzahlungen.length === 1) {
+      r.vorrechnungsnummer = anzahlungen[0].nr; r.vorrechnungsdatum = _deDate(anzahlungen[0].datum);
+    }
+  }
 
   // Bezug auf die ursprüngliche Rechnung (Gutschrift)
   const bezugText = kopfNotiz.concat(notiz).join(' ');
@@ -1130,6 +1155,9 @@ function extractEis(fullText) {
   // Innergemeinschaftlich braucht ein Leistungsdatum (BR-IC-11). Ohne Versand
   // (Lastschrift, Gutschrift) gilt das Belegdatum.
   if (r.steuerkategorie === 'K' && !r.lieferdatum) r.lieferdatum = r.rechnungsdatum;
+
+  // Gutschrift ohne Zahlungsziel: EN 16931 verlangt Fälligkeit oder Zahlungsbedingung (BR-CO-25)
+  if (!zahlung && !r.faelligkeitsdatum && r.rechnungsart === '381') zahlung = 'Gutschrift';
 
   // Hinweis (BT-22): Bestellung, Lieferbedingung, Zahlungsbedingung, Texte des Belegs
   const kopfZeilen = [];

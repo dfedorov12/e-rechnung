@@ -393,6 +393,17 @@
               <label>Notiz / Hinweise</label>
               <textarea id="notiz" placeholder="Zahlbar innerhalb von 30 Tagen ohne Abzug."></textarea>
             </div>
+            <div class="form-group">
+              <label>Bereits gezahlt (BT-113)</label>
+              <input type="number" id="gezahlt" step="0.01" min="0" placeholder="0,00">
+              <span class="hint">Anzahlungen, die eine Schlussrechnung abzieht. Wird bei Gienanth aus dem Beleg gelesen.</span>
+            </div>
+            <div class="form-group full-width">
+              <label>Anlagen (BG-24)</label>
+              <input type="file" id="anlage-datei" accept=".pdf,.png,.jpg,.jpeg" multiple>
+              <ul class="anlagen-liste" id="anlagen-liste"></ul>
+              <span class="hint" id="anlagen-hinweis">Zum Beispiel das unterschriebene Original einer Drittlandrechnung oder Lieferdokumente. Die Datei reist in der E-Rechnung mit: bei XRechnung im XML, bei ZUGFeRD als Anhang im PDF.</span>
+            </div>
           </div>
         </div>
       </div>
@@ -442,6 +453,14 @@
             <div class="totals-row total-grand">
               <span>Gesamtbetrag</span>
               <span class="amount" id="total-brutto">0,00 €</span>
+            </div>
+            <div class="totals-row" id="total-gezahlt-zeile" hidden>
+              <span>Bereits gezahlt</span>
+              <span class="amount" id="total-gezahlt">0,00 €</span>
+            </div>
+            <div class="totals-row total-grand" id="total-zahlbetrag-zeile" hidden>
+              <span>Zahlbetrag</span>
+              <span class="amount" id="total-zahlbetrag">0,00 €</span>
             </div>
           </div>
         </div>
