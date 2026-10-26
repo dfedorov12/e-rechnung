@@ -96,10 +96,17 @@ Postfach des Werks und setzt den Status.
 2. **Trigger** einstellen:
    - Websiteadresse: `https://dihag.sharepoint.com/sites/Rechnungsmonitoring`
    - Listenname: `KreditorMails`
-   - Reiter „Einstellungen“, bei „Triggerbedingungen“ auf „Hinzufügen“ und eintragen:
+   - Reiter „Einstellungen“, bei „Auslöserbedingungen“ auf „Hinzufügen“ und eintragen:
      ```
      @equals(triggerOutputs()?['body/Status/Value'], 'Wartet')
      ```
+   - Im selben Reiter „Teilen bei“ eingeschaltet lassen. Das Feld
+     **„„Teilen bei“-Nachverfolgungs-ID“** darf nicht leer sein, sonst lässt sich der Flow nicht
+     speichern („The 'clientTrackingId' value is not valid“). Eintragen:
+     ```
+     @{triggerBody()?['ID']}
+     ```
+     Dann steht im Ausführungsverlauf die ID des Listeneintrags.
 
 3. Darunter **„+“**, Aktion **„Verfassen“** (Datenvorgang). Über „…“ umbenennen in
    `Postfach`. Bei „Eingaben“ über „fx“ diesen Ausdruck eintragen:
