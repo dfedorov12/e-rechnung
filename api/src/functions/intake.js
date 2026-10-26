@@ -66,6 +66,12 @@ const TEXT_BERICHTIGUNG_FORMAT =
   + 'Vorbehalt; bitte uebermitteln Sie eine korrigierte E-Rechnung (XRechnung oder '
   + 'ZUGFeRD/Factur-X, Profil EN16931 oder hoeher).';
 
+// Zurueckweisung bei Fehlern in der Pruefung nach EN 16931 (Pruefergebnis rot).
+const TEXT_ZURUECKWEISUNG_FEHLER =
+  'Ihre E-Rechnung hat die Pruefung nach EN 16931 nicht bestanden und ist so keine gueltige '
+  + 'E-Rechnung. Wir koennen sie nicht verarbeiten und bitten Sie um eine korrigierte '
+  + 'E-Rechnung (XRechnung oder ZUGFeRD/Factur-X, Profil EN16931 oder hoeher).';
+
 app.http('intake', {
   methods: ['GET', 'POST'],
   authLevel: 'function',
@@ -229,6 +235,17 @@ app.http('intake', {
         res.zurueckweisung = v.zurueckweisung;
         res.kreditorAktion = { art: 'zurueckweisung', grund: v.zurueckweisung.grund, text: v.zurueckweisung.text };
         res.buchung = 'zurueckgewiesen';
+      }
+      // Fehler in der Pruefung (rot, z. B. Summen passen nicht): keine gueltige E-Rechnung,
+      // nicht buchen, korrigierte E-Rechnung anfordern. Gelb (nur Warnungen): gueltig, aber
+      // unter Vorbehalt, damit jemand draufschaut. Bis 10/2026 blieben beide auf Automatik.
+      // Rein formale Fehler (Leitweg) machen KoSIT schon gruen, sie landen nicht hier.
+      if (res.konform === 'rot' && !res.zurueckweisung) {
+        res.zurueckweisung = { grund: 'pruefung-rot', text: TEXT_ZURUECKWEISUNG_FEHLER };
+        res.kreditorAktion = { art: 'zurueckweisung', grund: 'pruefung-rot', text: TEXT_ZURUECKWEISUNG_FEHLER };
+        res.buchung = 'zurueckgewiesen';
+      } else if (res.konform === 'gelb' && res.buchung === 'automatik') {
+        res.buchung = 'unter_vorbehalt';
       }
       // Punkt 1: PDF/A-3 fehlt -> KEIN Ablehnungsgrund. Sonstige Rechnung, unter
       // Vorbehalt buchen, Berichtigung anfordern (konform bleibt das XML-Urteil).
