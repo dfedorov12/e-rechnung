@@ -11,6 +11,7 @@
  *   { konform, konformLabel, accepted, errorCount, warningCount, meldungen[],
  *     meldungenText, hinweis, werkzeug, bericht? }
  */
+const { hinweisWarnungen } = require('./hinweis');
 const MUSTANG_URL = process.env.MUSTANG_URL || 'http://localhost:8090/';
 
 // Standardtext fuer die automatische Zurueckweisung von MINIMUM/BASIC-WL (Punkt 3).
@@ -96,6 +97,8 @@ function parseMustangReport(report, opts = {}) {
   if (invalid) {
     const first = uniq(errTexts)[0] || 'Dokument entspricht nicht dem deklarierten Profil.';
     hinweis = 'Profil-/Formatfehler (ZUGFeRD/Factur-X): ' + first.slice(0, 240);
+  } else if (warningCount) {
+    hinweis = hinweisWarnungen(warnTexts);
   }
 
   // MINIMUM/BASIC-WL sind KEINE E-Rechnung (UStAE 14.1 Abs. 14) -> HARTER STOPP:

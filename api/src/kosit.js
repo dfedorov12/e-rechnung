@@ -1,4 +1,5 @@
 'use strict';
+const { hinweisWarnungen } = require('./hinweis');
 /**
  * KoSIT-Validierung (Client zum KoSIT-Validator im Daemon-Modus)
  * ==============================================================
@@ -105,7 +106,8 @@ function _en16931Guideline(xml) {
  */
 function parseReport(reportXml, httpRejected) {
   const s = String(reportXml || '');
-  const strip = t => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const strip = t => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 
   // Authoritatives Urteil: HTTP-Status 406 des Daemons ODER <rep:reject> im Report.
   const rejected = httpRejected === true || /<rep:reject\b/i.test(s);
@@ -113,15 +115,30 @@ function parseReport(reportXml, httpRejected) {
   const meldungen = [];
   let m;
 
+  // Befunde des KoSIT-Daemons: <rep:message level="error|warning|information" code="…">Text</rep:message>.
+  // Das ist das eigentliche Format des Berichts. Bis 10/2026 las der Parser es nur über
+  // die HTML-Tabelle und nur bei Ablehnung, dabei wurde jede Warnung zum Fehler und bei
+  // angenommenen Rechnungen fielen Warnungen ganz weg (grün statt gelb).
+  const repRe = /<rep:message\b([^>]*)>([\s\S]*?)<\/rep:message>/gi;
+  while ((m = repRe.exec(s))) {
+    const lvl = (m[1].match(/\blevel="([^"]*)"/i) || ['', ''])[1].toLowerCase();
+    if (lvl !== 'error' && lvl !== 'warning') continue;          // information zählt nicht
+    const code = (m[1].match(/\bcode="([^"]*)"/i) || ['', ''])[1];
+    let text = strip(m[2]);
+    if (code && !text.includes(code)) text = `[${code}] ${text}`;
+    if (text) meldungen.push({ level: lvl, text: text.slice(0, 300) });
+  }
+  const ausRep = meldungen.length > 0;
+
   const failRe = /<svrl:failed-assert\b([^>]*)>([\s\S]*?)<\/svrl:failed-assert>/gi;
-  while ((m = failRe.exec(s))) {
+  while (!ausRep && (m = failRe.exec(s))) {
     const flag = (m[1].match(/flag="([^"]*)"/i) || ['', ''])[1].toLowerCase();
     const level = (flag === 'warning' || flag === 'warn') ? 'warning' : 'error';
     const text = strip(m[2]);
     if (text) meldungen.push({ level, text: text.slice(0, 300) });
   }
   const okRe = /<svrl:successful-report\b([^>]*)>([\s\S]*?)<\/svrl:successful-report>/gi;
-  while ((m = okRe.exec(s))) {
+  while (!ausRep && (m = okRe.exec(s))) {
     const flag = (m[1].match(/flag="([^"]*)"/i) || ['', ''])[1].toLowerCase();
     if (flag === 'warning' || flag === 'warn') {
       const text = strip(m[2]);
@@ -198,7 +215,15 @@ function parseReport(reportXml, httpRejected) {
 function _hinweisAusBefunden(konform, meldungenText, rejected) {
   if (konform === 'gruen') return '';
   const s = String(meldungenText || '');
+  // Nur Warnungen: die erste Warnung nennen, nicht die Fehlertexte unten.
+  if (konform === 'gelb') {
+    return hinweisWarnungen(s.split(' | ').filter(t => t.startsWith('Warnung: ')).map(t => t.slice(9)));
+  }
+  // Für „rot“ nur die Fehler ansehen, sonst greift eine Regel aus einer Warnung.
+  const fehlerTexte = s.split(' | ').filter(t => t.startsWith('Fehler: ')).map(t => t.slice(8));
+  const f = fehlerTexte.join(' | ');
   const regeln = [
+    [/PEPPOL-EN16931-R008\b/i, 'Die Rechnung enthält leere XML-Elemente (z. B. eine leere Abteilung in der Adresse). Formaler Fehler, den der Rechnungssteller beheben muss.'],
     [/BR-CL-18\b/i, 'Rechnungspositionen ohne USt-Kategorie-Code (BT-151) — der Rechnungssteller muss je Position eine USt-Kategorie angeben; sonst lässt sich die Steueraufschlüsselung nicht zuordnen.'],
     [/BR-CO-1[0-7]\b/i, 'Rechnerische Summen stimmen nicht zusammen (Netto/USt/Brutto passen nicht).'],
     [/BR-[A-Z]{1,2}-0[6-9]\b/i, 'USt-Aufschlüsselung passt nicht zu den Positionssummen (Steuerbasis oder Steuerbetrag).'],
@@ -206,9 +231,10 @@ function _hinweisAusBefunden(konform, meldungenText, rejected) {
     [/BR-DEC-\d/i, 'Beträge mit falscher Anzahl Nachkommastellen.'],
     [/BR-CL-\d/i, 'Ungültiger Code — eine Code-Liste (Einheit, Land, USt-Kategorie …) wird nicht eingehalten.'],
     [/CII-(SR|DT)-/i, 'CII-Syntaxfehler — Struktur oder Datentyp entspricht nicht dem ZUGFeRD/Factur-X-Schema.'],
-    [/BR-\d|BR-[A-Z]/i, 'Verstoß gegen EN16931-Pflichtfelder oder -Geschäftsregeln.'],
   ];
-  for (const [re, text] of regeln) if (re.test(s)) return text;
+  for (const [re, text] of regeln) if (re.test(f)) return text;
+  // Keine bekannte Regel: den ersten Fehler aus dem Bericht nennen.
+  if (fehlerTexte.length) return 'Fehler laut Prüfbericht: ' + fehlerTexte[0].slice(0, 200);
   // Abgelehnt, aber keine Einzelbefunde greifbar (z. B. gar kein Prüfszenario).
   if (rejected) return 'Von KoSIT als nicht konform abgelehnt (kein passendes Prüfszenario / Dokumenttyp nicht erkannt).';
   return '';
