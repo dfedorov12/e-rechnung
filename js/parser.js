@@ -134,6 +134,7 @@ const _COMPANY_REGISTRY = {
   DSO: _werkGeruest('DSO'),
   LEG: _werkGeruest('LEG'),
   // ── EWA · Eisenwerk Arnstadt (SAP Adobe-Formular, Parser extractEwa) ──
+  // Wie EIS: E-Rechnung ohne Rückfrage nur für Kunden im Inland (_nurInland)
   EWA: {
     verkaeufer:         'Eisenwerk Arnstadt GmbH',
     verkaeufstrasse:    'Bierweg 4',
@@ -150,6 +151,7 @@ const _COMPANY_REGISTRY = {
     registernr:         'HRB 110887',
     geschaeftsfuehrung: 'Viktor Babushchak',
     _detect: /ewa-guss\.de|HRB\s*110887/i,
+    _nurInland: true,
     _aktiv: true,
   },
   HOL: _werkGeruest('HOL'),
