@@ -16,7 +16,7 @@ Drittlandrechnungen sind vorbereitet und lassen sich umwandeln, eine Pflicht gib
 
 1. Das SAP-PDF (mit Text) in den Konverter laden. Daraus kommen die Rechnungsdaten.
 2. Unter „Anlagen" den eingescannten, unterschriebenen Beleg wählen. Die Beschreibung lautet bei Drittland „Unterschriebene Rechnung (Präferenzangaben)".
-3. Exportieren. Bei XRechnung steckt die Datei im XML, bei ZUGFeRD hängt sie als Datei am PDF und das XML nennt sie.
+3. Exportieren. Bei XRechnung steckt die Datei im XML, bei ZUGFeRD hängt sie als Datei am PDF und das XML nennt sie. Die lesbare PDF-Ansicht im Monitoring führt die Anlage unter „Referenzen" auf.
 
 Lädt jemand einen Drittlandbeleg, erinnert der Konverter an die Anlage. Ohne Anlage fragt der Export nach. Ein eingescannter Beleg allein (ohne Text) taugt nicht als Datenquelle.
 
@@ -60,5 +60,4 @@ Die Kunden-Nummern und Rechnungsmails aus „Vorgaben Fakturierung" lassen sich 
 ## Grenzen
 
 - Die Schlussrechnung lag nur als Scan vor. Das Lesen des Anzahlungsblocks ist an einem nachgebauten Text geprüft und am ersten echten SAP-PDF noch einmal anzusehen.
-- Die lesbare PDF-Ansicht von XML-Dateien nennt Anlagen erst nach dem nächsten Deploy der Function App.
 - Hat das Feld (10) Ihr Zeichen einen Wert, steht er vor der Bestellnummer in derselben Zeile. Das kam in den Mustern nicht vor und ist im Formular zu prüfen.
