@@ -345,6 +345,7 @@ function _parseUBL(root) {
 
 /** CII: füllt r.weitere + je Position r.positionen[i].note / .posExtra */
 function _extraCII(trans, agreement, delivery, settle, r) {
+  const wz = r.waehrung && r.waehrung !== 'EUR' ? r.waehrung : '€';   // Währungszeichen der Rechnung
   const w = [];
   const push = (group, label, value) => { const v = (value || '').trim(); if (v) w.push({ group, label, value: v }); };
 
@@ -383,13 +384,13 @@ function _extraCII(trans, agreement, delivery, settle, r) {
   for (const tt of _children(settle).filter(c => c.localName === 'ApplicableTradeTax')) {
     push('Steuer', 'Steuerstichtag (BT-7)', _xmlDate(_t(tt, 'TaxPointDate', 'DateString')));
     const rate = _t(tt, 'RateApplicablePercent'), basis = _t(tt, 'BasisAmount'), amt = _t(tt, 'CalculatedAmount'), cat = _t(tt, 'CategoryCode');
-    if (basis || amt) push('Steueraufschlüsselung', `${cat} · ${rate} %`, `Basis ${basis} € · Steuer ${amt} €`);
+    if (basis || amt) push('Steueraufschlüsselung', `${cat} · ${rate} %`, `Basis ${basis} ${wz} · Steuer ${amt} ${wz}`);
   }
 
   // Zu-/Abschläge (Dokumentebene)
   for (const ac of _children(settle).filter(c => c.localName === 'SpecifiedTradeAllowanceCharge')) {
     const isCharge = _t(ac, 'ChargeIndicator', 'Indicator') === 'true';
-    push('Zu-/Abschläge', isCharge ? 'Zuschlag' : 'Abschlag', `${_t(ac, 'Reason')} ${_t(ac, 'ActualAmount')} €`);
+    push('Zu-/Abschläge', isCharge ? 'Zuschlag' : 'Abschlag', `${_t(ac, 'Reason')} ${_t(ac, 'ActualAmount')} ${wz}`);
   }
 
   r.weitere = w;
@@ -415,6 +416,7 @@ function _extraCII(trans, agreement, delivery, settle, r) {
 
 /** UBL: füllt r.weitere + je Position r.positionen[i].note / .posExtra */
 function _extraUBL(root, r) {
+  const wz = r.waehrung && r.waehrung !== 'EUR' ? r.waehrung : '€';   // Währungszeichen der Rechnung
   const w = [];
   const push = (group, label, value) => { const v = (value || '').trim(); if (v) w.push({ group, label, value: v }); };
 
@@ -436,12 +438,12 @@ function _extraUBL(root, r) {
 
   for (const ac of _children(root).filter(c => c.localName === 'AllowanceCharge')) {
     const isCharge = _t(ac, 'ChargeIndicator') === 'true';
-    push('Zu-/Abschläge', isCharge ? 'Zuschlag' : 'Abschlag', `${_t(ac, 'AllowanceChargeReason')} ${_t(ac, 'Amount')} €`);
+    push('Zu-/Abschläge', isCharge ? 'Zuschlag' : 'Abschlag', `${_t(ac, 'AllowanceChargeReason')} ${_t(ac, 'Amount')} ${wz}`);
   }
 
   for (const ts of _all(root, 'TaxSubtotal')) {
     const rate = _t(ts, 'TaxCategory', 'Percent'), basis = _t(ts, 'TaxableAmount'), amt = _t(ts, 'TaxAmount'), cat = _t(ts, 'TaxCategory', 'ID');
-    if (basis || amt) push('Steueraufschlüsselung', `${cat} · ${rate} %`, `Basis ${basis} € · Steuer ${amt} €`);
+    if (basis || amt) push('Steueraufschlüsselung', `${cat} · ${rate} %`, `Basis ${basis} ${wz} · Steuer ${amt} ${wz}`);
   }
 
   r.weitere = w;
