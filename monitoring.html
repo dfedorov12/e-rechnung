@@ -98,9 +98,9 @@
     .ug-badge.ug-klein { background:var(--gray-100); color:var(--gray-600); cursor:default; }
     button.ug-badge:hover { border-color:currentColor; }
 
-    #ug-dialog { margin:auto; border:none; border-radius:12px; padding:0; width:min(680px, calc(100vw - 32px));
+    #ug-dialog, #bh-dialog { margin:auto; border:none; border-radius:12px; padding:0; width:min(680px, calc(100vw - 32px));
                 max-height:calc(100vh - 48px); box-shadow:0 20px 50px rgba(0,0,0,.25); }
-    #ug-dialog::backdrop { background:rgba(17,24,39,.45); }
+    #ug-dialog::backdrop, #bh-dialog::backdrop { background:rgba(17,24,39,.45); }
     .ug-form { padding:20px 22px; display:flex; flex-direction:column; gap:12px; }
     .ug-kopf { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
     .ug-kopf h3 { margin:0; font-size:17px; color:var(--gray-900); }
@@ -147,6 +147,28 @@
     .ug-sek { border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); }
     .ug-prim { border:1px solid var(--primary); background:var(--primary); color:#fff; }
     @media (max-width:600px) { .ug-felder, .ug-wahl { grid-template-columns:1fr; } }
+
+    /* Bearbeitung durch die Buchhaltung (js/bearbeitung.js) */
+    .bh-btn { display:block; margin:0 0 6px; padding:3px 8px; font-size:11px; font-weight:600; border-radius:4px;
+              border:1px solid var(--primary); background:#fff; color:var(--primary); cursor:pointer; }
+    .bh-btn:hover { background:var(--primary); color:#fff; }
+    .bh-varial { margin-top:2px; font-size:11px; color:var(--gray-600); }
+    .bh-pill { display:inline-block; margin:3px 3px 0 0; font-size:11px; font-weight:600; border-radius:3px; padding:1px 6px; }
+    .bh-pill.bh-ja { background:#e3f5e9; color:#0a6b2e; }
+    .bh-pill.bh-nein { background:#ffe0e0; color:#b40000; }
+    .bh-pill.bh-wartet { background:#fff3d6; color:#8a5a00; }
+    .bh-pill.bh-neutral { background:var(--gray-100); color:var(--gray-700); }
+    .bh-raster { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end; }
+    .bh-raster.bh-abas { grid-template-columns:2fr 1fr; }
+    .ug-lbl select { font:inherit; font-size:13px; font-weight:400; color:var(--gray-900); padding:8px 10px;
+              border:1px solid var(--gray-300); border-radius:8px; background:#fff; }
+    .bh-check { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--gray-700); cursor:pointer; padding:8px 0; }
+    .bh-check input { width:16px; height:16px; }
+    .bh-box { display:flex; flex-direction:column; gap:8px; padding:12px 14px; background:var(--gray-50);
+              border:1px solid var(--gray-200); border-radius:8px; }
+    .bh-stand { margin:0; font-size:13px; color:var(--gray-700); }
+    #bh-anf { display:flex; flex-direction:column; gap:10px; }
+    @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas { grid-template-columns:1fr; } }
   </style>
 </head>
 <body class="auth-guard">
@@ -207,6 +229,8 @@
         </select>
         <select id="mon-f-buchung" aria-label="Buchung"><option value="">Alle Buchung</option></select>
         <select id="mon-f-status" aria-label="Status"><option value="">Alle Status</option></select>
+        <select id="mon-f-bstatus" aria-label="Bearbeitungsstatus"><option value="">Alle Bearbeitung</option></select>
+        <select id="mon-f-genehmigt" aria-label="Genehmigt"><option value="">Alle Genehmigt</option></select>
         <input type="date" id="mon-f-from" aria-label="Datum von" title="Datum von">
         <input type="date" id="mon-f-to" aria-label="Datum bis" title="Datum bis">
         <button type="button" id="mon-reset" class="mon-reset">Zurücksetzen</button>
@@ -247,6 +271,7 @@
 
 <!-- 800k-Umsatzgrenze: Einschaetzung + Mailvorlage (js/umsatzgrenze.js) -->
 <dialog id="ug-dialog" aria-label="Umsatzgrenze 800.000 €"></dialog>
+<dialog id="bh-dialog" aria-label="Rechnung bearbeiten"></dialog>
 
 <script src="js/vendor/msal-browser.min.js"></script>
 <script src="js/auth.js"></script>
@@ -256,6 +281,7 @@
 <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';</script>
 <script src="js/lieferant.js"></script>
 <script src="js/umsatzgrenze.js"></script>
+<script src="js/bearbeitung.js"></script>
 <script src="js/monitoring.js"></script>
 
 <script>

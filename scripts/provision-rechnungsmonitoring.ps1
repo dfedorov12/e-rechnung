@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Provisioniert die SharePoint-Rechnungsbibliotheken fuer das DIHAG-Rechnungsmonitoring.
 
@@ -145,6 +145,32 @@ $Felder = @(
   @{ Name='OriginalPdfName';     Titel='Original-PDF-Name';          Typ='Text' }   # js/sharepoint.js
 )
 
+# --- Bearbeitung durch die Buchhaltung (nur ERAR_<Werk>) -------------------------
+# Ersetzt die Eingangsrechnungsliste auf gruppe_wgc. Die Buchhaltung pflegt die Felder
+# im Monitoring (js/bearbeitung.js), der Flow "Genehmigung <Werk>" schreibt das
+# Ergebnis der Genehmigung (docs/Genehmigung-im-Monitoring.md). Werte von Genehmigt
+# wie in der alten Liste, Bearbeitungsstatus = die seit 04/2026 genutzten Werte.
+# Die Datei ist UTF-8 mit BOM, damit die Umlaute auch in Windows PowerShell stimmen.
+$EingangFelder = @(
+  @{ Name='Varialnummer';          Titel='Varialnummer';                   Typ='Text' }
+  @{ Name='Kontierung';            Titel='Kontierung';                     Typ='Note' }
+  @{ Name='Bearbeitungsstatus';    Titel='Bearbeitungsstatus';             Typ='Choice'; FillIn=$true; Choices=@('Offen','In Genehmigung','Vorkasse&BE-Obligo','Vorkasse erfaßt','Keine RG','Gebucht (m. Prüfg rechn & Stammd)','Mahnung','In Klärung','KOPIE') }
+  @{ Name='Genehmigt';             Titel='Genehmigt';                      Typ='Choice'; Choices=@('Ja','Nein','Abgelehnt','In Prüfung','Keine Rechnung','Vertrag','bezahlt','Verkauf','XML') }
+  @{ Name='GenehmigungAn';         Titel='Genehmigung an';                 Typ='Text' }
+  @{ Name='GenehmigtVon';          Titel='Genehmigt von';                  Typ='Text' }
+  @{ Name='GenehmigtAm';           Titel='Genehmigt am';                   Typ='DateTime' }
+  @{ Name='Genehmigungskommentar'; Titel='Genehmigungskommentar';          Typ='Note' }
+  @{ Name='GFGesehen';             Titel='GF gesehen';                     Typ='Boolean' }
+  @{ Name='Notiz';                 Titel='Notiz';                          Typ='Note' }
+  # Anforderung aus dem Monitoring; der Flow reagiert auf GenehmigungAnfordern = Ja
+  @{ Name='GenehmigungAnfordern';  Titel='Genehmigung anfordern (Ausloeser)'; Typ='Boolean' }
+  @{ Name='AnforderungKommentar';  Titel='Kommentar zur Anforderung';      Typ='Note' }
+  @{ Name='AngefordertVon';        Titel='Genehmigung angefordert von';    Typ='Text' }
+  @{ Name='AngefordertAm';         Titel='Genehmigung angefordert am';     Typ='DateTime' }
+  @{ Name='AbasInfoAn';            Titel='Info zum Austragen im abas an';  Typ='Text' }
+  @{ Name='AbasInfoGesendet';      Titel='Info abas gesendet (WL)';        Typ='Boolean' }
+)
+
 # --- Hilfsfunktion: Spalte sicherstellen ---------------------------------------
 function Ensure-Field {
   param([string]$Liste, [hashtable]$Spec)
@@ -241,6 +267,10 @@ foreach ($werk in $Werke) {
 
     Write-Host "   Spalten:"
     foreach ($f in $Felder) { Ensure-Field -Liste $listTitle -Spec $f }
+    if ($r.Praefix -eq 'ERAR') {
+      Write-Host "   Bearbeitung (Buchhaltung):"
+      foreach ($f in $EingangFelder) { Ensure-Field -Liste $listTitle -Spec $f }
+    }
     Ensure-Index -Liste $listTitle -Feld 'Created'
 
     # Sinnvolle Vorbelegung: Richtung + Werk je Bibliothek als Default

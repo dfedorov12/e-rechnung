@@ -197,6 +197,10 @@ unterschiedlich an die Buchhaltung:
 | Übergabe | Eintrag in der Eingangsrechnungsliste auf `gruppe_wgc`, Original und lesbares PDF als Anlage (bei grün oder gelb), Eintrag danach mit dem Prüfergebnis aktualisiert | Archiv-Mail mit lesbarem PDF an das eigene Postfach, Original-Mail nach „Verarbeitet“ |
 | Buchhaltung arbeitet in | der Liste auf `gruppe_wgc` | dem Postfachordner „Verarbeitet“ |
 
+Die Liste auf `gruppe_wgc` wird durch das Monitoring abgelöst: Varialnummer, Kontierung und
+Genehmigung pflegt die Buchhaltung dann an der Rechnung in `ERAR_WGC`, siehe
+[Genehmigung-im-Monitoring.md](Genehmigung-im-Monitoring.md).
+
 ---
 
 ## Dubletten & Nummernkollisionen

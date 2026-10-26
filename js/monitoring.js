@@ -25,7 +25,8 @@ let _monZeigen = MON.tabelleSeite;  // gezeichnete Zeilen, waechst mit „Weiter
 let _monAnsicht = '';               // Filter + Sortierung beim letzten Zeichnen
 let _monLadeLauf = 0;               // laufender Ladevorgang (ein neuer bricht den alten ab)
 let _monLaedt = false;
-const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', from: '', to: '', q: '', flag: '' };
+let _monLibs = [];                  // geladene Bibliotheken (für die Werk-Auswahl)
+const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' };
 let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
 /* ── Laden ──────────────────────────────────────────────────────────── */
@@ -87,6 +88,9 @@ async function loadMonitoring(accessList) {
     // Lieferantennamen dann schon beim ersten Zeichnen. Fehler sind nicht fatal.
     if (typeof ugLaden === 'function') await ugLaden(siteId, token);
     if (typeof ugMailsLaden === 'function') await ugMailsLaden(siteId, token, listsRes.value || []);
+    // Vorgaben für die Bearbeitung (abas-Info je Werk, js/bearbeitung.js)
+    if (typeof bhLaden === 'function') await bhLaden(siteId, token);
+    _monLibs = libs;
 
     // Bibliotheken NACHEINANDER und seitenweise laden, nicht alle parallel. So läuft
     // immer nur ein Abruf, SharePoint drosselt nicht, und die Tabelle füllt sich
@@ -266,6 +270,9 @@ function _monMap(it, f, lib) {
     rueckfrage:            _monBool(f.Rueckfrage),
     konvertiert:           _monBool(f.KonvertiertesPdf),
     kreditorAktion:        (f.KreditorAktion || '').toString(),
+    // Bearbeitung durch die Buchhaltung (js/bearbeitung.js): Varialnummer, Kontierung,
+    // Genehmigung usw.; ersetzt die Eingangsrechnungsliste auf gruppe_wgc
+    bh:       typeof bhAusFeldern === 'function' ? bhAusFeldern(f) : null,
     url:      (it.webUrl || '').toString(),
   };
 }
@@ -329,6 +336,13 @@ function _monGroup(recs) {
     // "öffnen" muss immer eine Datei treffen: hat die Primärzeile keine URL,
     // die erste verfügbare Geschwisterdatei nehmen.
     if (!primary.url) { const s = arr.find(r => r.url); if (s) primary.url = s.url; }
+    // Bearbeitung: eine Datei je Eingangsrechnung trägt die Felder der Buchhaltung.
+    if (typeof bhZiel === 'function' && !primary.intake && primary.richtung === 'Eingang') {
+      primary.bhQuelle = bhZiel(arr);
+      primary.bh = bhZusammen(arr, primary.bhQuelle);
+    } else {
+      primary.bh = null;
+    }
     out.push(primary);
   }
   return out;
@@ -375,6 +389,8 @@ function _monBuildFilterOptions(libs) {
   _fillSelect('mon-f-klass',   uniq(_monRecords.map(r => _monKlass(r))), 'Alle Typen');
   _fillSelect('mon-f-buchung', uniq(_monRecords.map(r => r.buchung)),    'Alle Buchung');
   _fillSelect('mon-f-status',  uniq(_monRecords.map(r => r.status)),     'Alle Status');
+  _fillSelect('mon-f-bstatus', uniq(_monRecords.map(r => r.bh && r.bh.bstatus)),   'Alle Bearbeitung');
+  _fillSelect('mon-f-genehmigt', uniq(_monRecords.map(r => r.bh && r.bh.genehmigt)), 'Alle Genehmigt');
 }
 
 function _fillSelect(id, values, allLabel) {
@@ -411,9 +427,13 @@ function _monMatchBase(r, f, q) {
       && (!f.konform  || (r.konform || '').toLowerCase().startsWith(f.konform))
       && (!f.buchung  || r.buchung === f.buchung)
       && (!f.status   || r.status === f.status)
+      && (!f.bstatus  || (r.bh && r.bh.bstatus) === f.bstatus)
+      && (!f.genehmigt || (r.bh && r.bh.genehmigt) === f.genehmigt)
       && (!f.from     || (d && d >= f.from))
       && (!f.to       || (d && d <= f.to))
-      && (!q || (r.nummer + ' ' + _monPartner(r) + ' ' + r.empf).toLowerCase().includes(q));
+      && (!q || (r.nummer + ' ' + _monPartner(r) + ' ' + r.empf
+                 + (r.bh ? ' ' + r.bh.varial + ' ' + r.bh.kontierung + ' ' + r.bh.notiz + ' ' + r.bh.bestellnr : ''))
+                 .toLowerCase().includes(q));
 }
 
 function _monMatchFlag(r, flag) {
@@ -426,6 +446,7 @@ function _monMatchFlag(r, flag) {
     case 'zurueck':    return /zur(?:ü|ue)ckgew/i.test(r.buchung || '');
     case 'umsatz':     return typeof ugBraucht === 'function' && ugBraucht(r) && !ugFuer(r)
                               && ugPhase(r.datum) !== 'pflicht';
+    case 'genehmigung': return typeof bhInGenehmigung === 'function' && bhInGenehmigung(r.bh);
     default:           return true;
   }
 }
@@ -469,6 +490,7 @@ function _monRenderKpis(rows) {
   const zurueck    = rows.filter(r => _monMatchFlag(r, 'zurueck')).length;
   // Sonstige Rechnungen ohne Einschaetzung zur 800k-Umsatzgrenze (js/umsatzgrenze.js).
   const umsatz     = rows.filter(r => _monMatchFlag(r, 'umsatz')).length;
+  const genehmigung = rows.filter(r => _monMatchFlag(r, 'genehmigung')).length;
 
   // Klassifizierung (ZUGFeRD / XRechnung / PDF ohne E-Rechnung) als Übersichtsfelder.
   const klassCounts = {};
@@ -489,6 +511,7 @@ function _monRenderKpis(rows) {
     { id: 'flag:rueckfrage', label: 'Zur Rückfrage',         val: rueckfrage, cls: rueckfrage ? 'bad' : '' },
     { id: 'flag:zurueck',    label: 'Zurückgewiesen',        val: zurueck,    cls: zurueck ? 'bad' : '' },
     { id: 'flag:umsatz',     label: '800k-Einschätzung offen', val: umsatz,   cls: umsatz ? 'warn' : '' },
+    { id: 'flag:genehmigung', label: 'In Genehmigung',       val: genehmigung, cls: genehmigung ? 'warn' : '' },
     ...klassKeys.map(k => ({ id: 'k:' + k, label: k, val: klassCounts[k], cls: 'klass' })),
   ];
   document.getElementById('mon-kpis').innerHTML = tiles.map(t => {
@@ -568,18 +591,18 @@ function _monRenderTable(rows) {
       <td style="white-space:nowrap;">${_esc(datum)}</td>
       <td><span class="pill pill-werk">${_esc(r.werk)}</span></td>
       <td><span class="pill ${richtCls}">${_esc(r.richtung)}</span></td>
-      <td>${_esc(r.nummer)}${r.dublette
+      <td>${_esc(r.nummer)}${r.bh && r.bh.varial ? `<div class="bh-varial" title="Varialnummer">V ${_esc(r.bh.varial)}</div>` : ''}${r.dublette
         ? `<div class="mon-dupe" title="${_esc(r.dubletteInfo || '')}" style="display:inline-block;margin-top:2px;font-size:11px;font-weight:600;color:#fff;background:#b40000;border-radius:3px;padding:1px 6px;">⚠ Dublette</div>`
         : ''}</td>
       <td>${_monPartnerCell(r)}</td>
       <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
       <td>${faelligCell}</td>
       <td>${_esc(_monKlass(r))}</td>
-      <td>${stat}${gobdBadge}</td>
+      <td>${stat}${gobdBadge}${typeof bhZelle === 'function' ? bhZelle(r) : ''}</td>
       <td>${buchungCell}</td>
       <td>${konCell}</td>
       <td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>
-      <td>${link}</td>
+      <td>${r.bh ? `<button type="button" class="bh-btn" data-bh="${idx}" title="Varialnummer, Kontierung, Genehmigung">Bearbeiten</button>` : ''}${link}</td>
     </tr>`;
   }).join('');
 
@@ -703,7 +726,7 @@ function _monRenderChips() {
   const KONF = { gr: 'grün', gel: 'gelb', rot: 'rot' };
   const FLAG = { offen: 'Offen', fehler: 'Fehler / rot', dublette: 'Dubletten',
                  manuell: 'Manuelle Prüfung', rueckfrage: 'Zur Rückfrage', zurueck: 'Zurückgewiesen',
-                 umsatz: '800k-Einschätzung offen' };
+                 umsatz: '800k-Einschätzung offen', genehmigung: 'In Genehmigung' };
   const deDate = s => s.split('-').reverse().join('.');
   const chips = [];
   if (f.werk)     chips.push(['werk', 'Werk: ' + f.werk]);
@@ -712,6 +735,8 @@ function _monRenderChips() {
   if (f.konform)  chips.push(['konform', 'Konform.: ' + (KONF[f.konform] || f.konform)]);
   if (f.buchung)  chips.push(['buchung', 'Buchung: ' + f.buchung]);
   if (f.status)   chips.push(['status', 'Status: ' + f.status]);
+  if (f.bstatus)  chips.push(['bstatus', 'Bearbeitung: ' + f.bstatus]);
+  if (f.genehmigt) chips.push(['genehmigt', 'Genehmigt: ' + f.genehmigt]);
   if (f.from)     chips.push(['from', 'ab ' + deDate(f.from)]);
   if (f.to)       chips.push(['to', 'bis ' + deDate(f.to)]);
   if (f.q)        chips.push(['q', 'Suche: „' + f.q + '“']);
@@ -723,7 +748,7 @@ function _monRenderChips() {
 }
 
 function _monResetFilters() {
-  Object.assign(_monFilter, { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', from: '', to: '', q: '', flag: '' });
+  Object.assign(_monFilter, { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' });
   _monSyncControls();
   _monApply();
 }
@@ -734,6 +759,7 @@ function _monSyncControls() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
   set('mon-f-werk', f.werk); set('mon-f-richtung', f.richtung); set('mon-f-klass', f.klass);
   set('mon-f-konform', f.konform); set('mon-f-buchung', f.buchung); set('mon-f-status', f.status);
+  set('mon-f-bstatus', f.bstatus); set('mon-f-genehmigt', f.genehmigt);
   set('mon-f-from', f.from); set('mon-f-to', f.to); set('mon-f-q', f.q);
 }
 
@@ -761,6 +787,8 @@ function monInitFilterEvents() {
   bind('mon-f-konform', 'konform');
   bind('mon-f-buchung', 'buchung');
   bind('mon-f-status', 'status');
+  bind('mon-f-bstatus', 'bstatus');
+  bind('mon-f-genehmigt', 'genehmigt');
   bind('mon-f-from', 'from');
   bind('mon-f-to', 'to');
   const q = document.getElementById('mon-f-q');
@@ -799,6 +827,12 @@ function monInitFilterEvents() {
     if (e.target.closest('[data-mehr]')) {
       _monZeigen += MON.tabelleSeite;
       _monRenderTable(_monRows);
+      return;
+    }
+    const bh = e.target.closest('[data-bh]');
+    if (bh && typeof bhDialogOeffnen === 'function') {
+      const r = _monRows[Number(bh.getAttribute('data-bh'))];
+      if (r) bhDialogOeffnen(r, () => { _monBuildFilterOptions(_monLibs); _monSyncControls(); _monApply(); });
       return;
     }
     const btn = e.target.closest('[data-ug]');
