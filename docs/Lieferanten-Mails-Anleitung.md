@@ -142,16 +142,46 @@ Postfach des Werks und setzt den Status.
    - Status Value = `Gesendet`
    - Gesendet am: über „fx“ `utcNow()`
 
-8. Den Fehlerfall als parallelen Zweig: auf das „+“ zwischen „E-Mail senden“ und „Gesendet“,
-   **„Parallelen Zweig hinzufügen“**, SharePoint **„Element aktualisieren“**, umbenennen in
-   `Fehler`.
-   - ID und Betreff wie in Schritt 5, Status Value = `Fehler`
-   - Fehlermeldung über „fx“:
-     ```
-     coalesce(body('E-Mail_senden')?['error']?['message'], 'Versand fehlgeschlagen')
-     ```
-   - Reiter „Einstellungen“, „Ausführen nach“: bei „E-Mail senden“ nur **„ist
-     fehlgeschlagen“** und **„hat Timeout“** anhaken, „ist erfolgreich“ abwählen.
+8. **Fehlerfall.** Schlägt „E-Mail senden“ fehl, überspringt Power Automate alles, was danach
+   kommt, also auch „Gesendet“. Der Eintrag bliebe dann für immer auf „Wartet“. Deshalb hängt
+   neben „Gesendet“ ein zweiter Schritt, der nur bei einem Fehler läuft:
+   ```
+   E-Mail senden
+     ├── Gesendet   läuft, wenn das Senden geklappt hat (Standard)
+     └── Fehler     läuft nur, wenn das Senden fehlgeschlagen ist oder hängt
+   ```
+   1. Mit der Maus auf die Verbindungslinie zwischen „E-Mail senden“ und „Gesendet“ gehen und
+      auf das „+“ klicken. Im Menü **„Parallelen Zweig hinzufügen“** wählen, nicht „Aktion
+      hinzufügen“.
+   2. Rechts öffnet sich die Suche. SharePoint **„Element aktualisieren“** wählen. Die neue
+      Aktion erscheint neben „Gesendet“, beide hängen unter „E-Mail senden“.
+   3. Oben im Fenster der Aktion auf ihren Namen klicken (etwa „Element aktualisieren 2“) und
+      in `Fehler` ändern.
+   4. Reiter „Parameter“ ausfüllen:
+      - Websiteadresse und Listenname wie im Trigger
+      - ID: ins Feld klicken, Blitz-Symbol (dynamischer Inhalt), unter „Wenn ein Element
+        erstellt wird“ **ID**
+      - Betreff: ebenso **Betreff**
+      - Erweiterte Parameter: **Status Value** und **Fehlermeldung** dazunehmen
+      - Status Value: `Fehler`
+      - Fehlermeldung: ins Feld klicken, „fx“-Symbol, diesen Ausdruck einfügen und
+        „Hinzufügen“:
+        ```
+        coalesce(body('E-Mail_senden')?['error']?['message'], 'Versand fehlgeschlagen')
+        ```
+        `body('E-Mail_senden')` ist die Antwort der Sendeaktion, bei einem Fehler steht dort die
+        Meldung von Outlook. Fehlt sie, steht „Versand fehlgeschlagen“ in der Liste. Der Name
+        im Ausdruck ist der Aktionsname mit Unterstrich statt Leerzeichen. Heißt die Aktion
+        anders, den Ausdruck anpassen.
+   5. Reiter **„Einstellungen“**, Abschnitt **„Ausführen nach“**. Dort steht „E-Mail senden“
+      mit vier Häkchen. Standard ist nur „ist erfolgreich“. Umstellen auf:
+      - „ist erfolgreich“: **aus**
+      - „hat Timeout“: **an**
+      - „wurde übersprungen“: aus
+      - „ist fehlgeschlagen“: **an**
+
+      Bleibt „ist erfolgreich“ an, setzt „Fehler“ jede erfolgreich gesendete Mail auf
+      „Fehler“.
 
 9. „Speichern“. Die Flow-Prüfung oben darf keine Fehler zeigen.
 
@@ -163,9 +193,14 @@ Postfach des Werks und setzt den Status.
 3. Nach etwa einer Minute ist die Mail im eigenen Posteingang, Absender ist das
    Werks-Postfach. In KreditorMails steht der Eintrag auf „Gesendet“. Im Monitoring zeigt die
    Rechnung nach dem Neuladen „Mail gesendet“.
-4. Gegenprobe: In der Liste KreditorMails einen Eintrag mit Werk `XYZ` und Status `Wartet`
-   von Hand anlegen. Er muss auf „Fehler“ springen, mit dem Hinweis auf das fehlende Postfach.
-5. Danach die Einschätzung der Testrechnung richtig setzen (Abzeichen anklicken, neu wählen,
+4. Gegenprobe Werk: In der Liste KreditorMails einen Eintrag mit Werk `XYZ` und Status
+   `Wartet` von Hand anlegen. Er muss auf „Fehler“ springen, mit dem Hinweis auf das fehlende
+   Postfach.
+5. Gegenprobe Versand: einen Eintrag mit Werk `ZAI`, An `test` (ohne @) und Status `Wartet`
+   anlegen. Outlook lehnt die Adresse ab, „Gesendet“ wird übersprungen, und „Fehler“ schreibt
+   die Meldung in die Liste. Das Monitoring lässt solche Adressen gar nicht erst durch, deshalb
+   geht dieser Test nur direkt in der Liste.
+6. Danach die Einschätzung der Testrechnung richtig setzen (Abzeichen anklicken, neu wählen,
    „Nur speichern“).
 
 ---
