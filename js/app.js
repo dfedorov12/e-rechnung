@@ -58,8 +58,13 @@ function setupGesellschaftSelector() {
   // ihre Ausgangsrechnungen wurden faelschlich als WGC in AR_WGC abgelegt. Nicht
   // nach Ansichts-Zugriffsconfig filtern (sonst fehlt ein Werk und Rechnungen
   // landen im falschen AR_<Werk>).
-  const werke = (typeof activeWerke === 'function' && activeWerke().length)
+  const alle = (typeof activeWerke === 'function' && activeWerke().length)
     ? activeWerke() : ['WGC', 'SHB'];
+  // Werkzuweisung aus den Einstellungen: zugewiesene Benutzer wählen nur ihre Werke.
+  // Admins und Benutzer ohne Zuweisung sehen alle. Passt keine Zuweisung zu einem
+  // aktiven Werk, bleiben alle stehen, damit niemand ohne Auswahl dasteht.
+  const erlaubt = typeof erlaubteWerke === 'function' ? erlaubteWerke(alle) : alle;
+  const werke = erlaubt.length ? erlaubt : alle;
   sel.innerHTML = werke.map(g => {
     const label = (typeof GESELLSCHAFT_LABELS !== 'undefined' && GESELLSCHAFT_LABELS[g.toLowerCase()]) || g;
     return `<option value="${g}">${label}</option>`;

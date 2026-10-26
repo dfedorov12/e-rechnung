@@ -6,6 +6,10 @@
   <title>Einstellungen | E-Rechnung Konverter | DIHAG</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    .werk-add-row { margin-top:14px; max-width:520px; }
+    .card-header .werk-entfernen { margin-left:auto; white-space:nowrap; }
+  </style>
 </head>
 <body class="auth-guard">
 
@@ -53,44 +57,18 @@
     <div class="settings-info-banner">
       <span>ℹ️</span>
       <span>
-        Legen Sie fest, welche Benutzer (per UPN / Microsoft-Login-E-Mail) den Exportverlauf
-        der jeweiligen Gesellschaft einsehen dürfen. Änderungen werden direkt in SharePoint
-        gespeichert und sind sofort für alle Nutzer wirksam.
+        Legen Sie fest, welche Werke es gibt und welche Benutzer (per UPN / Microsoft-Login-E-Mail)
+        welchem Werk zugewiesen sind. Zugewiesene Benutzer sehen nur ihre Werke: im Exportverlauf,
+        im Monitoring und bei der Auswahl im Konverter. Wer keinem Werk zugewiesen ist, sieht im
+        Monitoring und im Konverter weiter alle Werke, Admins immer. Änderungen werden direkt in
+        SharePoint gespeichert und gelten sofort für alle.
       </span>
     </div>
 
-    <div class="settings-grid">
-
-      <!-- WGC -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-icon"><span class="format-tag wgc" style="font-size:12px;">WGC</span></span>
-          <h3>Walzengießerei Coswig GmbH</h3>
-        </div>
-        <div class="card-body">
-          <div class="upn-list" id="upn-list-wgc"></div>
-          <div class="upn-add-row">
-            <input type="email" id="upn-input-wgc" placeholder="name@dihag.com" class="upn-input">
-            <button class="btn btn-primary btn-sm" onclick="addUpn('wgc')">+ Hinzufügen</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- SHB -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-icon"><span class="format-tag shb" style="font-size:12px;">SHB</span></span>
-          <h3>Stahl- und Hartgusswerk Bösdorf GmbH</h3>
-        </div>
-        <div class="card-body">
-          <div class="upn-list" id="upn-list-shb"></div>
-          <div class="upn-add-row">
-            <input type="email" id="upn-input-shb" placeholder="name@dihag.com" class="upn-input">
-            <button class="btn btn-primary btn-sm" onclick="addUpn('shb')">+ Hinzufügen</button>
-          </div>
-        </div>
-      </div>
-
+    <div class="settings-grid" id="werk-grid"></div>
+    <div class="upn-add-row werk-add-row">
+      <select id="werk-neu" class="upn-input" aria-label="Werk hinzufügen"></select>
+      <button class="btn btn-primary btn-sm" onclick="addWerk()">+ Werk hinzufügen</button>
     </div>
 
     <!-- Fehler-Benachrichtigung pro Werk -->
@@ -138,15 +116,10 @@
 
 <script>
 /* ── In-Memory Arbeitskopie der Config ── */
-let _editConfig = { wgc: [], shb: [] };
+let _editConfig = {};   // { wgc: ['user@…'], shb: [], zai: [] }; Schlüssel = zugewiesene Werke
 
 /* ── Fehler-Benachrichtigung: E-Mail je Werk ── */
-const WERKE_ALL = [
-  ['WGC', 'Walzengießerei Coswig GmbH'],
-  ['SHB', 'Stahl- und Hartgusswerk Bösdorf GmbH'],
-  ['EIS', 'Werk EIS'], ['DSO', 'Werk DSO'], ['LEG', 'Werk LEG'], ['EWA', 'Werk EWA'],
-  ['HOL', 'Werk HOL'], ['MEG', 'Werk MEG'], ['SCH', 'Werk SCH'], ['ZAI', 'Werk ZAI'],
-];
+const WERKE_ALL = WERKE_ALLE;   // js/access.js
 let _editFehler = {};
 
 /* ── Init nach Login ── */
@@ -162,17 +135,10 @@ onAuthReady(async () => {
   showOverlay(true);
   try {
     await loadRuntimeAccessConfig();
-    const cfg = _runtimeConfig || ACCESS_CONFIG_DEFAULT;
-    _editConfig = {
-      wgc: [...(cfg.wgc || [])],
-      shb: [...(cfg.shb || [])],
-    };
+    _editConfig = _kopie(_runtimeConfig || ACCESS_CONFIG_DEFAULT);
   } catch (e) {
     showToast('Konfiguration konnte nicht geladen werden: ' + e.message, 'error');
-    _editConfig = {
-      wgc: [...(ACCESS_CONFIG_DEFAULT.wgc || [])],
-      shb: [...(ACCESS_CONFIG_DEFAULT.shb || [])],
-    };
+    _editConfig = _kopie(ACCESS_CONFIG_DEFAULT);
   } finally {
     showOverlay(false);
   }
@@ -207,27 +173,70 @@ function renderFehlerGrid() {
   }).join('');
 }
 
-/* ── UPN-Listen rendern ── */
+/* ── Werk-Karten mit UPN-Listen rendern ── */
+function _kopie(cfg) {
+  const out = {};
+  for (const [k, v] of Object.entries(cfg || {})) if (Array.isArray(v)) out[k.toLowerCase()] = [...v];
+  return out;
+}
+
+function _werkName(code) {
+  const w = WERKE_ALL.find(([c]) => c === code.toUpperCase());
+  return w ? w[1] : 'Werk ' + code.toUpperCase();
+}
+
 function renderLists() {
-  ['wgc', 'shb'].forEach(g => {
-    const container = document.getElementById(`upn-list-${g}`);
-    container.innerHTML = '';
+  const grid = document.getElementById('werk-grid');
+  const reihenfolge = WERKE_ALL.map(([c]) => c.toLowerCase());
+  const werke = Object.keys(_editConfig)
+    .sort((a, b) => (reihenfolge.indexOf(a) + 1 || 99) - (reihenfolge.indexOf(b) + 1 || 99));
+  grid.innerHTML = werke.length ? werke.map(g => {
+    const cls = g === 'wgc' || g === 'shb' ? g : '';
     const upns = _editConfig[g] || [];
-    if (upns.length === 0) {
-      container.innerHTML = `<div class="upn-empty">Noch keine Benutzer eingetragen.</div>`;
-      return;
-    }
-    upns.forEach((upn, idx) => {
-      const row = document.createElement('div');
-      row.className = 'upn-row';
-      row.innerHTML = `
-        <span class="upn-avatar">${upn.slice(0,1).toUpperCase()}</span>
-        <span class="upn-text">${esc(upn)}</span>
-        <button class="btn btn-danger btn-sm" title="Entfernen" onclick="removeUpn('${g}',${idx})">✕</button>`;
-      container.appendChild(row);
-    });
-  });
-  updateHint('');
+    return `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon"><span class="format-tag ${cls}" style="font-size:12px;">${esc(g.toUpperCase())}</span></span>
+          <h3>${esc(_werkName(g))}</h3>
+          <button class="btn btn-danger btn-sm werk-entfernen" title="Werk entfernen" onclick="removeWerk('${g}')">Werk entfernen</button>
+        </div>
+        <div class="card-body">
+          <div class="upn-list">${upns.length ? upns.map((upn, idx) => `
+            <div class="upn-row">
+              <span class="upn-avatar">${esc(upn.slice(0, 1).toUpperCase())}</span>
+              <span class="upn-text">${esc(upn)}</span>
+              <button class="btn btn-danger btn-sm" title="Entfernen" onclick="removeUpn('${g}',${idx})">✕</button>
+            </div>`).join('') : '<div class="upn-empty">Noch keine Benutzer eingetragen.</div>'}</div>
+          <div class="upn-add-row">
+            <input type="email" id="upn-input-${g}" placeholder="name@dihag.com" class="upn-input"
+                   onkeydown="if (event.key === 'Enter') addUpn('${g}')">
+            <button class="btn btn-primary btn-sm" onclick="addUpn('${g}')">+ Hinzufügen</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('') : '<div class="upn-empty">Noch kein Werk angelegt.</div>';
+
+  const frei = WERKE_ALL.filter(([c]) => !(c.toLowerCase() in _editConfig));
+  const sel = document.getElementById('werk-neu');
+  sel.innerHTML = frei.map(([c, n]) => `<option value="${c.toLowerCase()}">${esc(c)} · ${esc(n)}</option>`).join('');
+  sel.parentElement.style.display = frei.length ? '' : 'none';
+}
+
+/* ── Werk hinzufügen / entfernen ── */
+function addWerk() {
+  const g = document.getElementById('werk-neu').value;
+  if (!g || g in _editConfig) return;
+  _editConfig[g] = [];
+  renderLists();
+  updateHint('ungespeicherte Änderungen');
+}
+
+function removeWerk(g) {
+  const n = (_editConfig[g] || []).length;
+  if (n && !confirm(`${g.toUpperCase()} mit ${n} zugewiesenen Benutzer(n) entfernen?`)) return;
+  delete _editConfig[g];
+  renderLists();
+  updateHint('ungespeicherte Änderungen');
 }
 
 /* ── UPN hinzufügen ── */
@@ -314,13 +323,6 @@ function showToast(message, type = 'info') {
   }, 4000);
 }
 
-/* Enter-Taste in UPN-Inputs */
-document.addEventListener('DOMContentLoaded', () => {
-  ['wgc', 'shb'].forEach(g => {
-    const input = document.getElementById(`upn-input-${g}`);
-    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') addUpn(g); });
-  });
-});
 </script>
 
 <script>authInit();</script>

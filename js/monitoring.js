@@ -27,6 +27,9 @@ let _monLadeLauf = 0;               // laufender Ladevorgang (ein neuer bricht d
 let _monLaedt = false;
 let _monLibs = [];                  // geladene Bibliotheken (für die Werk-Auswahl)
 let _monDateien = [];               // alle geladenen Dateien (neu zusammenfassen nach Einstellungen)
+const _monOffen = new Set();        // aufgeklappte Zeilen (Schlüssel: Werk|Richtung|Datei)
+let _monBeobachter = null;          // lädt beim Scrollen die nächste Seite der Tabelle
+let _monDichte = 'normal';          // kompakt | normal | gross (im Browser gemerkt)
 const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' };
 let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
@@ -74,8 +77,8 @@ async function loadMonitoring(accessList) {
         return null;
       })
       .filter(Boolean)
-      // Zugriffsfilter greift nur fuer Werk-Bibliotheken; die Eingangsstufe ist
-      // werkuebergreifend und immer sichtbar (SharePoint-Rechte gaten den Zugriff).
+      // Werkzuweisung aus den Einstellungen (leer = alle). Gilt nur fuer Werk-Bibliotheken;
+      // die Eingangsstufe ist werkuebergreifend und immer sichtbar (SharePoint-Rechte gaten den Zugriff).
       .filter(l => l.intake || allow.size === 0 || allow.has(l.werk.toLowerCase()));
 
     if (!libs.length) {
@@ -339,6 +342,12 @@ function _monGroup(recs) {
       if (!/^rot/i.test(primary.konform || '')) primary.konform = 'Gruen';
       primary.gobdArchiviert = true;
     }
+    // Bis 10/2026 blieb die Buchung bei gelb und rot auf Automatik. Angezeigt wird die
+    // heutige Regel des Prüfdienstes: gelb = Unter Vorbehalt, rot = Zurückgewiesen.
+    if (/^automatik$/i.test(primary.buchung || '') && (primary.richtung || '') === 'Eingang') {
+      if (/^gel/i.test(primary.konform || '')) { primary.buchungAlt = primary.buchung; primary.buchung = 'Unter Vorbehalt'; }
+      else if (/^rot/i.test(primary.konform || '')) { primary.buchungAlt = primary.buchung; primary.buchung = 'Zurueckgewiesen'; }
+    }
     // "öffnen" muss immer eine Datei treffen: hat die Primärzeile keine URL,
     // die erste verfügbare Geschwisterdatei nehmen.
     if (!primary.url) { const s = arr.find(r => r.url); if (s) primary.url = s.url; }
@@ -423,7 +432,12 @@ function _monApply() {
   // Neue Filter oder Sortierung: wieder mit der ersten Seite der Tabelle beginnen.
   // Nachladen und Speichern im Dialog lassen „Weitere anzeigen“ stehen.
   const ansicht = JSON.stringify([f, _monSort]);
-  if (ansicht !== _monAnsicht) { _monAnsicht = ansicht; _monZeigen = MON.tabelleSeite; }
+  if (ansicht !== _monAnsicht) {
+    _monAnsicht = ansicht;
+    _monZeigen = MON.tabelleSeite;
+    const wrap = document.getElementById('mon-wrap');
+    if (wrap) wrap.scrollTop = 0;
+  }
   _monSortRows(rows);
   _monRenderKpis(base);
   _monRenderTable(rows);
@@ -443,7 +457,7 @@ function _monMatchBase(r, f, q) {
       && (!f.genehmigt || (r.bh && r.bh.genehmigt) === f.genehmigt)
       && (!f.from     || (d && d >= f.from))
       && (!f.to       || (d && d <= f.to))
-      && (!q || (r.nummer + ' ' + _monPartner(r) + ' ' + r.empf
+      && (!q || (r.nummer + ' ' + _monPartner(r) + ' ' + r.steller + ' ' + r.empf + ' ' + (r.absenderMail || '')
                  + (r.bh ? ' ' + r.bh.varial + ' ' + r.bh.kontierung + ' ' + r.bh.notiz + ' ' + r.bh.bestellnr : ''))
                  .toLowerCase().includes(q));
 }
@@ -563,27 +577,27 @@ function _monTileClick(id) {
 // Monitoring/monitoring-einstellungen.json, js/bearbeitung.js). Ohne Festlegung gilt
 // MON_STANDARD. Spalten mit bh: true gibt es nur, wenn das Werk die Bearbeitung nutzt.
 const MON_SPALTEN = [
-  { id: 'datum',       titel: 'Datum',                sort: 'datum',      breite: 6 },
+  { id: 'datum',       titel: 'Datum',                sort: 'datum',      breite: 10 },
   { id: 'werk',        titel: 'Werk',                 sort: 'werk',       breite: 5 },
-  { id: 'richtung',    titel: 'Richtung',             sort: 'richtung',   breite: 6 },
-  { id: 'nummer',      titel: 'Rechnungsnr.',         sort: 'nummer',     breite: 9 },
-  { id: 'partner',     titel: 'Steller / Empfänger',  sort: 'partner',    breite: 14 },
-  { id: 'netto',       titel: 'Netto',                sort: 'netto',      breite: 7 },
-  { id: 'brutto',      titel: 'Brutto',               sort: 'brutto',     breite: 7 },
-  { id: 'faellig',     titel: 'Fällig am',            sort: 'faellig',    breite: 7 },
+  { id: 'richtung',    titel: 'Richtung',             sort: 'richtung',   breite: 7 },
+  { id: 'nummer',      titel: 'Rechnungsnr.',         sort: 'nummer',     breite: 10 },
+  { id: 'partner',     titel: 'Steller / Empfänger',  sort: 'partner',    breite: 15 },
+  { id: 'netto',       titel: 'Netto',                sort: 'netto',      breite: 8 },
+  { id: 'brutto',      titel: 'Brutto',               sort: 'brutto',     breite: 8 },
+  { id: 'faellig',     titel: 'Fällig am',            sort: 'faellig',    breite: 8 },
   { id: 'klass',       titel: 'Klassifizierung',      sort: 'klass',      breite: 9 },
   { id: 'status',      titel: 'Status',               sort: 'status',     breite: 8 },
-  { id: 'buchung',     titel: 'Buchung',              sort: 'buchung',    breite: 9 },
-  { id: 'informiert',  titel: 'Lieferant informiert', sort: 'informiert', breite: 7 },
-  { id: 'konform',     titel: 'Konform.',             sort: 'konform',    breite: 10 },
-  { id: 'fehler',      titel: 'Fehler',                                   breite: 6 },
-  { id: 'bestellnr',   titel: 'Bestellnummer',        sort: 'bestellnr',  breite: 7 },
-  { id: 'varial',      titel: 'Varialnummer',         sort: 'varial',     breite: 7, bh: true },
-  { id: 'kontierung',  titel: 'Kontierung',                               breite: 10, bh: true },
-  { id: 'bstatus',     titel: 'Bearbeitung',          sort: 'bstatus',    breite: 8, bh: true },
-  { id: 'genehmigung', titel: 'Genehmigung',          sort: 'genehmigt',  breite: 9, bh: true },
-  { id: 'notiz',       titel: 'Notiz',                                    breite: 10, bh: true },
-  { id: 'links',       titel: '',                                         breite: 6, fest: true },
+  { id: 'buchung',     titel: 'Buchung',              sort: 'buchung',    breite: 11 },
+  { id: 'informiert',  titel: 'Lieferant informiert', sort: 'informiert', breite: 8 },
+  { id: 'konform',     titel: 'Konform.',             sort: 'konform',    breite: 13 },
+  { id: 'fehler',      titel: 'Fehler',                                   breite: 8 },
+  { id: 'bestellnr',   titel: 'Bestellnummer',        sort: 'bestellnr',  breite: 9 },
+  { id: 'varial',      titel: 'Varialnummer',         sort: 'varial',     breite: 9, bh: true },
+  { id: 'kontierung',  titel: 'Kontierung',                               breite: 12, bh: true },
+  { id: 'bstatus',     titel: 'Bearbeitung',          sort: 'bstatus',    breite: 9, bh: true },
+  { id: 'genehmigung', titel: 'Genehmigung',          sort: 'genehmigt',  breite: 11, bh: true },
+  { id: 'notiz',       titel: 'Notiz',                                    breite: 12, bh: true },
+  { id: 'links',       titel: '',                                         breite: 11, fest: true },
 ];
 const MON_STANDARD = ['datum', 'werk', 'richtung', 'nummer', 'partner', 'netto', 'faellig', 'klass',
   'status', 'buchung', 'informiert', 'konform', 'fehler', 'varial', 'bstatus', 'genehmigung'];
@@ -607,15 +621,19 @@ function _monSichtbareSpalten() {
   return MON_SPALTEN.filter(sp => ids.has(sp.id));
 }
 
+// Spaltenbreiten in Pixeln (Einheit 12 px). Ist der Bereich breiter, verteilt der Browser
+// den Rest anteilig; ist er schmaler, scrollt die Tabelle waagerecht.
+const MON_EINHEIT = 12;
+
 function _monRenderKopf(spalten) {
-  const summe = spalten.reduce((a, sp) => a + sp.breite, 0);
+  const summe = spalten.reduce((a, sp) => a + sp.breite, 0) * MON_EINHEIT;
   document.getElementById('mon-cols').innerHTML = spalten
-    .map(sp => `<col style="width:${(sp.breite / summe * 100).toFixed(2)}%">`).join('');
+    .map(sp => `<col style="width:${sp.breite * MON_EINHEIT}px">`).join('');
   document.getElementById('mon-kopf').innerHTML = spalten.map(sp => sp.sort
     ? `<th data-sort="${sp.sort}">${_esc(sp.titel)}<span class="sort-ind"></span></th>`
     : `<th>${_esc(sp.titel)}</th>`).join('');
   const tab = document.querySelector('table.mon-table');
-  if (tab) tab.style.minWidth = Math.max(1040, spalten.length * 86) + 'px';
+  if (tab) tab.style.minWidth = summe + 'px';
 }
 
 function _monGeld(v, r) {
@@ -668,7 +686,8 @@ function _monZelle(id, r, idx) {
       const badges = flags.map(([t, c, bgc]) =>
         `<div title="${_esc(t)}" style="display:inline-block;margin:3px 3px 0 0;font-size:11px;font-weight:600;color:${c};background:${bgc};border-radius:3px;padding:1px 6px;">${_esc(t.length > 28 ? t.slice(0, 26) + '…' : t)}</div>`).join('');
       const ug = typeof ugZelle === 'function' ? ugZelle(r, idx) : '';
-      return `<td>${(r.buchung ? `<span class="pill pill-status">${_esc(r.buchung)}</span>` : '')
+      const tipBuchung = r.buchungAlt ? ` title="Gespeichert ist ${_esc(r.buchungAlt)}. Nach dem Prüfergebnis gilt ${_esc(r.buchung)}."` : '';
+      return `<td>${(r.buchung ? `<span class="pill pill-status"${tipBuchung}>${_esc(r.buchung)}</span>` : '')
         + (badges ? `<div>${badges}</div>` : '') + (ug ? `<div>${ug}</div>` : '') || '–'}</td>`;
     }
     case 'informiert': {
@@ -692,12 +711,11 @@ function _monZelle(id, r, idx) {
     case 'genehmigung': return `<td>${typeof bhZelle === 'function' ? bhZelle(r) : ''}</td>`;
     case 'notiz':    return `<td class="mon-mehrzeilig">${_esc(bh ? bh.notiz : '')}</td>`;
     case 'links': {
-      const extra = (r.dateien || [])
-        .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`).join(' · ');
-      const origLabel = r.ext ? `Original (${r.ext.toUpperCase()})` : 'Original';
-      const link = [r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">${origLabel} ↗</a>` : '', extra]
-        .filter(Boolean).join(' · ');
-      return `<td>${bh ? `<button type="button" class="bh-btn" data-bh="${idx}" title="Varialnummer, Kontierung, Genehmigung">Bearbeiten</button>` : ''}${link}</td>`;
+      const kurz = { 'KoSIT-Bericht': 'Bericht', 'Lesbares PDF': 'Lesbar' };
+      const chip = (url, text, tip) => `<a class="mon-datei" href="${_esc(url)}" target="_blank" rel="noopener" title="${_esc(tip)}">${_esc(text)}</a>`;
+      const dateien = [r.url ? chip(r.url, r.ext ? r.ext.toUpperCase() : 'Datei', 'Original öffnen') : '']
+        .concat((r.dateien || []).map(d => chip(d.url, kurz[d.label] || d.label, d.label + ' öffnen'))).join('');
+      return `<td>${bh ? `<button type="button" class="bh-btn" data-bh="${idx}" title="Varialnummer, Kontierung, Genehmigung">Bearbeiten</button>` : ''}${dateien}</td>`;
     }
     default: return '<td></td>';
   }
@@ -714,7 +732,12 @@ function _monRenderTable(rows) {
   const body = sicht.map((r, idx) => {
     if (!jeWerk.has(r.werk)) jeWerk.set(r.werk, _monWerkSpalten(r.werk));
     const ids = jeWerk.get(r.werk);
-    return '<tr>' + spalten.map(sp => ids.has(sp.id) ? _monZelle(sp.id, r, idx) : '<td></td>').join('') + '</tr>';
+    const offen = _monOffen.has(_monKey(r));
+    const zellen = spalten.map(sp => ids.has(sp.id) ? _monZelle(sp.id, r, idx) : '<td></td>');
+    if (zellen.length) zellen[0] = zellen[0].replace(/^<td([^>]*)>/, '<td$1><span class="mon-auf" aria-hidden="true"></span>');
+    return `<tr class="mon-zeile${idx % 2 ? ' z' : ''}${offen ? ' offen' : ''}" data-zeile="${idx}" tabindex="0" aria-expanded="${offen}">`
+      + zellen.join('') + '</tr>'
+      + (offen ? _monDetailZeile(r, idx, spalten.length) : '');
   }).join('');
 
   const rest = rows.length - sicht.length;
@@ -729,6 +752,165 @@ function _monRenderTable(rows) {
     (rest > 0 ? `${sicht.length} von ${rows.length} Treffern angezeigt (${_monRecords.length} gesamt)`
               : `${rows.length} von ${_monRecords.length} angezeigt`)
     + (_monLaedt ? ' · lädt…' : '');
+  _monNachTabelle(sicht);
+}
+
+/* ── Ansicht: Details, Dichte, Vollbild, Scrollen ───────────────────── */
+
+function _monKey(r) {
+  return [r.werk, r.richtung, r.baseKey || r.file || r.nummer].join('|');
+}
+
+// Nach jedem Zeichnen: Breite für die Details, Knopf „Alle aufklappen“, Nachladen beim Scrollen
+function _monNachTabelle(sicht) {
+  const wrap = document.getElementById('mon-wrap');
+  if (wrap) wrap.style.setProperty('--mon-wrap-breite', wrap.clientWidth + 'px');
+  const alle = document.getElementById('mon-alle-auf');
+  if (alle) {
+    const alleOffen = sicht.length > 0 && sicht.every(r => _monOffen.has(_monKey(r)));
+    alle.textContent = alleOffen ? 'Alle zuklappen' : 'Alle aufklappen';
+    alle.disabled = !sicht.length;
+  }
+  if (_monBeobachter) _monBeobachter.disconnect();
+  const mehr = document.querySelector('#mon-tbody [data-mehr]');
+  if (mehr && wrap && 'IntersectionObserver' in window) {
+    _monBeobachter = new IntersectionObserver(eintraege => {
+      if (!eintraege.some(e => e.isIntersecting)) return;
+      _monBeobachter.disconnect();
+      _monZeigen += MON.tabelleSeite;
+      _monRenderTable(_monRows);
+    }, { root: wrap, rootMargin: '400px 0px' });
+    _monBeobachter.observe(mehr);
+  }
+}
+
+function _monDetailZeile(r, idx, spaltenAnzahl) {
+  return `<tr class="mon-detail" data-detail="${idx}"><td colspan="${spaltenAnzahl}">${_monDetail(r, idx)}</td></tr>`;
+}
+
+// Alle Angaben zu einer Rechnung, auch aus Spalten, die gerade nicht angezeigt werden
+function _monDetail(r, idx) {
+  const block = (titel, paare) => {
+    const inhalt = paare.filter(([, v]) => v != null && v !== '')
+      .map(([k, v]) => `<dt>${_esc(k)}</dt><dd>${v}</dd>`).join('');
+    return inhalt ? `<section><h4>${_esc(titel)}</h4><dl>${inhalt}</dl></section>` : '';
+  };
+  const t = v => (v == null || v === '' ? '' : _esc(v));
+  const p = _monPartnerSicher(r);
+  const flags = [r.formatmangel && 'Formatmangel', r.manuellePruefung && ('Manuelle Prüfung' + (r.manuellePruefungGrund ? ': ' + r.manuellePruefungGrund : '')),
+    r.rueckfrage && 'Rückfrage beim Lieferanten', r.konvertiert && 'technisch konvertiertes PDF', r.dublette && r.dubletteInfo].filter(Boolean);
+  const sonstige = typeof ugSonstige === 'function' && ugSonstige(r);
+  const e = sonstige && typeof ugFuer === 'function' ? ugFuer(r) : null;
+  const mails = sonstige && typeof ugMailsFuer === 'function' ? ugMailsFuer(r).slice(0, 3).map(m => _ugMailStand(m)) : [];
+  const b = r.bh;
+  const dateien = [r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">${r.ext ? 'Original (' + _esc(r.ext.toUpperCase()) + ')' : 'Original'} ↗</a>` : '']
+    .concat((r.dateien || []).map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`))
+    .filter(Boolean).join('<br>');
+  const aktionen = (b ? `<button type="button" class="bh-btn" data-bh="${idx}">Bearbeiten</button>` : '')
+    + (sonstige && typeof ugZelle === 'function' ? ugZelle(r, idx) : '');
+  return `<div class="mon-det">`
+    + block('Rechnung', [['Nummer', t(r.nummer)], ['Datum', t(_monDate(r.datum))], ['Fällig am', t(_monDate(r.faelligkeit))],
+        ['Werk', t(r.werk)], ['Richtung', t(r.richtung)], ['Typ', t(_monKlass(r))], ['Rechnungsart', t(r.art)]])
+    + block(r.richtung === 'Eingang' ? 'Lieferant' : 'Kunde', [
+        ['Name', p.name ? t(p.name) + (p.quelle === 'einschaetzung' ? ' (bei der 800k-Einschätzung bestätigt)' : '') : ''],
+        ['Rechnungsmail von', t(r.absenderMail)], ['USt-IdNr.', t(r.ustid)]])
+    + block('Beträge', [['Netto', t(_monGeld(r.netto, r))], ['Brutto', t(_monGeld(r.brutto, r))], ['Bestellnummer', t((b && b.bestellnr) || r.bestellnr)]])
+    + block('Prüfung', [['Ergebnis', t(r.konform)], ['Hinweis', t(_monHinweis(r))], ['Status', t(r.status)],
+        ['Buchung', t(r.buchung) + (r.buchungAlt ? ` (gespeichert: ${t(r.buchungAlt)})` : '')], ['Prüfschritte', t(flags.join('\n'))],
+        ['Fehler', t(r.fehler)], ['Aufbewahrung', r.gobdArchiviert ? t(r.complianceTag || 'GoBD-Aufbewahrung gesetzt') : '']])
+    + (sonstige ? block('800.000 €', [
+        ['Einschätzung', e ? t(`${(typeof _UG_LABEL !== 'undefined' && _UG_LABEL[e.vermutung]) || e.vermutung}, ${e.vonName || e.von || ''} am ${_monDate(e.am)}`) : 'noch offen'],
+        ['Lieferant informiert', t(typeof ugInformiert === 'function' ? ugInformiert(r) : '')], ['Mails', t(mails.join('\n'))]]) : '')
+    + (b ? block('Bearbeitung', [['Varialnummer', t(b.varial)], ['Kontierung', t(b.kontierung)], ['Bearbeitungsstatus', t(b.bstatus)],
+        ['Genehmigung', t([typeof bhGenehmigungsStand === 'function' ? bhGenehmigungsStand(b) : '', b.genehmigt && 'Genehmigt: ' + b.genehmigt,
+          b.kommentar && 'Kommentar: ' + b.kommentar].filter(Boolean).join('\n'))],
+        ['GF gesehen', b.gfGesehen ? 'Ja' : ''], ['Notiz', t(b.notiz)]]) : '')
+    + (dateien ? `<section><h4>Dateien</h4><div>${dateien}</div></section>` : '')
+    + (aktionen ? `<div class="mon-det-aktionen">${aktionen}</div>` : '')
+    + `</div>`;
+}
+
+function _monZeileUmschalten(tr) {
+  const idx = Number(tr.getAttribute('data-zeile'));
+  const r = _monRows[idx];
+  if (!r) return;
+  const key = _monKey(r);
+  const naechste = tr.nextElementSibling;
+  if (_monOffen.has(key)) {
+    _monOffen.delete(key);
+    if (naechste && naechste.classList.contains('mon-detail')) naechste.remove();
+  } else {
+    _monOffen.add(key);
+    tr.insertAdjacentHTML('afterend', _monDetailZeile(r, idx, tr.children.length));
+  }
+  const offen = _monOffen.has(key);
+  tr.classList.toggle('offen', offen);
+  tr.setAttribute('aria-expanded', String(offen));
+  _monNachTabelle(_monRows.slice(0, _monZeigen));
+}
+
+function _monDichteSetzen(d) {
+  _monDichte = ['kompakt', 'normal', 'gross'].includes(d) ? d : 'normal';
+  const wrap = document.getElementById('mon-wrap');
+  if (wrap) wrap.className = 'mon-table-wrap dichte-' + _monDichte;
+  document.querySelectorAll('[data-dichte]').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.getAttribute('data-dichte') === _monDichte)));
+  try { localStorage.setItem('mon-dichte', _monDichte); } catch (e) { /* ohne Speicher */ }
+}
+
+function _monVollbild(an) {
+  const bereich = document.getElementById('mon-tabelle');
+  if (!bereich) return;
+  const jetzt = typeof an === 'boolean' ? an : !bereich.classList.contains('vollbild');
+  bereich.classList.toggle('vollbild', jetzt);
+  document.body.classList.toggle('mon-vollbild-an', jetzt);
+  const knopf = document.getElementById('mon-vollbild');
+  if (knopf) knopf.textContent = jetzt ? '✕ Vollbild beenden' : '⛶ Vollbild';
+  const wrap = document.getElementById('mon-wrap');
+  if (wrap) wrap.style.setProperty('--mon-wrap-breite', wrap.clientWidth + 'px');
+}
+
+function _monAnsichtEvents() {
+  let d = 'normal';
+  try { d = localStorage.getItem('mon-dichte') || 'normal'; } catch (e) { /* ohne Speicher */ }
+  _monDichteSetzen(d);
+  document.querySelectorAll('[data-dichte]').forEach(b =>
+    b.addEventListener('click', () => _monDichteSetzen(b.getAttribute('data-dichte'))));
+
+  const alle = document.getElementById('mon-alle-auf');
+  if (alle) alle.addEventListener('click', () => {
+    const sicht = _monRows.slice(0, _monZeigen);
+    const alleOffen = sicht.every(r => _monOffen.has(_monKey(r)));
+    sicht.forEach(r => (alleOffen ? _monOffen.delete(_monKey(r)) : _monOffen.add(_monKey(r))));
+    _monRenderTable(_monRows);
+  });
+
+  const voll = document.getElementById('mon-vollbild');
+  if (voll) voll.addEventListener('click', () => _monVollbild());
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.body.classList.contains('mon-vollbild-an') && !document.querySelector('dialog[open]')) {
+      _monVollbild(false);
+    }
+  });
+
+  const wrap = document.getElementById('mon-wrap');
+  const hoch = document.getElementById('mon-nachoben');
+  if (wrap && hoch) {
+    wrap.addEventListener('scroll', () => { hoch.hidden = wrap.scrollTop < 400; }, { passive: true });
+    hoch.addEventListener('click', () => wrap.scrollTo({ top: 0, behavior: 'smooth' }));
+  }
+  window.addEventListener('resize', () => {
+    if (wrap) wrap.style.setProperty('--mon-wrap-breite', wrap.clientWidth + 'px');
+  });
+
+  // Zeile per Tastatur auf- und zuklappen
+  const tbody = document.getElementById('mon-tbody');
+  if (tbody) tbody.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr.mon-zeile')) {
+      e.preventDefault();
+      _monZeileUmschalten(e.target);
+    }
+  });
 }
 
 /* ── Spalten je Werk festlegen (Admin) ──────────────────────────────── */
@@ -789,20 +971,38 @@ function _monSpaltenDialog(werk) {
   if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
 }
 
-// Geschaeftspartner der Zeile: Eingang = Steller, Ausgang = Empfaenger. Bringt eine
-// sonstige Rechnung (PDF ohne XML) keinen Steller mit, gilt der Name aus der
-// 800k-Einschaetzung (js/umsatzgrenze.js).
+// Geschaeftspartner der Zeile: Eingang = Steller, Ausgang = Empfaenger. Angezeigt
+// wird nur, was sicher ist: der Name aus der E-Rechnung (XML) oder der Name, den die
+// Buchhaltung bei der 800k-Einschaetzung bestaetigt hat (js/umsatzgrenze.js). Den
+// Namen, den der Pruefdienst aus dem PDF-Text gelesen hat, zeigt die Tabelle nicht.
+
+/** Stammen die Kopfdaten aus einer XML (ZUGFeRD, XRechnung) statt aus dem PDF-Text? */
+function _monAusXml(r) {
+  return ['ZUGFeRD', 'XRechnung'].includes(_monKlass(r)) || r.ext === 'xml'
+    || (r.dateien || []).some(d => d.label === 'XML');
+}
+
+/** Sicherer Name und seine Quelle: { name, quelle: 'xml' | 'einschaetzung' | '' }. */
+function _monPartnerSicher(r) {
+  if (r.richtung !== 'Eingang') return { name: r.empf || '', quelle: 'xml' };
+  if (r.steller && _monAusXml(r)) return { name: r.steller, quelle: 'xml' };
+  const e = typeof ugFuer === 'function' ? ugFuer(r) : null;
+  return e && e.name ? { name: e.name, quelle: 'einschaetzung' } : { name: '', quelle: '' };
+}
+
 function _monPartner(r) {
-  if (r.richtung !== 'Eingang') return r.empf || '';
-  return r.steller || (typeof ugLieferantName === 'function' ? ugLieferantName(r) : '') || '';
+  return _monPartnerSicher(r).name;
 }
 
 function _monPartnerCell(r) {
-  const p = _monPartner(r);
-  if (r.richtung === 'Eingang' && p && !r.steller) {
-    return `<span title="Aus der 800k-Einschätzung, nicht aus der Rechnung gelesen" style="font-style:italic;">${_esc(p)}</span>`;
-  }
-  return _esc(p);
+  const p = _monPartnerSicher(r);
+  const name = p.quelle === 'einschaetzung'
+    ? `<span title="Bei der 800k-Einschätzung bestätigt, nicht aus der Rechnung gelesen" style="font-style:italic;">${_esc(p.name)}</span>`
+    : _esc(p.name);
+  // Absender der Rechnungsmail (vom Eingangs-Flow, also sicher), grün wie das GoBD-Abzeichen
+  const mail = r.richtung === 'Eingang' && r.absenderMail
+    ? `<div class="mon-mail" title="Absender der Rechnungsmail">✉ ${_esc(r.absenderMail)}</div>` : '';
+  return (name + mail) || '<span style="color:#9ca3af;">–</span>';
 }
 
 // Klartext-Hinweis zur Konformität. Nimmt einen bereits fertigen API-Hinweis
@@ -1009,10 +1209,17 @@ function monInitFilterEvents() {
       return;
     }
     const btn = e.target.closest('[data-ug]');
-    if (!btn || typeof ugDialogOeffnen !== 'function') return;
-    const r = _monRows[Number(btn.getAttribute('data-ug'))];
-    if (r) ugDialogOeffnen(r, () => _monApply());
+    if (btn && typeof ugDialogOeffnen === 'function') {
+      const r = _monRows[Number(btn.getAttribute('data-ug'))];
+      if (r) ugDialogOeffnen(r, () => _monApply());
+      return;
+    }
+    if (e.target.closest('a, button, input, select, textarea, label')) return;
+    if (String(window.getSelection ? window.getSelection() : '').trim()) return;
+    const tr = e.target.closest('tr.mon-zeile');
+    if (tr) _monZeileUmschalten(tr);
   });
+  _monAnsichtEvents();
 
   // Spalten sortieren (Klick auf Kopfzeile toggelt Richtung). Die Kopfzeile wird je
   // nach Spaltenauswahl neu gezeichnet, deshalb per Delegation.

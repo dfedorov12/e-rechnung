@@ -53,17 +53,70 @@
                 border-radius:50%; cursor:pointer; font-size:10px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; }
     .mon-chip button:hover { background:rgba(0,0,0,.22); }
 
-    .mon-table-wrap { overflow-x:auto; background:#fff; border:1px solid var(--gray-200);
-                border-radius:var(--border-radius); box-shadow:var(--shadow-sm); }
+    .mon-tabelle { position:relative; }
+    .mon-table-wrap { overflow:auto; max-height:calc(100vh - 150px); min-height:240px; background:#fff;
+                border:1px solid var(--gray-200); border-radius:var(--border-radius); box-shadow:var(--shadow-sm);
+                scrollbar-gutter:stable; }
     table.mon-table { width:100%; border-collapse:collapse; font-size:13px; min-width:1040px; table-layout:fixed; }
     table.mon-table th { text-align:left; padding:11px 12px; background:var(--gray-50); color:var(--gray-600);
-                font-weight:600; border-bottom:1px solid var(--gray-200); white-space:nowrap; position:sticky; top:0; z-index:1; }
+                font-weight:600; border-bottom:1px solid var(--gray-200); white-space:nowrap; position:sticky; top:0; z-index:2;
+                box-shadow:0 1px 0 var(--gray-200); }
     table.mon-table th[data-sort] { cursor:pointer; user-select:none; }
     table.mon-table th[data-sort]:hover { background:var(--gray-100); color:var(--gray-800); }
     table.mon-table th .sort-ind { display:inline-block; width:10px; font-size:10px; margin-left:2px; color:var(--primary); }
     table.mon-table td { padding:10px 12px; border-bottom:1px solid var(--gray-100); vertical-align:top; word-break:break-word; overflow-wrap:anywhere; }
-    table.mon-table tbody tr:nth-child(even) td { background:#fafbfc; }
-    table.mon-table tbody tr:hover td { background:#eef4fc; }
+    table.mon-table tbody td { background:#fff; }
+    table.mon-table tbody tr.z td { background:#fafbfc; }
+    table.mon-table tbody tr.mon-zeile { cursor:pointer; }
+    table.mon-table tbody tr.mon-zeile:hover td, table.mon-table tbody tr.mon-zeile.offen td { background:#eef4fc; }
+    table.mon-table tbody tr.mon-zeile:focus-visible { outline:2px solid var(--primary); outline-offset:-2px; }
+    /* erste Spalte bleibt beim waagerechten Scrollen stehen */
+    table.mon-table thead th:first-child { left:0; z-index:3; }
+    table.mon-table tbody tr.mon-zeile td:first-child { position:sticky; left:0; z-index:1; box-shadow:1px 0 0 var(--gray-200); }
+    .mon-auf { display:inline-block; width:0; height:0; margin:0 7px 1px 0; border-style:solid; border-width:4px 0 4px 6px;
+                border-color:transparent transparent transparent var(--gray-400); transition:transform .15s; vertical-align:middle; }
+    tr.mon-zeile.offen .mon-auf { transform:rotate(90deg); border-left-color:var(--primary); }
+    /* Zeilendichte */
+    .dichte-kompakt table.mon-table td { padding:5px 8px; font-size:12px; }
+    .dichte-kompakt table.mon-table th { padding:7px 8px; font-size:12px; }
+    .dichte-kompakt .mon-hint { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .dichte-gross table.mon-table td { padding:14px 14px; font-size:14px; }
+    .dichte-gross table.mon-table th { padding:13px 14px; font-size:13px; }
+    /* Details einer Zeile */
+    table.mon-table tr.mon-detail td { background:#f6f9fd; padding:14px 18px 16px; border-bottom:1px solid var(--gray-200);
+                cursor:default; box-shadow:inset 3px 0 0 var(--primary); }
+    .mon-det { position:sticky; left:18px; width:min(100%, calc(var(--mon-wrap-breite, 1100px) - 40px));
+                display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:14px 26px; }
+    .mon-det section h4 { margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+    .mon-det dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 10px; font-size:13px; }
+    .mon-det dt { color:var(--gray-500); white-space:nowrap; }
+    .mon-det dd { margin:0; color:var(--gray-900); white-space:pre-line; overflow-wrap:anywhere; }
+    .mon-det-aktionen { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .mon-det-aktionen .bh-btn { display:inline-block; margin:0; }
+    /* Ansicht-Leiste */
+    .mon-ansicht { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; }
+    .mon-ansicht .mon-reset { height:32px; font-size:12px; }
+    .mon-ansicht-tipp { font-size:12px; color:var(--gray-500); margin-left:4px; }
+    #mon-vollbild { margin-left:auto; }
+    .mon-seg { display:inline-flex; border:1px solid var(--gray-300); border-radius:8px; overflow:hidden; background:#fff; }
+    .mon-seg button { height:30px; padding:0 12px; border:none; border-right:1px solid var(--gray-200); background:#fff;
+                font-size:12px; color:var(--gray-600); cursor:pointer; }
+    .mon-seg button:last-child { border-right:none; }
+    .mon-seg button[aria-pressed="true"] { background:var(--primary); color:#fff; font-weight:600; }
+    /* Vollbild */
+    .mon-tabelle.vollbild { position:fixed; inset:0; z-index:950; background:var(--gray-50, #f8fafc); padding:14px 18px;
+                display:flex; flex-direction:column; }
+    .mon-tabelle.vollbild .mon-table-wrap { flex:1 1 auto; max-height:none; min-height:0; }
+    body.mon-vollbild-an { overflow:hidden; }
+    .mon-datei { display:inline-block; margin:0 4px 4px 0; padding:1px 6px; font-size:11px; font-weight:600; border-radius:3px;
+                background:var(--gray-100); color:var(--primary); text-decoration:none; white-space:nowrap; }
+    .mon-datei:hover { background:var(--primary); color:#fff; }
+    td .bh-btn { white-space:nowrap; }
+    .mon-nachoben { position:absolute; right:22px; bottom:18px; z-index:5; width:38px; height:38px; border-radius:50%;
+                border:1px solid var(--gray-300); background:#fff; color:var(--primary); font-size:18px; cursor:pointer;
+                box-shadow:0 4px 12px rgba(0,0,0,.15); }
+    .mon-tabelle.vollbild .mon-nachoben { right:34px; bottom:30px; }
+    @media (max-width:700px) { .mon-ansicht-tipp { display:none; } .mon-table-wrap { max-height:calc(100vh - 110px); } }
     .mon-err { color:var(--danger); max-width:220px; }
     table.mon-table td.mon-mehr { text-align:center; padding:14px; background:#fff; }
     .mon-mehr button { height:34px; padding:0 16px; border:1px solid var(--gray-300); background:var(--gray-50);
@@ -172,6 +225,8 @@
     .sp-raster .bh-check { padding:4px 0; }
     .sp-raster .bh-check:has(input:disabled) { color:var(--gray-400); cursor:default; }
     td.mon-mehrzeilig { white-space:pre-line; font-size:12px; }
+    .mon-mail { display:inline-block; max-width:100%; margin-top:3px; font-size:11px; font-weight:600; color:#0a6b2e;
+                background:#e3f5e9; border-radius:3px; padding:1px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:top; }
     @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas, .sp-raster { grid-template-columns:1fr; } }
   </style>
 </head>
@@ -213,6 +268,7 @@
   <div id="mon-body" style="display:none;">
     <div class="mon-kpis" id="mon-kpis"></div>
 
+    <div class="mon-tabelle" id="mon-tabelle">
     <div class="mon-toolbar">
       <div class="mon-search">
         <input type="search" id="mon-f-q" placeholder="Nummer, Steller, Empfänger…">
@@ -244,12 +300,25 @@
     </div>
     <div class="mon-chips" id="mon-chips"></div>
 
-    <div class="mon-table-wrap">
+    <div class="mon-ansicht">
+      <div class="mon-seg" role="group" aria-label="Zeilenhöhe">
+        <button type="button" data-dichte="kompakt">Kompakt</button>
+        <button type="button" data-dichte="normal">Normal</button>
+        <button type="button" data-dichte="gross">Groß</button>
+      </div>
+      <button type="button" class="mon-reset" id="mon-alle-auf" title="Details aller angezeigten Zeilen auf- oder zuklappen">Alle aufklappen</button>
+      <span class="mon-ansicht-tipp">Zeile anklicken zeigt alle Angaben zur Rechnung</span>
+      <button type="button" class="mon-reset" id="mon-vollbild" title="Tabelle auf den ganzen Bildschirm, Esc beendet">⛶ Vollbild</button>
+    </div>
+
+    <div class="mon-table-wrap dichte-normal" id="mon-wrap">
       <table class="mon-table">
         <colgroup id="mon-cols"></colgroup>
         <thead><tr id="mon-kopf"></tr></thead>
         <tbody id="mon-tbody"></tbody>
       </table>
+    </div>
+    <button type="button" class="mon-nachoben" id="mon-nachoben" title="Zum Anfang der Tabelle" hidden>↑</button>
     </div>
   </div>
 
@@ -275,10 +344,11 @@
 onAuthReady(async () => {
   initAdminNav();
   monInitFilterEvents();
-  // Zugriff regelt SharePoint (wer die Site/Bibliothek lesen darf, sieht sie).
-  // KEIN zusaetzlicher Gesellschafts-Filter -> alle Werke der Site erscheinen
-  // (sonst wurde z.B. SHB fuer WGC-only-Nutzer ausgeblendet).
-  loadMonitoring();
+  // Werkzuweisung aus den Einstellungen (einstellungen.html): Wer Werken zugewiesen
+  // ist, sieht nur diese. Admins und Benutzer ohne Zuweisung sehen alle Werke, die
+  // SharePoint sie lesen lässt.
+  try { await loadRuntimeAccessConfig(); } catch (e) { /* Standard greift */ }
+  loadMonitoring(isCurrentUserAdmin() ? [] : getCurrentUserAccess());
 });
 </script>
 <script>authInit();</script>

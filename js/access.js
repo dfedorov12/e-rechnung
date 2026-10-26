@@ -28,6 +28,15 @@ const GESELLSCHAFT_LABELS = {
   zai: 'ZAI',
 };
 
+/* Alle Werke der Gruppe, aus denen die Einstellungen die Werke für die Zuweisung wählen */
+const WERKE_ALLE = [
+  ['WGC', 'Walzengießerei Coswig GmbH'],
+  ['SHB', 'Stahl- und Hartgusswerk Bösdorf GmbH'],
+  ['ZAI', 'Dihag Zaigler GmbH'],
+  ['EIS', 'Werk EIS'], ['DSO', 'Werk DSO'], ['LEG', 'Werk LEG'], ['EWA', 'Werk EWA'],
+  ['HOL', 'Werk HOL'], ['MEG', 'Werk MEG'], ['SCH', 'Werk SCH'],
+];
+
 /* Admin-UPNs – dürfen die Einstellungen-Seite sehen */
 const ADMIN_UPNS = ['administrator@dihag.com'];
 
@@ -67,8 +76,8 @@ function getAccessFor(upn) {
   const u = (upn || '').toLowerCase().trim();
   const cfg = _activeConfig();
   return Object.keys(cfg).filter(g =>
-    (cfg[g] || []).some(x => x.toLowerCase().trim() === u)
-  );
+    Array.isArray(cfg[g]) && cfg[g].some(x => String(x).toLowerCase().trim() === u)
+  ).map(g => g.toLowerCase());
 }
 
 /**
@@ -78,6 +87,19 @@ function getAccessFor(upn) {
 function getCurrentUserAccess() {
   const account = typeof getAuthUser === 'function' ? getAuthUser() : null;
   return account ? getAccessFor(account.username) : [];
+}
+
+/**
+ * Welche Werke darf der angemeldete Benutzer sehen bzw. auswählen (Monitoring, Konverter)?
+ * Admins und Benutzer, die in den Einstellungen keinem Werk zugewiesen sind: alle.
+ * @param   {string[]} alle  Werk-Kürzel, Groß-/Kleinschreibung egal
+ * @returns {string[]}
+ */
+function erlaubteWerke(alle) {
+  if (isCurrentUserAdmin()) return alle.slice();
+  const access = getCurrentUserAccess();
+  if (!access.length) return alle.slice();
+  return alle.filter(w => access.includes(String(w).toLowerCase()));
 }
 
 /**

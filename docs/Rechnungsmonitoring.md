@@ -14,60 +14,73 @@ der Eingangs-Flow steht in [`Eingangsrechnungen-Flow.md`](Eingangsrechnungen-Flo
 
 ## Zugriff
 
-Der Aufruf übergibt eine **Freigabeliste** (`accessList`, Werk-Kürzel des Nutzers aus
-`AppPermissions`). Sichtbar sind nur die Werk-Bibliotheken, für die der Nutzer
-freigeschaltet ist; die zentrale `Rechnungseingang`-Stufe ist werkübergreifend (die
-SharePoint-Rechte gaten den tatsächlichen Zugriff). Ohne Freigabe → Hinweisseite.
+Welche Werke ein Benutzer sieht, steht in den **Einstellungen** (`einstellungen.html`, nur
+Admins): Dort werden Werke angelegt und Benutzer (UPN) je Werk eingetragen. Die Zuweisung
+gilt für Exportverlauf, Monitoring und die Werkauswahl im Konverter (`erlaubteWerke` in
+`js/access.js`). Wer keinem Werk zugewiesen ist, sieht im Monitoring und im Konverter alle
+Werke, Admins immer. Die zentrale `Rechnungseingang`-Stufe ist werkübergreifend sichtbar,
+den tatsächlichen Zugriff regeln die SharePoint-Rechte.
 
-## Laden (Skalierung)
+## Laden
 
-- **Parallel** über alle Bibliotheken (statt sequenziell) → schnelles Laden auch bei
-  vielen Werken.
-- **Neueste zuerst** (`$orderby=fields/Created desc`): das Seitenlimit
-  (`maxPagesPerLib`, 30 × 200 = 6000 Items/Bibliothek) liefert damit immer die
-  **aktuellsten** Rechnungen, statt in der Graph-Default-Reihenfolge (ID aufsteigend =
-  älteste zuerst) die neuen abzuschneiden.
-- Jenseits von **5000 Items/Bibliothek** verlangt `$orderby` eine **indizierte
-  `Created`-Spalte** (setzt das Provisioning). Ist sie (noch) nicht indiziert, lädt das
-  Dashboard automatisch ungeordnet weiter (graceful Fallback) — es bricht nie ab.
+- **Nacheinander und seitenweise**: immer nur ein Abruf gegen SharePoint, die Tabelle
+  füllt sich nach jeder Seite, Fortschritt im Untertitel. 429/503 werden wiederholt, eine
+  Bibliothek mit Fehler hält die anderen nicht auf.
+- **Neueste zuerst** (`$orderby=fields/Created desc`): Das Seitenlimit
+  (`maxPagesPerLib`, 30 × 200 = 6000 Items/Bibliothek) liefert damit immer die aktuellsten
+  Rechnungen. Jenseits von 5000 Items verlangt `$orderby` eine indizierte
+  `Created`-Spalte (setzt das Provisioning), sonst lädt das Monitoring ungeordnet weiter.
 
 ## Zeilen-Aggregation
 
 Eine Rechnung besteht oft aus mehreren Dateien (Original-PDF/-XML, extrahierte XML,
-lesbares PDF, KoSIT-Bericht). Sie werden zu **einer Zeile** zusammengefasst
-(Gruppierung über `baseKey` = Dateiname ohne Endung/Sidecar-Suffix/Datum). Die
-Nebendateien erscheinen als Links in der letzten Spalte:
-
-- **Original (XML/PDF) ↗** — die primäre Datei
-- **Lesbares PDF ↗** — aus XRechnung-XML gerendertes PDF/A (bei ZUGFeRD ist das
-  Original schon lesbar)
-- **KoSIT-Bericht ↗** — vollständiger Prüfbericht
+lesbares PDF, KoSIT-Bericht). Sie werden zu **einer Zeile** zusammengefasst (Gruppierung
+über `baseKey` = Dateiname ohne Endung, Sidecar-Suffix und Datum). Die Dateien stehen als
+kurze Abzeichen in der letzten Spalte: **PDF/XML** (Original), **Lesbar**, **Bericht**.
 
 ## Spalten
 
-| Spalte | Inhalt |
-|--------|--------|
-| Datum | Rechnungs- bzw. Eingangsdatum |
-| Werk | aus dem Bibliotheksnamen (`AR_SHB` → SHB); Eingangsstufe: erst nach Erkennung |
-| Richtung | Eingang / Ausgang |
-| Rechnungsnr. | Nummer; darunter ggf. Badge **⚠ Dublette** (siehe unten) |
-| Steller / Empfänger | Aussteller (Eingang) bzw. Empfänger (Ausgang) |
-| Brutto | Bruttobetrag |
-| Format | ZUGFeRD / XRechnung / PDF |
-| Status | Verarbeitungsstatus |
-| Konform. | KoSIT-Ampel (grün/gelb/rot) + **Klartext-Hinweis** darunter (siehe unten) |
-| Fehler | Fehlermeldung (z. B. Fehlleitung, Fehler-Benachrichtigung) |
-| (Links) | Original + Sidecar-Dateien |
+Welche Spalten ein Werk zeigt, legt ein Admin über den Knopf **„Spalten“** fest
+(Einzelheiten in [Genehmigung-im-Monitoring.md](Genehmigung-im-Monitoring.md)). Standard:
+Datum, Werk, Richtung, Rechnungsnr., Steller / Empfänger, Netto, Fällig am,
+Klassifizierung, Status, Buchung, Lieferant informiert, Konform., Fehler und, wo die
+Bearbeitung an ist, Varialnummer, Bearbeitung, Genehmigung. Wählbar sind außerdem Brutto,
+Bestellnummer, Kontierung und Notiz.
+
+**Steller / Empfänger** zeigt nur, was sicher ist: den Namen aus der E-Rechnung (XML) oder
+den Namen, den die Buchhaltung bei der 800k-Einschätzung bestätigt hat (kursiv). Den Namen,
+den der Prüfdienst nur aus dem PDF-Text gelesen hat, zeigt die Tabelle nicht. Darunter steht
+grün die Absenderadresse der Rechnungsmail, die der Eingangs-Flow mitschreibt.
+
+**Buchung**: Bis 10/2026 blieb sie bei gelb und rot auf Automatik. Für solche Rechnungen
+zeigt das Monitoring die heutige Regel (gelb = Unter Vorbehalt, rot = Zurückgewiesen), der
+Tooltip nennt den gespeicherten Wert.
+
+## Ansicht
+
+- Die Tabelle scrollt in einem eigenen Bereich. **Kopfzeile und erste Spalte bleiben
+  stehen**, die waagerechte Bildlaufleiste ist immer sichtbar.
+- **Zeile anklicken** (oder Enter) klappt alle Angaben zur Rechnung auf: Rechnung,
+  Lieferant, Beträge, Prüfung mit vollem Hinweis, 800.000 €, Bearbeitung, Dateien, auch aus
+  Spalten, die gerade ausgeblendet sind. **„Alle aufklappen“** gilt für die angezeigten
+  Zeilen.
+- **Kompakt / Normal / Groß** ändert die Zeilenhöhe, der Browser merkt sich die Wahl.
+- **Vollbild** legt Filter und Tabelle über den ganzen Bildschirm, Esc beendet es.
+- Beim Scrollen lädt die Tabelle die nächsten 200 Zeilen von selbst nach, der Knopf
+  „Weitere anzeigen“ bleibt als Rückfall. Ein Pfeil unten rechts springt zum Anfang.
 
 ## KPI-Kacheln
 
 Rechnungen gesamt · Eingang · Ausgang · Offen (nicht gebucht) · **Fehler / rot** ·
-**Dubletten** · Bruttosumme. Die Kacheln beziehen sich auf die **aktuell gefilterte**
-Auswahl.
+**Dubletten** · Manuelle Prüfung · Zur Rückfrage · Zurückgewiesen · 800k-Einschätzung
+offen · In Genehmigung (nur wenn ein Werk die Bearbeitung nutzt) · Typen. Die Kacheln
+beziehen sich auf die gefilterte Auswahl, ein Klick filtert.
 
 ## Filter & Suche
 
-Werk · Richtung · Status · Format · Freitextsuche (Nummer, Steller, Empfänger).
+Werk · Richtung · Typ · Konformität · Buchung (mit „Kleinbetrag bis 250 € brutto“) ·
+Status · Bearbeitung · Genehmigt · Datum von/bis · Freitextsuche (Nummer, Steller,
+Empfänger, Absendermail, Varialnummer, Kontierung, Bestellnummer, Notiz).
 
 ## Konformität + Klartext-Hinweis
 
