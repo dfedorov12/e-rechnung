@@ -51,4 +51,5 @@ Admins pflegen die Liste unter Einstellungen, Abschnitt „Rechnungsadressen der
 
 - Die Rechnungsadresse muss beim ersten Beleg je Kunde einmal eingetragen werden, entweder im Konverter oder vorab in den Einstellungen.
 - Die Bestellnummer im Kopf (BT-13) ist die erste Best.Nr. im Beleg. Hat eine Rechnung Positionen aus mehreren Bestellungen, stehen die übrigen im Positionshinweis der jeweiligen Position.
-- Die lesbare PDF-Ansicht von XML-Dateien (/api/convert und Monitoring) zeigt die neuen Felder erst nach dem nächsten Deploy der Function App.
+
+Die lesbare PDF-Ansicht von XML-Dateien (/api/convert und Monitoring) zeigt die neuen Felder seit dem Deploy vom 26.10.2026. Die Rechnungsadresse des Kunden steht dort im Block Rechnungsempfänger unter der Anschrift, die Mail aus dem ALF-Kopf beim Rechnungssteller.
