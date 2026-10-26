@@ -241,6 +241,32 @@ async function spSaveFehlerConfig(config) {
 }
 
 /**
+ * Rechnungsadressen der Kunden (BT-49) laden, js/kundenmail.js.
+ * Datei: Dokumente/E-Rechnung/kunden-rechnungsmail.json
+ * @returns {{version:number, eintraege:object[]}|null}
+ */
+async function spLoadKundenMails() {
+  const token = await acquireToken(SP.scopes);
+  if (!token) return null;
+  await _spInit(token);
+  if (!_sp.driveId) return null;
+  const url = `${SP.graphBase}/drives/${_sp.driveId}/root:/${SP.folder}/kunden-rechnungsmail.json:/content`;
+  const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } });
+  if (!resp.ok) return null;   // 404 = noch nicht angelegt
+  return resp.json();
+}
+
+/** Rechnungsadressen der Kunden speichern. */
+async function spSaveKundenMails(daten) {
+  const token = await acquireToken(SP.scopes);
+  if (!token) throw new Error('Nicht angemeldet');
+  await _spInit(token);
+  if (!_sp.driveId) throw new Error('Keine Dokument-Bibliothek gefunden.');
+  await _uploadFile(token, `${SP.folder}/kunden-rechnungsmail.json`,
+    new TextEncoder().encode(JSON.stringify(daten, null, 2)), 'application/json');
+}
+
+/**
  * Eintrag aus der SharePoint-Liste löschen.
  */
 async function spDeleteItem(itemId) {

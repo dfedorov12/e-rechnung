@@ -83,6 +83,48 @@
     </div>
     <div class="settings-grid" id="fehler-mail-grid"></div>
 
+    <!-- Rechnungsadressen der Kunden (BT-49), js/kundenmail.js -->
+    <div class="settings-info-banner" style="margin-top:28px;">
+      <span>📮</span>
+      <span>
+        <strong>Rechnungsadressen der Kunden</strong> für Ausgangsrechnungen. Der Konverter schlägt
+        die Adresse vor, sobald eine Rechnung dieses Kunden geladen wird (gesucht nach Kunden-Nr.,
+        dann USt-IdNr., dann Name, jeweils im selben Werk). Neue Adressen merkt sich die App beim
+        Export von selbst. Einzutragen ist das Rechnungspostfach des Kunden, nicht die Adresse
+        der Sachbearbeitung im eigenen Haus.
+      </span>
+    </div>
+    <div class="card km-card">
+      <div class="card-body">
+        <div class="km-filter-row">
+          <input type="search" id="km-suche" class="upn-input" placeholder="Suchen (Kunde, Nr., Mail)" oninput="renderKundenMails()">
+          <span class="km-anzahl" id="km-anzahl"></span>
+        </div>
+        <div class="km-tabelle-wrap">
+          <table class="km-tabelle">
+            <thead><tr><th>Werk</th><th>Kunden-Nr.</th><th>Kunde</th><th>Rechnungsadresse</th><th>Gemerkt</th><th></th></tr></thead>
+            <tbody id="km-body"></tbody>
+            <tfoot><tr>
+              <td><select id="km-neu-werk" class="upn-input" aria-label="Werk"></select></td>
+              <td><input type="text" id="km-neu-nr" class="upn-input" placeholder="z. B. 100123"></td>
+              <td><input type="text" id="km-neu-name" class="upn-input" placeholder="Name des Kunden"></td>
+              <td><input type="email" id="km-neu-mail" class="upn-input" placeholder="rechnung@kunde.de"
+                         onkeydown="if (event.key === 'Enter') kmHinzufuegen()"></td>
+              <td></td>
+              <td><button class="btn btn-primary btn-sm" onclick="kmHinzufuegen()">+ Hinzufügen</button></td>
+            </tr></tfoot>
+          </table>
+        </div>
+        <details class="km-import">
+          <summary>Mehrere auf einmal einfügen</summary>
+          <p class="km-hinweis">Eine Zeile je Kunde: <code>Werk;Kunden-Nr.;Kunde;Mail</code>. Tabulator geht auch,
+            so lässt sich direkt aus Excel kopieren. Bestehende Einträge mit gleicher Kunden-Nr. im selben Werk werden ersetzt.</p>
+          <textarea id="km-import-text" rows="5" class="upn-input" placeholder="ZAI;100123;Musterkunde GmbH;rechnung@musterkunde.de"></textarea>
+          <button class="btn btn-primary btn-sm" onclick="kmImportieren()">Übernehmen</button>
+        </details>
+      </div>
+    </div>
+
     <!-- Speichern -->
     <div class="settings-save-row">
       <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
@@ -113,6 +155,26 @@
 <script src="js/auth.js"></script>
 <script src="js/access.js"></script>
 <script src="js/sharepoint.js"></script>
+<script src="js/kundenmail.js"></script>
+
+<style>
+  .km-card { margin-top: 12px; }
+  .km-filter-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .km-filter-row input { max-width: 320px; }
+  .km-anzahl { font-size: 12px; color: var(--gray-500, #64748b); }
+  .km-tabelle-wrap { overflow-x: auto; }
+  .km-tabelle { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .km-tabelle th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+    color: var(--gray-500, #64748b); padding: 6px 8px; border-bottom: 1px solid var(--gray-200, #e2e8f0); }
+  .km-tabelle td { padding: 6px 8px; border-bottom: 1px solid var(--gray-100, #f1f5f9); vertical-align: middle; }
+  .km-tabelle tfoot td { border-bottom: none; padding-top: 10px; }
+  .km-tabelle tfoot .upn-input { width: 100%; min-width: 90px; }
+  .km-tabelle .km-am { font-size: 11px; color: var(--gray-500, #64748b); white-space: nowrap; }
+  .km-import { margin-top: 14px; }
+  .km-import summary { cursor: pointer; font-size: 13px; color: var(--primary, #17509E); }
+  .km-import textarea { width: 100%; margin: 6px 0; font-family: Consolas, monospace; font-size: 12px; }
+  .km-hinweis { font-size: 12px; color: var(--gray-600, #475569); margin: 8px 0 0; }
+</style>
 
 <script>
 /* ── In-Memory Arbeitskopie der Config ── */
@@ -149,7 +211,91 @@ onAuthReady(async () => {
   try { _editFehler = (await spLoadFehlerConfig()) || {}; }
   catch (e) { _editFehler = {}; }
   renderFehlerGrid();
+
+  // Rechnungsadressen der Kunden laden + rendern
+  _kmGeladenAm = new Date().toISOString();
+  try { _editKm = (await spLoadKundenMails()) || null; }
+  catch (e) { _editKm = null; }
+  if (!_editKm || !Array.isArray(_editKm.eintraege)) _editKm = { version: 1, eintraege: [] };
+  renderKundenMails();
 });
+
+/* ── Rechnungsadressen der Kunden ── */
+let _editKm = { version: 1, eintraege: [] };
+let _kmGeaendert = false;
+let _kmGeladenAm = '';
+
+function _kmDatum(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d) ? d.toLocaleDateString('de-DE') : '';
+}
+
+function renderKundenMails() {
+  const body = document.getElementById('km-body');
+  if (!body) return;
+  const q = (document.getElementById('km-suche').value || '').trim().toLowerCase();
+  const alle = _editKm.eintraege.map((e, i) => ({ e, i }))
+    .sort((a, b) => (a.e.werk || '').localeCompare(b.e.werk || '') || (a.e.name || '').localeCompare(b.e.name || ''));
+  const zeilen = q ? alle.filter(({ e }) => [e.werk, e.kundennummer, e.name, e.mail, e.vat].join(' ').toLowerCase().includes(q)) : alle;
+  body.innerHTML = zeilen.length ? zeilen.map(({ e, i }) => `
+    <tr>
+      <td><span class="format-tag ${e.werk === 'WGC' || e.werk === 'SHB' ? e.werk.toLowerCase() : ''}" style="font-size:11px;">${esc(e.werk || 'alle')}</span></td>
+      <td>${esc(e.kundennummer || '')}</td>
+      <td>${esc(e.name || '')}${e.vat ? `<br><small>${esc(e.vat)}</small>` : ''}</td>
+      <td>${esc(e.mail)}</td>
+      <td class="km-am" title="${esc(e.von || '')}">${esc(_kmDatum(e.am))}${e.von ? '<br>' + esc(e.von.split('@')[0]) : ''}</td>
+      <td><button class="btn btn-danger btn-sm" title="Entfernen" onclick="kmEntfernen(${i})">✕</button></td>
+    </tr>`).join('')
+    : `<tr><td colspan="6" class="upn-empty">${q ? 'Kein Treffer.' : 'Noch keine Rechnungsadresse gemerkt.'}</td></tr>`;
+  document.getElementById('km-anzahl').textContent = `${_editKm.eintraege.length} Kunden`;
+  const sel = document.getElementById('km-neu-werk');
+  if (sel && !sel.options.length) sel.innerHTML = WERKE_ALL.map(([c]) => `<option value="${c}">${c}</option>`).join('');
+}
+
+function _kmEinfuegen(neu) {
+  const gleich = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const idx = _editKm.eintraege.findIndex(e => gleich(e.werk, neu.werk)
+    && (neu.kundennummer ? gleich(e.kundennummer, neu.kundennummer) : gleich(e.name, neu.name)));
+  const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
+  const eintrag = { vat: '', ...neu, am: new Date().toISOString(), von: user.username || '' };
+  if (idx >= 0) _editKm.eintraege[idx] = { ..._editKm.eintraege[idx], ...eintrag };
+  else _editKm.eintraege.push(eintrag);
+}
+
+function kmHinzufuegen() {
+  const werk = document.getElementById('km-neu-werk').value;
+  const kundennummer = document.getElementById('km-neu-nr').value.trim();
+  const name = document.getElementById('km-neu-name').value.trim();
+  const mail = document.getElementById('km-neu-mail').value.trim();
+  if (!kundennummer && !name) { showToast('Bitte Kunden-Nr. oder Namen angeben.', 'error'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(mail)) { showToast('Ungültige E-Mail-Adresse.', 'error'); return; }
+  _kmEinfuegen({ werk, kundennummer, name, mail });
+  ['km-neu-nr', 'km-neu-name', 'km-neu-mail'].forEach(id => { document.getElementById(id).value = ''; });
+  _kmGeaendert = true;
+  renderKundenMails();
+  updateHint('ungespeicherte Änderungen');
+}
+
+function kmImportieren() {
+  const feld = document.getElementById('km-import-text');
+  const { eintraege, fehler } = kundenMailZeilen(feld.value);
+  if (!eintraege.length) { showToast('Keine gültige Zeile gefunden.', 'error'); return; }
+  eintraege.forEach(_kmEinfuegen);
+  feld.value = '';
+  _kmGeaendert = true;
+  renderKundenMails();
+  updateHint('ungespeicherte Änderungen');
+  showToast(`${eintraege.length} übernommen${fehler ? `, ${fehler} Zeile(n) ohne gültige Mail übersprungen` : ''}.`, fehler ? 'info' : 'success');
+}
+
+function kmEntfernen(i) {
+  const e = _editKm.eintraege[i];
+  if (!e || !confirm(`Rechnungsadresse von ${e.name || e.kundennummer} (${e.mail}) entfernen?`)) return;
+  _editKm.eintraege.splice(i, 1);
+  _kmGeaendert = true;
+  renderKundenMails();
+  updateHint('ungespeicherte Änderungen');
+}
 
 /* ── Fehler-Benachrichtigung: Werk-Kacheln rendern ── */
 function renderFehlerGrid() {
@@ -279,6 +425,22 @@ async function saveSettings() {
     }
     await spSaveFehlerConfig(fehler);
     _editFehler = fehler;
+
+    // Rechnungsadressen nur schreiben, wenn hier etwas geändert wurde: der Konverter
+    // merkt sich neue Adressen beim Export, die sollen nicht überschrieben werden.
+    if (_kmGeaendert) {
+      // Was der Konverter seit dem Laden gemerkt hat, bleibt erhalten
+      const aktuell = await spLoadKundenMails().catch(() => null);
+      const k = e => [e.werk, e.kundennummer || e.name].join('|').toLowerCase();
+      const hier = new Set(_editKm.eintraege.map(k));
+      ((aktuell && aktuell.eintraege) || [])
+        .filter(e => e.am && e.am > _kmGeladenAm && !hier.has(k(e)))
+        .forEach(e => _editKm.eintraege.push(e));
+      await spSaveKundenMails(_editKm);
+      _kmGeladenAm = new Date().toISOString();
+      renderKundenMails();
+      _kmGeaendert = false;
+    }
 
     showOverlay(false);
     showToast('Einstellungen erfolgreich gespeichert.', 'success');

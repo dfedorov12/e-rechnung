@@ -1356,3 +1356,14 @@ body.auth-guard { visibility: hidden; }
   color: var(--gray-800);
   word-break: break-word;
 }
+
+/* Positionsdetails (BT-154 / BT-127 / BT-132) */
+.positions-table .pos-details-toggle { margin-top: 4px; border: none; background: none; padding: 0; font-size: 11px;
+  color: var(--primary, #17509E); cursor: pointer; }
+.positions-table .pos-details-toggle:hover { text-decoration: underline; }
+.positions-table tr.pos-details-row td { background: #f8fafc; padding-top: 6px; padding-bottom: 10px; }
+.pos-details-grid { display: grid; grid-template-columns: 1fr 1fr 160px; gap: 10px; }
+.pos-details-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; color: var(--gray-600, #475569); }
+.pos-details-grid textarea, .pos-details-grid input { font: inherit; font-size: 12px; font-weight: 400; padding: 6px 8px;
+  border: 1px solid var(--gray-300, #cbd5e1); border-radius: 6px; resize: vertical; }
+@media (max-width: 800px) { .pos-details-grid { grid-template-columns: 1fr; } }

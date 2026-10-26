@@ -106,6 +106,7 @@ function _parseCII(root) {
   const seller = _q(agreement, 'SellerTradeParty');
   if (seller) {
     r.verkaeufer       = _t(seller, 'Name');
+    r.lieferantennummer = _t(seller, 'ID');           // BT-29: Kennung des Verkäufers beim Käufer
     r.rechtsangaben    = _t(seller, 'Description');   // BT-33
     r.registernr       = _t(seller, 'SpecifiedLegalOrganization', 'ID');   // BT-30
     r.verkaeufkontakt  = _t(seller, 'DefinedTradeContact', 'PersonName');
@@ -129,6 +130,7 @@ function _parseCII(root) {
   const buyer = _q(agreement, 'BuyerTradeParty');
   if (buyer) {
     r.kaeufer        = _t(buyer, 'Name');
+    r.kundennummer   = _t(buyer, 'ID');               // BT-46
     r.kaeuferstrasse = _t(buyer, 'PostalTradeAddress', 'LineOne');
     r.kaeuferplz     = _t(buyer, 'PostalTradeAddress', 'PostcodeCode');
     r.kaeuferstadt   = _t(buyer, 'PostalTradeAddress', 'CityName');
@@ -173,6 +175,8 @@ function _parseCII(root) {
     r.faelligkeitsdatum = _xmlDate(_t(settle, 'SpecifiedTradePaymentTerms', 'DueDateDateTime', 'DateTimeString'));
     r.kontoinhaber        = _t(settle, 'SpecifiedTradeSettlementPaymentMeans', 'PayeePartyCreditorFinancialAccount', 'AccountName');   // BT-85
     r.zahlungsbedingungen = _t(settle, 'SpecifiedTradePaymentTerms', 'Description');   // BT-20
+    r.vorrechnungsnummer  = _t(settle, 'InvoiceReferencedDocument', 'IssuerAssignedID');   // BT-25
+    r.vorrechnungsdatum   = _xmlDate(_t(settle, 'InvoiceReferencedDocument', 'FormattedIssueDateTime', 'DateTimeString'));   // BT-26
     r.abrZeitraumStart    = _xmlDate(_t(settle, 'BillingSpecifiedPeriod', 'StartDateTime', 'DateTimeString'));   // BT-73
     r.abrZeitraumEnde     = _xmlDate(_t(settle, 'BillingSpecifiedPeriod', 'EndDateTime', 'DateTimeString'));     // BT-74
     const sums = _q(settle, 'SpecifiedTradeSettlementHeaderMonetarySummation');
@@ -201,6 +205,8 @@ function _parseCII(root) {
     r.positionen.push({
       posnr:        _t(li, 'AssociatedDocumentLineDocument', 'LineID'),
       beschreibung: _t(li, 'SpecifiedTradeProduct', 'Name'),
+      details:      _t(li, 'SpecifiedTradeProduct', 'Description'),                                // BT-154
+      bestellposition: _t(li, 'SpecifiedLineTradeAgreement', 'BuyerOrderReferencedDocument', 'LineID'),   // BT-132
       menge,
       einheit:      _unitFromCode(qtyEl ? qtyEl.getAttribute('unitCode') : ''),
       einzelpreis:  parseFloat(_t(li, 'SpecifiedLineTradeAgreement', 'NetPriceProductTradePrice', 'ChargeAmount')) || 0,
@@ -240,6 +246,10 @@ function _parseUBL(root) {
 
   // Referenzen (BT-13/12/11), Abrechnungszeitraum (BT-73/74), Zahlungsbedingungen (BT-20)
   r.bestellnummer       = _t(root, 'OrderReference', 'ID');
+  r.vorrechnungsnummer  = _t(root, 'BillingReference', 'InvoiceDocumentReference', 'ID');           // BT-25
+  r.vorrechnungsdatum   = _xmlDate(_t(root, 'BillingReference', 'InvoiceDocumentReference', 'IssueDate'));   // BT-26
+  r.lieferantennummer   = _t(root, 'AccountingSupplierParty', 'Party', 'PartyIdentification', 'ID');   // BT-29
+  r.kundennummer        = _t(root, 'AccountingCustomerParty', 'Party', 'PartyIdentification', 'ID');   // BT-46
   r.vertragsnummer      = _t(root, 'ContractDocumentReference', 'ID');
   r.projektreferenz     = _t(root, 'ProjectReference', 'ID');
   r.abrZeitraumStart    = _xmlDate(_t(root, 'InvoicePeriod', 'StartDate'));
@@ -311,6 +321,8 @@ function _parseUBL(root) {
     r.positionen.push({
       posnr:        _t(li, 'ID'),
       beschreibung: _t(li, 'Item', 'Name') || _t(li, 'Item', 'Description'),
+      details:      _t(li, 'Item', 'Name') ? _t(li, 'Item', 'Description') : '',      // BT-154
+      bestellposition: _t(li, 'OrderLineReference', 'LineID'),                        // BT-132
       menge:        qtyEl ? parseFloat(qtyEl.textContent) || 0 : 0,
       einheit:      _unitFromCode(qtyEl ? qtyEl.getAttribute('unitCode') : ''),
       einzelpreis:  parseFloat(_t(li, 'Price', 'PriceAmount')) || 0,
@@ -334,8 +346,11 @@ function _extraCII(trans, agreement, delivery, settle, r) {
 
   // Referenzen
   push('Referenzen', 'Auftragsnr. Verkäufer', _t(agreement, 'SellerOrderReferencedDocument', 'IssuerAssignedID'));
-  r.lieferscheinnummer = (_t(delivery, 'DeliveryNoteReferencedDocument', 'IssuerAssignedID') || '').trim();
-  push('Referenzen', 'Versandavis (BT-16)', _t(delivery, 'DespatchAdviceReferencedDocument', 'IssuerAssignedID'));
+  // Lieferschein: Lieferschein-Referenz, sonst Versandavis (BT-16), das der Konverter schreibt
+  const lieferschein = (_t(delivery, 'DeliveryNoteReferencedDocument', 'IssuerAssignedID') || '').trim();
+  const versandavis = (_t(delivery, 'DespatchAdviceReferencedDocument', 'IssuerAssignedID') || '').trim();
+  r.lieferscheinnummer = lieferschein || versandavis;
+  if (lieferschein && versandavis && versandavis !== lieferschein) push('Referenzen', 'Versandavis (BT-16)', versandavis);
 
   // Verkäufer
   const seller = _q(agreement, 'SellerTradeParty');
@@ -344,12 +359,10 @@ function _extraCII(trans, agreement, delivery, settle, r) {
     if (id && id.getAttribute('schemeID') === 'FC') push('Verkäufer', 'Steuernummer (BT-32)', id.textContent);
   }
   push('Verkäufer', 'Abteilung', _t(seller, 'DefinedTradeContact', 'DepartmentName'));
-  push('Verkäufer', 'Kennung (BT-29)', _t(seller, 'ID'));
   push('Verkäufer', 'Handelsname', _t(seller, 'SpecifiedLegalOrganization', 'TradingBusinessName'));
 
   // Käufer
   const buyer = _q(agreement, 'BuyerTradeParty');
-  push('Käufer', 'Kennung (BT-46)', _t(buyer, 'ID'));
   push('Käufer', 'Adresszusatz', _t(buyer, 'PostalTradeAddress', 'LineTwo'));
 
   // Zahlung: weitere Konten
@@ -379,6 +392,7 @@ function _extraCII(trans, agreement, delivery, settle, r) {
     const li = lis[i];
     if (!li) return;
     p.note = _t(li, 'AssociatedDocumentLineDocument', 'IncludedNote', 'Content');
+    p.positionsnotiz = p.note;                                  // BT-127, steht im PDF unter der Position
     const ex = [];
     const prod = _q(li, 'SpecifiedTradeProduct');
     const addEx = (label, value) => { const v = (value || '').trim(); if (v) ex.push({ label, value: v }); };
@@ -403,11 +417,9 @@ function _extraUBL(root, r) {
   for (const pts of _all(sp, 'PartyTaxScheme')) {
     if (_t(pts, 'TaxScheme', 'ID') === 'FC') push('Verkäufer', 'Steuernummer (BT-32)', _t(pts, 'CompanyID'));
   }
-  push('Verkäufer', 'Kennung (BT-29)', _t(sp, 'PartyIdentification', 'ID'));
   push('Verkäufer', 'Registernr. (BT-30)', _t(sp, 'PartyLegalEntity', 'CompanyID'));
 
   const cp = _q(root, 'AccountingCustomerParty', 'Party');
-  push('Käufer', 'Kennung (BT-46)', _t(cp, 'PartyIdentification', 'ID'));
 
   const pms = _children(root).filter(c => c.localName === 'PaymentMeans');
   pms.forEach((pm, i) => { if (i > 0) push('Zahlung', 'Weiteres Konto IBAN', _t(pm, 'PayeeFinancialAccount', 'ID')); });
@@ -431,6 +443,7 @@ function _extraUBL(root, r) {
     const li = lines[i];
     if (!li) return;
     p.note = _t(li, 'Note');
+    p.positionsnotiz = p.note;
     const item = _q(li, 'Item');
     const ex = [];
     const addEx = (label, value) => { const v = (value || '').trim(); if (v) ex.push({ label, value: v }); };

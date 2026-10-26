@@ -238,7 +238,8 @@
             </div>
             <div class="form-group">
               <label id="kaeufer-email-label">E-Mail (elektronische Adresse) <span class="required">*</span></label>
-              <input type="email" id="kaeufer-email" placeholder="einkauf@empfaenger.de">
+              <input type="email" id="kaeufer-email" placeholder="rechnung@kunde.de">
+              <span class="hint" id="kaeufer-email-hinweis">Rechnungspostfach des Kunden, nicht die eigene Adresse. Die App merkt sich die Adresse je Kunde und schlägt sie beim nächsten Mal vor.</span>
             </div>
             <div class="form-group">
               <label>USt-IdNr.</label>
@@ -345,6 +346,33 @@
               <label>Zahlungsreferenz / Verwendungszweck</label>
               <input type="text" id="zahlungsreferenz" placeholder="Wird automatisch mit Rechnungsnummer befüllt">
             </div>
+            <div class="form-group">
+              <label>Bestellnummer des Kunden (BT-13)</label>
+              <input type="text" id="bestellnummer" placeholder="z. B. 4500012345">
+            </div>
+            <div class="form-group">
+              <label>Lieferscheinnummer (BT-16)</label>
+              <input type="text" id="lieferscheinnummer" placeholder="z. B. 2026.001234">
+            </div>
+            <div class="form-group">
+              <label>Kunden-Nr. (BT-46)</label>
+              <input type="text" id="kundennummer" placeholder="z. B. 100123">
+            </div>
+            <div class="form-group">
+              <label>Lieferanten-Nr. beim Kunden (BT-29)</label>
+              <input type="text" id="lieferantennummer" placeholder="z. B. 7700123">
+              <span class="hint">Unter dieser Nummer führt der Kunde uns als Lieferanten. Viele Kunden ordnen E-Rechnungen damit automatisch zu.</span>
+            </div>
+            <div class="form-group">
+              <label>Bezug auf Rechnung (BT-25)</label>
+              <input type="text" id="vorrechnungsnummer" placeholder="nur bei Gutschrift, Storno, Korrektur">
+              <span class="hint">Nummer der ursprünglichen Rechnung. Bei einer Storno-Rechnung wird sie aus dem PDF gelesen.</span>
+            </div>
+            <div class="form-group">
+              <label>Datum der ursprünglichen Rechnung (BT-26)</label>
+              <input type="date" id="vorrechnungsdatum">
+            </div>
+            <input type="hidden" id="steuerbetrag-original">
             <div class="form-group">
               <label>Steuerbehandlung bei 0 % MwSt.</label>
               <select id="steuerkategorie">
@@ -505,6 +533,7 @@
 <script src="js/parser.js"></script>
 <script src="js/ocr.js"></script>
 <script src="js/sharepoint.js"></script>
+<script src="js/kundenmail.js"></script>
 <script src="js/validate.js"></script>
 <script src="js/xmlinvoice.js"></script>
 <script src="js/vendor/fontkit.umd.min.js"></script>

@@ -646,9 +646,18 @@ function extractLineItemsGermanSHB(fullText) {
 function extractMetadataZai(fullText) {
   const r = {};
 
-  // Rechnungsnummer: "Beleg-Nr.: 2026.001772" (der Punkt gehört zur ERP-Nummer)
-  const nrM = fullText.match(/Beleg-?Nr\.?\s*:?\s*([0-9][0-9.\-\/]{3,20})/i);
+  // Rechnungsnummer: "Beleg-Nr.: 2026.001772" (der Punkt gehört zur ERP-Nummer).
+  // Nur mit Bindestrich und Doppelpunkt: Bei Storno-Rechnungen steht im Kopf zusätzlich
+  // "zu Belegnr. 2026.001234" (die stornierte Rechnung), die darf nicht greifen.
+  const nrM = fullText.match(/Beleg-Nr\.?\s*:\s*([0-9][0-9.\-\/]{3,20})/i);
   if (nrM) r.rechnungsnummer = nrM[1].trim();
+
+  // Storno-Rechnung / Gutschrift → BT-3 381, Bezug auf die stornierte Rechnung (BT-25)
+  if (/Storno-?\s*Rechnung|^\s*Gutschrift\b/im.test(fullText)) {
+    r.rechnungsart = '381';
+    const vorM = fullText.match(/zu\s+Beleg-?\s*nr\.?\s*:?\s*([0-9][0-9.\-\/]{3,20})/i);
+    if (vorM) r.vorrechnungsnummer = vorM[1].trim();
+  }
 
   // Rechnungsdatum: "Beleg-Datum: 16.09.2026"
   const datM = fullText.match(/Beleg-?Datum\s*:?\s*(\d{2}\.\d{2}\.\d{4})/i);
@@ -666,9 +675,45 @@ function extractMetadataZai(fullText) {
   const apM = fullText.match(/Ansprechpartner\s*:?\s*([A-ZÄÖÜ][A-Za-zäöüß.\-]+(?:\s+[A-ZÄÖÜ][A-Za-zäöüß.\-]+)?)/);
   if (apM) r.verkaeufkontakt = apM[1].trim();
 
-  // Zahlungsbedingung → Notiz
-  const zbM = fullText.match(/Zahlungsbedingung\s*:?\s*"?([^"\n]{5,120})"?/i);
-  if (zbM) r.notiz = 'Zahlungsbedingung: ' + zbM[1].trim().replace(/\s+/g, ' ').replace(/!+$/, '');
+  // Kunden-Nr. (BT-46, Kennung des Käufers) und Lieferanten-Nr. (BT-29, unter dieser
+  // Nummer führt der Kunde ZAI als Lieferanten; viele Kunden buchen damit automatisch)
+  const kdM = fullText.match(/Kunden-Nr\.?\s*:\s*([A-Z0-9][A-Z0-9\-\/]*)/i);
+  if (kdM) r.kundennummer = kdM[1];
+  const lfM = fullText.match(/Lieferanten-Nr\.?\s*:\s*([A-Z0-9][A-Z0-9\-\/]*)/i);
+  if (lfM) r.lieferantennummer = lfM[1];
+
+  // Bestellnummer des Kunden (BT-13): erste "Best.Nr. 4500012345 Pos. 20" → 4500012345
+  const bestM = fullText.match(/Best\.?\s*-?\s*Nr\.?\s*:?\s*([A-Z0-9][A-Z0-9\-\/.]*)/i);
+  if (bestM) r.bestellnummer = bestM[1].replace(/[.\/]+$/, '');
+
+  // Summenzeile des Originals: "982,62  19,00 %  186,69  1.169,31". Die MwSt übernimmt die
+  // E-Rechnung von hier, statt sie neu zu rechnen: Das ERP rundet anders (186,69 statt
+  // 186,70). EN 16931 (BR-CO-17) lässt diese Abweichung zu. Die letzte Summenzeile zählt,
+  // Zwischensummen auf Folgeseiten haben nur zwei Werte.
+  const summen = [...fullText.matchAll(/(-?[\d.]+,\d{2})\s+(\d{1,2}(?:,\d+)?)\s*%\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})/g)];
+  if (summen.length) {
+    const z = summen[summen.length - 1];
+    r.steuerbetrag = _parseDE(z[3]);
+    r.gesamtbetrag = _parseDE(z[4]);
+  }
+
+  // Hinweise (BT-22): Zahlungsbedingung und die Fußtexte bis zur Bankverbindung
+  // (AGB-Hinweis, Leistungstag, Lieferbedingung, ggf. Hinweis zur Steuerschuldnerschaft)
+  const zeilen = fullText.split('\n').map(z => z.trim());
+  const zb = zeilen.findIndex(z => /^Zahlungsbedingung\b/i.test(z));
+  const hinweise = [];
+  if (zb >= 0) {
+    const zbText = zeilen[zb].replace(/^Zahlungsbedingung\s*:?\s*/i, '').replace(/^"|"$|!+"?$/g, '').replace(/"/g, '').trim();
+    if (zbText) hinweise.push('Zahlungsbedingung: ' + zbText.replace(/!+$/, ''));
+    for (let i = zb + 1; i < zeilen.length; i++) {
+      const z = zeilen[i];
+      if (!z) continue;
+      if (/^Unsere\s+Bankverbindung|^Seite\s*:?\s*\d|^(?:Deutsche\s+Bank|Sparkasse|IBAN|BIC)\b/i.test(z)) break;
+      hinweise.push(z);
+    }
+  }
+  // Zwei Zeilen des AGB-Hinweises zu einem Satz zusammenfassen
+  if (hinweise.length) r.notiz = hinweise.join('\n').replace(/Geschäftsbedingungen\.\nDie AGB/, 'Geschäftsbedingungen. Die AGB');
 
   return r;
 }
@@ -684,67 +729,161 @@ function extractBuyerZai(buyerBlock, leftColumnText, fullText) {
   return r;
 }
 
+/**
+ * Positionen einer ZAI-Rechnung, blockweise über alle Seiten:
+ *   Bestellblock (Bestellung vom / Best.Nr. / Komm. / Auftrags/Pos.-Nr.) → Positionshinweis
+ *   Positionszeile (Pos. Artikel Menge Einheit Einzelpreis Gesamtpreis)
+ *   Detailzeilen (Zeichnung, Guss-Nr., AVO …) → Positionsbeschreibung
+ *   Lieferschein-Nr. / Lieferdatum → Positionshinweis
+ * Preiszeilen ohne Positionsnummer ("Erstmusterkosten 1 Stück …") sind eigene
+ * Positionen oder, wenn die Position davor noch keinen Preis hat, deren Preis.
+ * Die auf jeder Seite wiederholten Köpfe (Seite: n … Pos. Bezeichnung …) fallen heraus.
+ */
 function extractLineItemsZai(fullText) {
-  const items = [];
-  const lines = fullText.split('\n');
+  const EINHEIT = '(St[üu]ck|Stk|St|kg|to?|m|Std|h|l|Pausch\\.?)';
+  const BETRAG = '(-?[\\d.]+,\\d{2})';
+  const mitNr = new RegExp('^(\\d{1,3})\\s+(?:(\\S.*?)\\s+)?(\\d+(?:[.,]\\d+)?)\\s+' + EINHEIT + '\\s+' + BETRAG + '\\s+' + BETRAG + '$', 'i');
+  const ohneNr = new RegExp('^(\\S.*?)\\s+(\\d+(?:[.,]\\d+)?)\\s+' + EINHEIT + '\\s+' + BETRAG + '\\s+' + BETRAG + '$', 'i');
+  const nurKopf = /^(\d{1,3})\s+(\S.*)$/;
+  const bestellZeile = /^(?:Bestellung\s+vom|Best\.?\s*-?\s*Nr|Komm\.|Kommission\s*:|Auftrags?\/?\s*Pos)/i;
+  const lsZeile = /^(?:Lieferschein-?\s*Nr|Lieferdatum)\b/i;
+  const summenKopf = /^Nettobetrag\s+MwSt/i;
+  const summen4 = /^-?[\d.]+,\d{2}\s+\d{1,2}(?:,\d+)?\s*%\s+-?[\d.]+,\d{2}\s+-?[\d.]+,\d{2}$/;
 
-  // Dokument-MwSt aus der Summenzeile ("… 15.452,50  0,00 %  0,00  15.452,50")
-  const mwstM   = fullText.match(/[\d.]+,\d{2}\s+(\d{1,2}(?:,\d+)?)\s*%\s+[\d.]+,\d{2}\s+[\d.]+,\d{2}/);
-  const mwstDoc = mwstM ? _parseDE(mwstM[1]) : 0;
+  // Dokument-MwSt aus der (letzten) Summenzeile
+  const summen = [...fullText.matchAll(/[\d.]+,\d{2}\s+(\d{1,2}(?:,\d+)?)\s*%\s+[\d.]+,\d{2}\s+[\d.]+,\d{2}/g)];
+  const mwstDoc = summen.length ? _parseDE(summen[summen.length - 1][1]) : 0;
 
-  // Positionszeile: PosNr  Artikel(mit Leerzeichen)  Menge  Einheit  Einzelpreis  Gesamtpreis
-  // Anker: Einheit-Schlüsselwort + zwei Dezimalbeträge am Zeilenende.
-  const itemRe = /^\s*(\d+)\s+(\S.*?)\s+(\d+(?:[.,]\d+)?)\s+(St[üu]ck|Stk|St|kg|to?|m|Std|h|l|Pausch\.?)\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})\s*$/i;
-
-  // Zeilen, die sicher keine Position/Beschreibung sind
-  const skipRe = /^(?:Nettobetrag|MwSt|Rechnungsbetrag|Zahlungsbedingung|Es\s+gelten|Die\s+AGB|Pos\.\s+Bezeichnung|Seite|Leistungstag|Lieferbedingung|Auf\s+die\s+Steuerschuldner|Unsere\s+Bankverbindung|Sparkasse|IBAN|BIC)/i;
-  // ERP-Detailzeilen unter der Position (keine Beschreibung)
-  const detailRe = /^(?:Bestellung|Best\.?\s*Nr|Komm\b|Auftrags?|Index\b|Document\s+ID|R.vision|Serialnummer|Lieferschein|Lieferdatum|\d)/i;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line || skipRe.test(line)) continue;
-
-    const m = line.match(itemRe);
-    if (!m) continue;
-
-    const posnr   = _normPosNr(m[1]);
-    const artikel = m[2].trim().replace(/\s{2,}/g, ' ');
-    const menge   = _parseDE(m[3]) || 1;
-    const einheit = _unitCode(m[4]);
-    const gesamt  = _parseDE(m[6]);
-    const einzel  = menge > 0 ? gesamt / menge : _parseDE(m[5]);   // Gesamt/Menge → Summe exakt
-
-    // Beschreibung: erste sinnvolle Folgezeile (keine ERP-Detailzeile/Nummer)
-    let desc = '';
-    for (let j = i + 1; j <= i + 8 && j < lines.length; j++) {
-      const nl = lines[j].trim();
-      if (!nl) continue;
-      if (skipRe.test(nl) || detailRe.test(nl)) continue;
-      if (itemRe.test(nl)) break;                 // nächste Position
-      if (/^[-\d.,\s%]+$/.test(nl)) continue;     // reine Zahlenzeile
-      if (nl.length < 3) continue;
-      desc = nl;
-      break;
+  // Nur den Positionsbereich nehmen, Seitenköpfe und Zwischensummen überspringen
+  const roh = fullText.split('\n').map(z => z.trim());
+  const zeilen = [];
+  let imBereich = false, imKopf = false;
+  for (let i = 0; i < roh.length; i++) {
+    const z = roh[i];
+    if (!z) continue;
+    if (/^Pos\.\s+Bezeichnung/i.test(z)) { imBereich = true; imKopf = false; continue; }
+    if (!imBereich) continue;
+    if (/^Seite\s*:?\s*\d/i.test(z)) { imKopf = true; continue; }
+    if (imKopf) continue;
+    if (summenKopf.test(z)) {
+      const naechste = roh.slice(i + 1).find(x => x);
+      if (naechste && summen4.test(naechste)) break;      // echte Endsumme: Positionsbereich zu Ende
+      continue;                                          // Zwischensumme auf einer Folgeseite
     }
-
-    items.push({
-      posnr,
-      beschreibung: desc ? `${artikel} – ${desc}` : artikel,
-      menge,
-      einheit,
-      einzelpreis: einzel,
-      mwst: mwstDoc,
-    });
+    if (/^\d{1,2}(?:,\d+)?\s*%\s+-?[\d.]+,\d{2}$/.test(z)) continue;   // "19,00 % 0,00"
+    if (/^Zahlungsbedingung\b/i.test(z)) break;
+    zeilen.push(z);
   }
 
-  return _validateAndFallback(items, _extractNetTotalZai(fullText), mwstDoc);
+  const items = [];
+  let offen = null;            // aktuelle Position
+  let bestellung = [];         // Bestellblock für die nächste Position
+  const neuePos = (posnr, artikel) => {
+    offen = { posnr, artikel: (artikel || '').replace(/\s{2,}/g, ' ').trim(), details: [], hinweise: bestellung.slice(),
+      bestellposition: _bestellposition(bestellung), menge: null, einheit: 'C62', einzelpreis: 0, preis: false };
+    bestellung = [];
+    items.push(offen);
+    return offen;
+  };
+  const letzteNr = () => {
+    for (let i = items.length - 1; i >= 0; i--) if (/^\d+$/.test(items[i].posnr)) return Number(items[i].posnr);
+    return 0;
+  };
+
+  for (const z of zeilen) {
+    let m;
+    if (bestellZeile.test(z) && !(offen && /^Kommission\s*:/i.test(z))) {
+      bestellung.push(z.replace(/\s+/g, ' '));
+      offen = null;
+      continue;
+    }
+    if ((m = z.match(mitNr))) {
+      const p = neuePos(_normPosNr(m[1]), m[2] || '');
+      p.menge = _parseDE(m[3]) || 1;
+      p.einheit = _unitCode(m[4]);
+      const gesamt = _parseDE(m[6]);
+      p.einzelpreis = _preisAusGesamt(gesamt, p.menge, _parseDE(m[5]));
+      p.preis = true;
+      continue;
+    }
+    if ((m = z.match(nurKopf)) && Number(m[1]) === letzteNr() + 1 && !/\d{2}\.\d{2}\.\d{4}/.test(z)) {
+      neuePos(_normPosNr(m[1]), m[2]);
+      continue;
+    }
+    if ((m = z.match(ohneNr)) && !lsZeile.test(z)) {
+      const menge = _parseDE(m[2]) || 1;
+      const gesamt = _parseDE(m[5]);
+      let p;
+      if (offen && !offen.preis) {
+        // Preis zur Position davor (z. B. Storno: Kopfzeile ohne Preis, Preis weiter unten)
+        p = offen;
+        p.preisText = m[1].trim();
+      } else {
+        const basis = letzteNr() || 1;
+        const geschwister = items.filter(x => String(x.posnr).startsWith(basis + '.')).length;
+        p = neuePos(`${basis}.${geschwister + 1}`, m[1]);
+      }
+      p.menge = menge;
+      p.einheit = _unitCode(m[3]);
+      p.einzelpreis = _preisAusGesamt(gesamt, menge, _parseDE(m[4]));
+      p.preis = true;
+      continue;
+    }
+    if (!offen) continue;
+    if (lsZeile.test(z)) { offen.hinweise.push(z.replace(/\s+/g, ' ')); continue; }
+    offen.details.push(z);
+  }
+
+  const fertig = items.filter(p => p.preis).map(p => {
+    // Name (BT-153): Artikel + erste sprechende Detailzeile, wie bisher
+    const sprechend = p.details.find(d => d.length >= 3 && !/^[-\d.,\s%\/#]+$/.test(d) && !/^\d/.test(d))
+      || p.details.find(d => d.length >= 3) || '';
+    const zusatz = p.preisText || sprechend;   // bepreiste Zeile (Storno) geht vor
+    const name = p.artikel ? (zusatz && zusatz !== p.artikel ? `${p.artikel} – ${zusatz}` : p.artikel) : zusatz;
+    return {
+      posnr: p.posnr,
+      beschreibung: name || 'Position ' + p.posnr,
+      details: p.details.join('\n'),                 // BT-154 Positionsbeschreibung
+      positionsnotiz: p.hinweise.join('\n'),         // BT-127 Positionshinweis
+      bestellposition: p.bestellposition,            // BT-132
+      menge: p.menge,
+      einheit: p.einheit,
+      einzelpreis: p.einzelpreis,
+      mwst: mwstDoc,
+    };
+  });
+
+  return _validateAndFallback(fertig, _extractNetTotalZai(fullText), mwstDoc);
 }
 
-/** Netto-Erwartungswert: erster Betrag der ZAI-Summenzeile (= Nettobetrag). */
+/**
+ * Einzelpreis so wählen, dass Menge mal Preis den gedruckten Gesamtpreis ergibt.
+ * Das ERP rechnet mit mehr Stellen als es druckt (3 x 160,88 = 482,64, gedruckt 482,63).
+ * Daher der gedruckte Preis, wenn er passt, sonst so wenige Nachkommastellen wie nötig.
+ */
+function _preisAusGesamt(gesamt, menge, gedruckt) {
+  if (!(menge > 0)) return gedruckt;
+  const r2 = x => Math.round(x * 100) / 100;
+  if (r2(menge * gedruckt) === r2(gesamt)) return gedruckt;
+  for (const st of [3, 4, 6]) {
+    const f = Math.pow(10, st);
+    const preis = Math.round(gesamt / menge * f) / f;
+    if (r2(menge * preis) === r2(gesamt)) return preis;
+  }
+  return gesamt / menge;
+}
+
+/** Positionsnummer der Bestellung aus "Best.Nr. 4500012345 Pos. 20" bzw. "… / M21 Pos. 4". */
+function _bestellposition(bestellung) {
+  const z = (bestellung || []).find(x => /Best\.?\s*-?\s*Nr/i.test(x)) || '';
+  const m = z.match(/\bPos\.?\s*(\d+(?:\s*[+,]\s*\d+)*)/i);
+  return m ? m[1].replace(/\s+/g, '') : '';
+}
+
+/** Netto-Erwartungswert: erster Betrag der (letzten) ZAI-Summenzeile (= Nettobetrag). */
 function _extractNetTotalZai(fullText) {
-  const m = fullText.match(/(-?[\d.]+,\d{2})\s+\d{1,2}(?:,\d+)?\s*%\s+-?[\d.]+,\d{2}\s+-?[\d.]+,\d{2}/);
-  return m ? _parseDE(m[1]) : null;
+  const alle = [...fullText.matchAll(/(-?[\d.]+,\d{2})\s+\d{1,2}(?:,\d+)?\s*%\s+-?[\d.]+,\d{2}\s+-?[\d.]+,\d{2}/g)];
+  return alle.length ? _parseDE(alle[alle.length - 1][1]) : null;
 }
 
 /* ══════════════════════════════════════════════════════

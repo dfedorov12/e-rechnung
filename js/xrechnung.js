@@ -50,6 +50,7 @@ function buildXML(data, profile = 'xrechnung') {
     vatGroups[key].amount += net * rate / 100;
   });
 
+  _steuerVorgabeAnwenden(vatGroups, data.steuerbetrag);
   const netTotal = Object.values(vatGroups).reduce((s, g) => s + g.base, 0);
   const vatTotal = Object.values(vatGroups).reduce((s, g) => s + g.amount, 0);
   const grossTotal = netTotal + vatTotal;
@@ -76,11 +77,14 @@ function buildXML(data, profile = 'xrechnung') {
     <ram:IncludedSupplyChainTradeLineItem>
       <ram:AssociatedDocumentLineDocument>
         <ram:LineID>${esc(lineIds[i])}</ram:LineID>
+        ${p.positionsnotiz ? `<ram:IncludedNote><ram:Content>${esc(p.positionsnotiz)}</ram:Content></ram:IncludedNote>` : ''}
       </ram:AssociatedDocumentLineDocument>
       <ram:SpecifiedTradeProduct>
         <ram:Name>${esc(p.beschreibung)}</ram:Name>
+        ${p.details ? `<ram:Description>${esc(p.details)}</ram:Description>` : ''}
       </ram:SpecifiedTradeProduct>
       <ram:SpecifiedLineTradeAgreement>
+        ${p.bestellposition ? `<ram:BuyerOrderReferencedDocument><ram:LineID>${esc(p.bestellposition)}</ram:LineID></ram:BuyerOrderReferencedDocument>` : ''}
         <ram:NetPriceProductTradePrice>
           <ram:ChargeAmount>${fmt(effPreis)}</ram:ChargeAmount>
         </ram:NetPriceProductTradePrice>
@@ -162,11 +166,16 @@ function buildXML(data, profile = 'xrechnung') {
 
   const buyerRef = esc(data.leitwegid || data.rechnungsnummer);
   const note = data.notiz ? `<ram:IncludedNote><ram:Content>${esc(data.notiz)}</ram:Content></ram:IncludedNote>` : '';
-  const dueDateXML = data.faelligkeitsdatum
+  // Zahlungsbedingungen (BT-20) und Fälligkeit (BT-9). Eins von beiden ist Pflicht, sobald
+  // ein Betrag zu zahlen ist (BR-CO-25); Gutschriften haben oft nur den Text („… in Abzug“).
+  const zahlungstext = data.zahlungsbedingung
+    || ((String(data.notiz || '').match(/^Zahlungsbedingung\s*:\s*(.+)$/m) || [])[1] || '').trim();
+  const dueDateXML = (data.faelligkeitsdatum || zahlungstext)
     ? `<ram:SpecifiedTradePaymentTerms>
-        <ram:DueDateDateTime>
+        ${zahlungstext ? `<ram:Description>${esc(zahlungstext)}</ram:Description>` : ''}
+        ${data.faelligkeitsdatum ? `<ram:DueDateDateTime>
           <udt:DateTimeString format="102">${fmtDate(data.faelligkeitsdatum)}</udt:DateTimeString>
-        </ram:DueDateDateTime>
+        </ram:DueDateDateTime>` : ''}
       </ram:SpecifiedTradePaymentTerms>`
     : '';
 
@@ -213,6 +222,7 @@ function buildXML(data, profile = 'xrechnung') {
       <ram:BuyerReference>${buyerRef}</ram:BuyerReference>
 
       <ram:SellerTradeParty>
+        ${data.lieferantennummer ? `<ram:ID>${esc(data.lieferantennummer)}</ram:ID>` : ''}
         <ram:Name>${esc(data.verkaeufer)}</ram:Name>
         ${sellerDescription}
         ${sellerLegalOrg}
@@ -230,6 +240,7 @@ function buildXML(data, profile = 'xrechnung') {
       </ram:SellerTradeParty>
 
       <ram:BuyerTradeParty>
+        ${data.kundennummer ? `<ram:ID>${esc(data.kundennummer)}</ram:ID>` : ''}
         <ram:Name>${esc(data.kaeufer)}</ram:Name>
         <ram:PostalTradeAddress>
           <ram:PostcodeCode>${esc(data.kaeuferplz)}</ram:PostcodeCode>
@@ -244,6 +255,9 @@ function buildXML(data, profile = 'xrechnung') {
         </ram:URIUniversalCommunication>` : '')}
         ${data.kaeufervat ? `<ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">${esc(data.kaeufervat)}</ram:ID></ram:SpecifiedTaxRegistration>` : ''}
       </ram:BuyerTradeParty>
+      ${data.bestellnummer ? `<ram:BuyerOrderReferencedDocument>
+        <ram:IssuerAssignedID>${esc(data.bestellnummer)}</ram:IssuerAssignedID>
+      </ram:BuyerOrderReferencedDocument>` : ''}
     </ram:ApplicableHeaderTradeAgreement>
 
     <ram:ApplicableHeaderTradeDelivery>
@@ -292,6 +306,10 @@ function buildXML(data, profile = 'xrechnung') {
         <ram:GrandTotalAmount>${fmt(grossTotal)}</ram:GrandTotalAmount>
         <ram:DuePayableAmount>${fmt(grossTotal)}</ram:DuePayableAmount>
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+      ${data.vorrechnungsnummer ? `<ram:InvoiceReferencedDocument>
+        <ram:IssuerAssignedID>${esc(data.vorrechnungsnummer)}</ram:IssuerAssignedID>
+        ${data.vorrechnungsdatum ? `<ram:FormattedIssueDateTime><qdt:DateTimeString format="102">${fmtDate(data.vorrechnungsdatum)}</qdt:DateTimeString></ram:FormattedIssueDateTime>` : ''}
+      </ram:InvoiceReferencedDocument>` : ''}
     </ram:ApplicableHeaderTradeSettlement>
   </rsm:SupplyChainTradeTransaction>
 
@@ -315,7 +333,22 @@ function mapUnit(einheit) {
   return map[einheit] || 'C62';
 }
 
-function calcTotals(positionen) {
+/**
+ * MwSt-Betrag laut Original übernehmen (BT-110/BT-117), statt ihn neu zu rechnen.
+ * Das ERP rundet je nach Verfahren anders (186,69 statt 186,70); EN 16931 lässt das in
+ * BR-CO-17 zu. Nur bei genau einem Steuersatz und höchstens 5 Cent Abweichung, sonst
+ * gilt die eigene Rechnung (z. B. wenn jemand Positionen geändert hat).
+ */
+function _steuerVorgabeAnwenden(vatGroups, vorgabe) {
+  const gruppen = Object.values(vatGroups);
+  const v = parseFloat(vorgabe);
+  if (vorgabe === '' || vorgabe == null || !isFinite(v) || gruppen.length !== 1) return false;
+  if (Math.abs(gruppen[0].amount - v) > 0.05) return false;
+  gruppen[0].amount = v;
+  return true;
+}
+
+function calcTotals(positionen, steuerVorgabe) {
   const vatGroups = {};
   positionen.forEach(p => {
     const net = parseFloat(p.menge || 0) * parseFloat(p.einzelpreis || 0)
@@ -326,7 +359,8 @@ function calcTotals(positionen) {
     vatGroups[key].base += net;
     vatGroups[key].amount += net * rate / 100;
   });
+  const steuerLautOriginal = _steuerVorgabeAnwenden(vatGroups, steuerVorgabe);
   const netTotal = Object.values(vatGroups).reduce((s, g) => s + g.base, 0);
   const vatTotal = Object.values(vatGroups).reduce((s, g) => s + g.amount, 0);
-  return { netTotal, vatTotal, grossTotal: netTotal + vatTotal, vatGroups };
+  return { netTotal, vatTotal, grossTotal: netTotal + vatTotal, vatGroups, steuerLautOriginal };
 }

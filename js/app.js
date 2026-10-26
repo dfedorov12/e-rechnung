@@ -199,6 +199,7 @@ async function autoFillFromPDF() {
     _sourceViaOcr      = viaOcr;
 
     const count = fillFormFromExtracted(data);
+    await _kundenMailVorschlagen(data);
     showLoading(false);
     if (count > 0) {
       showAutofillBanner(count);
@@ -218,6 +219,14 @@ async function autoFillFromPDF() {
 
 function fillFormFromExtracted(data) {
   let count = 0;
+  // Werte einer vorher geladenen Rechnung dürfen nicht stehen bleiben (z. B. Bezug einer Storno)
+  ['bestellnummer', 'lieferscheinnummer', 'kundennummer', 'lieferantennummer', 'vorrechnungsnummer',
+    'vorrechnungsdatum', 'steuerbetrag-original', 'kaeufer-email'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; el.classList.remove('autofilled'); }
+  });
+  const rechnungsart = document.getElementById('rechnungsart');
+  if (rechnungsart) rechnungsart.value = data.rechnungsart || '380';
   const map = {
     'verkaeufer':          data.verkaeufer,
     'verkaeufer-strasse':  data.verkaeufstrasse,
@@ -257,6 +266,13 @@ function fillFormFromExtracted(data) {
     'faelligkeitsdatum':   data.faelligkeitsdatum,
     'zahlungsreferenz':    data.zahlungsreferenz || data.rechnungsnummer,
     'notiz':               data.notiz,
+    'bestellnummer':       data.bestellnummer,
+    'lieferscheinnummer':  data.lieferscheinnummer,
+    'kundennummer':        data.kundennummer,
+    'lieferantennummer':   data.lieferantennummer,
+    'vorrechnungsnummer':  data.vorrechnungsnummer,
+    'vorrechnungsdatum':   data.vorrechnungsdatum,
+    'steuerbetrag-original': data.steuerbetrag != null ? String(data.steuerbetrag) : '',
   };
 
   for (const [id, val] of Object.entries(map)) {
@@ -282,6 +298,50 @@ function fillFormFromExtracted(data) {
   updateTotals();
   lockSellerMaster();   // #1: Verkäufer-Stammdaten gegen versehentliche/böswillige Änderung sperren
   return count;
+}
+
+/* ── Rechnungsadresse je Kunde (BT-49): vorschlagen und merken, js/kundenmail.js ── */
+let _kundenMails = null;
+
+async function _kundenMailsLaden() {
+  if (_kundenMails) return _kundenMails;
+  try { _kundenMails = (typeof spLoadKundenMails === 'function' && await spLoadKundenMails()) || null; }
+  catch (e) { console.warn('Kunden-Rechnungsadressen nicht lesbar:', e.message || e); }
+  if (!_kundenMails || !Array.isArray(_kundenMails.eintraege)) _kundenMails = { version: 1, eintraege: [] };
+  return _kundenMails;
+}
+
+async function _kundenMailVorschlagen(data) {
+  const el = document.getElementById('kaeufer-email');
+  const hinweis = document.getElementById('kaeufer-email-hinweis');
+  if (!el || el.value.trim() || v('leitwegid') || typeof kundenMailFinden !== 'function') return;
+  const k = await _kundenMailsLaden();
+  const e = kundenMailFinden(k.eintraege, {
+    gesellschaft: v('gesellschaft') || data.gesellschaft, kundennummer: data.kundennummer,
+    kaeufervat: data.kaeufervat, kaeufer: data.kaeufer,
+  });
+  if (!e) {
+    if (hinweis) hinweis.textContent = 'Für diesen Kunden ist noch keine Rechnungsadresse gemerkt. Bitte das Rechnungspostfach des Kunden eintragen, die App merkt es sich beim Export.';
+    return;
+  }
+  el.value = e.mail;
+  el.classList.add('autofilled');
+  el.addEventListener('input', () => el.classList.remove('autofilled'), { once: true });
+  if (hinweis) hinweis.textContent = `Gemerkte Rechnungsadresse für ${e.name || e.kundennummer || 'diesen Kunden'}. Bitte prüfen.`;
+}
+
+async function _kundenMailMerken(data) {
+  try {
+    if (typeof kundenMailUebernehmen !== 'function' || typeof spSaveKundenMails !== 'function') return;
+    const k = await _kundenMailsLaden();
+    const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
+    const neu = kundenMailUebernehmen(k.eintraege, data, user.username || '');
+    if (!neu) return;
+    k.eintraege = neu;
+    await spSaveKundenMails(k);
+  } catch (e) {
+    console.warn('Rechnungsadresse nicht gemerkt:', e.message || e);
+  }
 }
 
 /* ── #1: Verkäufer-Stammdaten sperren/entsperren ──
@@ -462,9 +522,11 @@ function addPositionRow(data = {}) {
   const tr = document.createElement('tr');
   tr.dataset.row = rowCounter;
 
+  tr.className = 'pos-row';
   tr.innerHTML = `
-    <td style="width:68px;"><input type="text" class="pos-nr" placeholder="${tbody.children.length + 1}" value="${escHTML(data.posnr || '')}" title="Positionsnummer (z. B. 1, 1.1, 1.2.1)"></td>
-    <td style="min-width:200px;"><input type="text" class="pos-beschreibung" placeholder="Leistungsbeschreibung" value="${escHTML(data.beschreibung || '')}"></td>
+    <td style="width:68px;"><input type="text" class="pos-nr" placeholder="${tbody.querySelectorAll('tr.pos-row').length + 1}" value="${escHTML(data.posnr || '')}" title="Positionsnummer (z. B. 1, 1.1, 1.2.1)"></td>
+    <td style="min-width:200px;"><input type="text" class="pos-beschreibung" placeholder="Leistungsbeschreibung" value="${escHTML(data.beschreibung || '')}">
+      <button type="button" class="pos-details-toggle" title="Positionsbeschreibung, Hinweis (z. B. Bestellung, Lieferschein) und Bestellposition"></button></td>
     <td style="width:80px;"><input type="number" class="pos-menge" placeholder="1" min="0" step="0.001" value="${data.menge || 1}"></td>
     <td style="width:90px;">
       <select class="pos-einheit">
@@ -487,8 +549,28 @@ function addPositionRow(data = {}) {
 
   tbody.appendChild(tr);
 
+  // Detailbereich der Position (BT-154 Beschreibung, BT-127 Hinweis, BT-132 Bestellposition)
+  const det = document.createElement('tr');
+  det.className = 'pos-details-row';
+  det.hidden = true;
+  det.innerHTML = `<td></td><td colspan="8"><div class="pos-details-grid">
+      <label>Positionsbeschreibung (BT-154)<textarea class="pos-details" rows="3" placeholder="z. B. Zeichnung, Guss-Nr., Arbeitsgang">${escHTML(data.details || '')}</textarea></label>
+      <label>Positionshinweis (BT-127)<textarea class="pos-notiz" rows="3" placeholder="z. B. Bestellung vom …, Komm., Lieferschein">${escHTML(data.positionsnotiz || '')}</textarea></label>
+      <label>Bestellposition (BT-132)<input type="text" class="pos-bestellpos" value="${escHTML(data.bestellposition || '')}" placeholder="z. B. 20"></label>
+    </div></td>`;
+  tbody.appendChild(det);
+  const knopf = tr.querySelector('.pos-details-toggle');
+  const knopfText = () => {
+    const voll = ['.pos-details', '.pos-notiz', '.pos-bestellpos'].some(c => det.querySelector(c).value.trim());
+    knopf.textContent = (det.hidden ? '▸ ' : '▾ ') + 'Details' + (voll ? ' ✓' : '');
+  };
+  knopf.addEventListener('click', () => { det.hidden = !det.hidden; knopfText(); });
+  det.querySelectorAll('textarea, input').forEach(el => el.addEventListener('input', knopfText));
+  knopfText();
+
   tr.querySelector('.btn-remove-row').addEventListener('click', () => {
-    if (tbody.children.length > 1) {
+    if (tbody.querySelectorAll('tr.pos-row').length > 1) {
+      det.remove();
       tr.remove();
       renumberRows();
       updateTotals();
@@ -508,16 +590,19 @@ function addPositionRow(data = {}) {
 function renumberRows() {
   // Nur den Platzhalter (fortlaufende Nr.) aktualisieren — den erkannten
   // Positionsnummern-Wert nicht überschreiben.
-  document.querySelectorAll('#positions-body tr').forEach((tr, i) => {
+  document.querySelectorAll('#positions-body tr.pos-row').forEach((tr, i) => {
     const nr = tr.querySelector('.pos-nr');
     if (nr) nr.placeholder = i + 1;
   });
 }
 
 function collectPositionen() {
-  return Array.from(document.querySelectorAll('#positions-body tr')).map((tr, i) => ({
+  return Array.from(document.querySelectorAll('#positions-body tr.pos-row')).map((tr, i) => ({
     posnr: tr.querySelector('.pos-nr').value.trim() || String(i + 1),
     beschreibung: tr.querySelector('.pos-beschreibung').value.trim(),
+    details: (tr.nextElementSibling && tr.nextElementSibling.querySelector('.pos-details') || { value: '' }).value.trim(),
+    positionsnotiz: (tr.nextElementSibling && tr.nextElementSibling.querySelector('.pos-notiz') || { value: '' }).value.trim(),
+    bestellposition: (tr.nextElementSibling && tr.nextElementSibling.querySelector('.pos-bestellpos') || { value: '' }).value.trim(),
     menge: parseFloat(tr.querySelector('.pos-menge').value) || 0,
     einheit: tr.querySelector('.pos-einheit').value,
     einzelpreis: parseFloat(tr.querySelector('.pos-einzelpreis').value) || 0,
@@ -527,7 +612,7 @@ function collectPositionen() {
 }
 
 function updateTotals() {
-  document.querySelectorAll('#positions-body tr').forEach(tr => {
+  document.querySelectorAll('#positions-body tr.pos-row').forEach(tr => {
     const menge  = parseFloat(tr.querySelector('.pos-menge').value) || 0;
     const preis  = parseFloat(tr.querySelector('.pos-einzelpreis').value) || 0;
     const rabatt = parseFloat(tr.querySelector('.pos-rabatt').value) || 0;
@@ -537,7 +622,7 @@ function updateTotals() {
   });
 
   const positionen = collectPositionen();
-  const { netTotal, vatTotal, grossTotal, vatGroups } = calcTotals(positionen);
+  const { netTotal, vatTotal, grossTotal, vatGroups, steuerLautOriginal } = calcTotals(positionen, v('steuerbetrag-original'));
 
   document.getElementById('total-netto').textContent = formatDE(netTotal) + ' €';
 
@@ -546,7 +631,7 @@ function updateTotals() {
   Object.values(vatGroups).sort((a, b) => b.rate - a.rate).forEach(g => {
     const row = document.createElement('div');
     row.className = 'totals-row';
-    row.innerHTML = `<span>MwSt. ${g.rate.toFixed(0)} %</span><span class="amount">${formatDE(g.amount)} €</span>`;
+    row.innerHTML = `<span>MwSt. ${g.rate.toFixed(0)} %${steuerLautOriginal ? ' <small title="Betrag aus dem Original übernommen, das ERP rundet anders">(laut Original)</small>' : ''}</span><span class="amount">${formatDE(g.amount)} €</span>`;
     vatContainer.appendChild(row);
   });
 
@@ -612,6 +697,13 @@ function collectFormData() {
     faelligkeitsdatum: v('faelligkeitsdatum'),
     zahlungsreferenz:  v('zahlungsreferenz'),
     notiz:             v('notiz'),
+    bestellnummer:     v('bestellnummer'),       // BT-13
+    lieferscheinnummer: v('lieferscheinnummer'), // BT-16
+    kundennummer:      v('kundennummer'),        // BT-46
+    lieferantennummer: v('lieferantennummer'),   // BT-29
+    vorrechnungsnummer: v('vorrechnungsnummer'), // BT-25
+    vorrechnungsdatum: v('vorrechnungsdatum'),   // BT-26
+    steuerbetrag:      v('steuerbetrag-original'),   // MwSt laut Original (BT-110)
     gesellschaft:      v('gesellschaft') || 'WGC',
     // Steuerbefreiung (bei 0%-Positionen): UNTDID 5305 + BT-120
     steuerkategorie:   v('steuerkategorie') || 'Z',
@@ -682,12 +774,25 @@ async function exportInvoice(format) {
     return;
   }
 
+  // Rechnungsadresse des Kunden darf nicht die eigene sein (z. B. die Adresse dessen,
+  // der die Rechnung erstellt): dann käme die E-Rechnung nie beim Kunden an.
+  const _ich = ((typeof getAuthUser === 'function' && getAuthUser()) || {}).username || '';
+  if (!data.leitwegid && typeof kundenMailIstEigen === 'function'
+    && (kundenMailIstEigen(data.kaeufermail, data.verkaeuferemail)
+      || (_ich && data.kaeufermail.trim().toLowerCase() === _ich.toLowerCase()))) {
+    if (!window.confirm(`Die Rechnungsadresse des Kunden (${data.kaeufermail}) gehört zur eigenen Firma. `
+      + 'Eingetragen werden sollte das Rechnungspostfach des Kunden. Trotzdem exportieren?')) {
+      document.getElementById('kaeufer-email').focus();
+      return;
+    }
+  }
+
   // (Punkt 7 der UStAE/GoBD-Einordnung: Auslandskreditor ohne Leitweg als XRechnung
   //  ist zulässig — konkludente Zustimmung, keine Rückfrage nötig. Daher KEIN
   //  Sonder-Check hier.)
 
   // #2/#3/#4: Plausibilitäts- und PDF↔XML-Prüfung vor dem Erstellen
-  const totals = calcTotals(data.positionen);
+  const totals = calcTotals(data.positionen, data.steuerbetrag);
   if (!_preflightChecks(data, totals)) return;
 
   showLoading(true, format === 'zugferd' ? 'ZUGFeRD PDF wird erstellt...' : 'XRechnung XML wird erstellt...');
@@ -762,6 +867,7 @@ async function exportInvoice(format) {
         format,
       });
       showLoading(false);
+      _kundenMailMerken(data);
       showToast(
         format === 'zugferd'
           ? `ZUGFeRD PDF exportiert & im Monitoring gespeichert. (${safeNr})`
@@ -808,7 +914,7 @@ async function createInvoiceMail() {
   const useZugferd = !!uploadedPdfBytes || renderFromData;
 
   // #2/#3/#4: gleiche Prüfungen wie beim Export
-  const totals = calcTotals(data.positionen);
+  const totals = calcTotals(data.positionen, data.steuerbetrag);
   if (!_preflightChecks(data, totals)) return;
 
   showLoading(true, useZugferd ? 'ZUGFeRD wird erstellt …' : 'XRechnung wird erstellt …');

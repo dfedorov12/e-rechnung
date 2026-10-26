@@ -165,6 +165,7 @@ async function buildInvoicePdf(data) {
     [data.verkaeufersteuernr ? `Steuernr.: ${data.verkaeufersteuernr}` : ''],
     [data.registernr         ? `Register: ${data.registernr}` : ''],
     [data.rechtsangaben || ''],
+    [data.lieferantennummer  ? `Lieferanten-Nr. beim Kunden: ${data.lieferantennummer}` : ''],
     [data.verkaeufkontakt    ? `Ansprechpartner: ${data.verkaeufkontakt}` : ''],
     [data.verkaeuftel        ? `Tel.: ${data.verkaeuftel}` : ''],
     [_eAdr(data.verkaeuferemail)],
@@ -176,6 +177,7 @@ async function buildInvoicePdf(data) {
     [[data.kaeuferplz, data.kaeuferstadt].filter(Boolean).join(' ')],
     [data.kaeuferland !== 'DE' ? data.kaeuferland : ''],
     [data.kaeufervat ? `USt-IdNr.: ${data.kaeufervat}` : ''],
+    [data.kundennummer    ? `Kunden-Nr.: ${data.kundennummer}` : ''],
     [data.leitwegid       ? `Käuferreferenz: ${data.leitwegid}` : ''],
     [data.bestellnummer   ? `Bestellnummer: ${data.bestellnummer}` : ''],
     [data.projektreferenz ? `Projektreferenz: ${data.projektreferenz}` : ''],
@@ -205,9 +207,13 @@ async function buildInvoicePdf(data) {
   const meta = [
     ['Rechnungsdatum',      fmtDate(data.rechnungsdatum)],
     ['Lieferdatum',         fmtDate(data.lieferdatum)],
-    ['Abrechnungszeitraum', abrZeitraum],
+    ...((data.abrZeitraumStart || data.abrZeitraumEnde) ? [['Abrechnungszeitraum', abrZeitraum]] : []),
     ['Lieferscheinnummer',  data.lieferscheinnummer || '–'],
   ];
+  // Gutschrift/Korrektur: Bezug auf die ursprüngliche Rechnung (BT-25/BT-26)
+  if (data.vorrechnungsnummer) {
+    meta.push(['Bezug auf Rechnung', data.vorrechnungsnummer + (data.vorrechnungsdatum ? ` vom ${fmtDate(data.vorrechnungsdatum)}` : '')]);
+  }
   const metaW = (W - 2 * M) / meta.length;
   meta.forEach(([label, val], i) => {
     text(label, M + i * metaW, y, { size: 7.5, bold: true, color: gray });
@@ -275,6 +281,19 @@ async function buildInvoicePdf(data) {
     textRight(fmtEur(gesamt), cols.gesamt.x + cols.gesamt.w, y, { size: 9 });
 
     y -= rowH;
+    // Positionsbeschreibung (BT-154) und Positionshinweis (BT-127, z. B. Bestellung,
+    // Lieferschein) in kleiner Schrift über die volle Breite, mit Seitenumbruch
+    const zusatzBreite = W - M - cols.besch.x;
+    const zusatz = [];
+    if (p.details) wrap(p.details, zusatzBreite, 8).forEach(l => zusatz.push(l));
+    const hinweis = p.positionsnotiz || p.note;
+    if (hinweis) wrap(hinweis, zusatzBreite, 8).forEach(l => zusatz.push(l));
+    zusatz.forEach(l => {
+      if (y < M + 40) { newPage(); tableHeader(); }
+      text(l, cols.besch.x, y + 2, { size: 8, color: gray });
+      y -= 10;
+    });
+    if (zusatz.length) y -= 2;
     hline(y + 4);
     y -= 6;
   });
@@ -348,10 +367,13 @@ async function buildInvoicePdf(data) {
     y -= 6;
   }
 
-  if (data.notiz) {
+  const zb = String(data.zahlungsbedingungen || '').trim();
+  const notiz = String(data.notiz || '').split(/\r?\n/)
+    .filter(l => !(zb && l.replace(/^Zahlungsbedingung(?:en)?\s*:\s*/i, '').trim() === zb)).join('\n').trim();
+  if (notiz) {
     text('HINWEISE', M, y, { size: 7.5, bold: true, color: gray });
     y -= 13;
-    for (const l of wrap(data.notiz, W - 2 * M)) {
+    for (const l of wrap(notiz, W - 2 * M)) {
       if (y < M + 30) newPage();
       text(l, M, y, { size: 9 });
       y -= 12;
@@ -360,7 +382,7 @@ async function buildInvoicePdf(data) {
 
   /* ── Seite 2: Weitere Angaben aus der XML ── */
   const _weitere = data.weitere || [];
-  const _hasPosExtra = (data.positionen || []).some(p => p.note || (p.posExtra && p.posExtra.length));
+  const _hasPosExtra = (data.positionen || []).some(p => p.posExtra && p.posExtra.length);
   if (_weitere.length || _hasPosExtra) {
     newPage();
     text('WEITERE ANGABEN AUS DER XML', M, y - 4, { size: 13, bold: true, color: primary });
@@ -391,7 +413,6 @@ async function buildInvoicePdf(data) {
     }
     (data.positionen || []).forEach((p, i) => {
       const items = [];
-      if (p.note) items.push(['Hinweis (BT-127)', p.note]);
       (p.posExtra || []).forEach(e => items.push([e.label, e.value]));
       if (!items.length) return;
       grp(`Position ${p.posnr || (i + 1)}: ${(p.beschreibung || '').slice(0, 60)}`);
