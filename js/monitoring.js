@@ -26,6 +26,7 @@ let _monAnsicht = '';               // Filter + Sortierung beim letzten Zeichnen
 let _monLadeLauf = 0;               // laufender Ladevorgang (ein neuer bricht den alten ab)
 let _monLaedt = false;
 let _monLibs = [];                  // geladene Bibliotheken (für die Werk-Auswahl)
+let _monDateien = [];               // alle geladenen Dateien (neu zusammenfassen nach Einstellungen)
 const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' };
 let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
@@ -97,6 +98,7 @@ async function loadMonitoring(accessList) {
     // schon während des Ladens. Eine Bibliothek mit Fehler hält die anderen nicht auf.
     const lauf = ++_monLadeLauf;
     const recs = [];
+    _monDateien = recs;
     const fehlerLibs = [];
     _monRecords = [];
     _monLaedt = true;
@@ -245,6 +247,8 @@ function _monMap(it, f, lib) {
     steller:  (f.Rechnungssteller || '').toString(),
     empf:     (f.Rechnungsempfaenger || '').toString(),
     brutto:   num(f.Bruttobetrag),
+    netto:    num(f.Nettobetrag),
+    bestellnr: (f.Bestellnummer || '').toString(),
     waehrung: (f.Waehrung || 'EUR').toString(),
     datum:    (f.Rechnungsdatum || f.Eingangszeitpunkt || it.createdDateTime || '').toString(),
     faelligkeit: (f.Faelligkeitsdatum || '').toString(),
@@ -313,6 +317,8 @@ function _monGroup(recs) {
       if (!primary[key]) { const s = arr.find(r => r[key]); if (s) primary[key] = s[key]; }
     }
     if (primary.brutto == null) { const s = arr.find(r => r.brutto != null); if (s) primary.brutto = s.brutto; }
+    if (primary.netto == null) { const s = arr.find(r => r.netto != null); if (s) primary.netto = s.netto; }
+    if (!primary.bestellnr) { const s = arr.find(r => r.bestellnr); if (s) primary.bestellnr = s.bestellnr; }
     // GoBD-archiviert, sobald IRGENDEINE Datei der Rechnung unter Aufbewahrung liegt
     // (Tag) bzw. der Flow es gesetzt hat; Tag-Wert für den Tooltip merken.
     primary.gobdArchiviert = arr.some(r => r.complianceTag || r.gobd);
@@ -337,7 +343,8 @@ function _monGroup(recs) {
     // die erste verfügbare Geschwisterdatei nehmen.
     if (!primary.url) { const s = arr.find(r => r.url); if (s) primary.url = s.url; }
     // Bearbeitung: eine Datei je Eingangsrechnung trägt die Felder der Buchhaltung.
-    if (typeof bhZiel === 'function' && !primary.intake && primary.richtung === 'Eingang') {
+    if (typeof bhZiel === 'function' && !primary.intake && primary.richtung === 'Eingang'
+        && (typeof bhBearbeitenAn !== 'function' || bhBearbeitenAn(primary.werk))) {
       primary.bhQuelle = bhZiel(arr);
       primary.bh = bhZusammen(arr, primary.bhQuelle);
     } else {
@@ -388,9 +395,14 @@ function _monBuildFilterOptions(libs) {
   _fillSelect('mon-f-werk',    uniq(libs.map(l => l.werk)),              'Alle Werke');
   _fillSelect('mon-f-klass',   uniq(_monRecords.map(r => _monKlass(r))), 'Alle Typen');
   _fillSelect('mon-f-buchung', uniq(_monRecords.map(r => r.buchung)),    'Alle Buchung');
+  const buchung = document.getElementById('mon-f-buchung');
+  if (buchung) buchung.insertAdjacentHTML('beforeend', '<option value="__klein">Kleinbetrag (bis 250 € brutto)</option>');
   _fillSelect('mon-f-status',  uniq(_monRecords.map(r => r.status)),     'Alle Status');
   _fillSelect('mon-f-bstatus', uniq(_monRecords.map(r => r.bh && r.bh.bstatus)),   'Alle Bearbeitung');
   _fillSelect('mon-f-genehmigt', uniq(_monRecords.map(r => r.bh && r.bh.genehmigt)), 'Alle Genehmigt');
+  // Filter der Bearbeitung nur zeigen, wenn ein Werk sie nutzt
+  const bh = _monRecords.some(r => r.bh);
+  ['mon-f-bstatus', 'mon-f-genehmigt'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = bh ? '' : 'none'; });
 }
 
 function _fillSelect(id, values, allLabel) {
@@ -425,7 +437,7 @@ function _monMatchBase(r, f, q) {
       && (!f.richtung || r.richtung === f.richtung)
       && (!f.klass    || _monKlass(r) === f.klass)
       && (!f.konform  || (r.konform || '').toLowerCase().startsWith(f.konform))
-      && (!f.buchung  || r.buchung === f.buchung)
+      && (!f.buchung  || (f.buchung === '__klein' ? _monKlein(r) : r.buchung === f.buchung))
       && (!f.status   || r.status === f.status)
       && (!f.bstatus  || (r.bh && r.bh.bstatus) === f.bstatus)
       && (!f.genehmigt || (r.bh && r.bh.genehmigt) === f.genehmigt)
@@ -468,6 +480,12 @@ function _monSortVal(r, key) {
     case 'nummer':   return (r.nummer || '').toLowerCase();
     case 'partner':  return _monPartner(r).toLowerCase();
     case 'brutto':   return r.brutto == null ? -Infinity : r.brutto;
+    case 'netto':    return r.netto == null ? -Infinity : r.netto;
+    case 'informiert': return typeof ugInformiert === 'function' ? ugInformiert(r) : '';
+    case 'varial':   return (r.bh && r.bh.varial) || '';
+    case 'bestellnr': return ((r.bh && r.bh.bestellnr) || r.bestellnr || '').toLowerCase();
+    case 'bstatus':  return (r.bh && r.bh.bstatus) || '';
+    case 'genehmigt': return (r.bh && r.bh.genehmigt) || '';
     case 'faellig':  return (r.faelligkeit || '').slice(0, 10);
     case 'klass':    return _monKlass(r) || '';
     case 'status':   return r.status || '';
@@ -511,7 +529,7 @@ function _monRenderKpis(rows) {
     { id: 'flag:rueckfrage', label: 'Zur Rückfrage',         val: rueckfrage, cls: rueckfrage ? 'bad' : '' },
     { id: 'flag:zurueck',    label: 'Zurückgewiesen',        val: zurueck,    cls: zurueck ? 'bad' : '' },
     { id: 'flag:umsatz',     label: '800k-Einschätzung offen', val: umsatz,   cls: umsatz ? 'warn' : '' },
-    { id: 'flag:genehmigung', label: 'In Genehmigung',       val: genehmigung, cls: genehmigung ? 'warn' : '' },
+    ...(_monRecords.some(r => r.bh) ? [{ id: 'flag:genehmigung', label: 'In Genehmigung', val: genehmigung, cls: genehmigung ? 'warn' : '' }] : []),
     ...klassKeys.map(k => ({ id: 'k:' + k, label: k, val: klassCounts[k], cls: 'klass' })),
   ];
   document.getElementById('mon-kpis').innerHTML = tiles.map(t => {
@@ -540,84 +558,235 @@ function _monTileClick(id) {
   _monApply();
 }
 
+/* ── Spalten ────────────────────────────────────────────────────────── */
+// Welche Spalten ein Werk zeigt, legt ein Admin unter „Spalten“ fest (gespeichert in
+// Monitoring/monitoring-einstellungen.json, js/bearbeitung.js). Ohne Festlegung gilt
+// MON_STANDARD. Spalten mit bh: true gibt es nur, wenn das Werk die Bearbeitung nutzt.
+const MON_SPALTEN = [
+  { id: 'datum',       titel: 'Datum',                sort: 'datum',      breite: 6 },
+  { id: 'werk',        titel: 'Werk',                 sort: 'werk',       breite: 5 },
+  { id: 'richtung',    titel: 'Richtung',             sort: 'richtung',   breite: 6 },
+  { id: 'nummer',      titel: 'Rechnungsnr.',         sort: 'nummer',     breite: 9 },
+  { id: 'partner',     titel: 'Steller / Empfänger',  sort: 'partner',    breite: 14 },
+  { id: 'netto',       titel: 'Netto',                sort: 'netto',      breite: 7 },
+  { id: 'brutto',      titel: 'Brutto',               sort: 'brutto',     breite: 7 },
+  { id: 'faellig',     titel: 'Fällig am',            sort: 'faellig',    breite: 7 },
+  { id: 'klass',       titel: 'Klassifizierung',      sort: 'klass',      breite: 9 },
+  { id: 'status',      titel: 'Status',               sort: 'status',     breite: 8 },
+  { id: 'buchung',     titel: 'Buchung',              sort: 'buchung',    breite: 9 },
+  { id: 'informiert',  titel: 'Lieferant informiert', sort: 'informiert', breite: 7 },
+  { id: 'konform',     titel: 'Konform.',             sort: 'konform',    breite: 10 },
+  { id: 'fehler',      titel: 'Fehler',                                   breite: 6 },
+  { id: 'bestellnr',   titel: 'Bestellnummer',        sort: 'bestellnr',  breite: 7 },
+  { id: 'varial',      titel: 'Varialnummer',         sort: 'varial',     breite: 7, bh: true },
+  { id: 'kontierung',  titel: 'Kontierung',                               breite: 10, bh: true },
+  { id: 'bstatus',     titel: 'Bearbeitung',          sort: 'bstatus',    breite: 8, bh: true },
+  { id: 'genehmigung', titel: 'Genehmigung',          sort: 'genehmigt',  breite: 9, bh: true },
+  { id: 'notiz',       titel: 'Notiz',                                    breite: 10, bh: true },
+  { id: 'links',       titel: '',                                         breite: 6, fest: true },
+];
+const MON_STANDARD = ['datum', 'werk', 'richtung', 'nummer', 'partner', 'netto', 'faellig', 'klass',
+  'status', 'buchung', 'informiert', 'konform', 'fehler', 'varial', 'bstatus', 'genehmigung'];
+
+/** Spalten-IDs, die ein Werk zeigt (immer mit 'links'). */
+function _monWerkSpalten(werk) {
+  const e = typeof bhWerkEinst === 'function' ? bhWerkEinst(werk) : {};
+  const ids = Array.isArray(e.spalten) && e.spalten.length ? e.spalten : MON_STANDARD;
+  const bh = typeof bhBearbeitenAn !== 'function' || bhBearbeitenAn(werk);
+  return new Set(ids.filter(id => {
+    const sp = MON_SPALTEN.find(x => x.id === id);
+    return sp && (!sp.bh || bh);
+  }).concat(['links']));
+}
+
+/** Spalten der Tabelle: das gefilterte Werk, sonst alle Werke zusammen. */
+function _monSichtbareSpalten() {
+  const werke = _monFilter.werk ? [_monFilter.werk] : Array.from(new Set(_monRecords.map(r => r.werk)));
+  const ids = new Set();
+  (werke.length ? werke : ['']).forEach(w => _monWerkSpalten(w).forEach(id => ids.add(id)));
+  return MON_SPALTEN.filter(sp => ids.has(sp.id));
+}
+
+function _monRenderKopf(spalten) {
+  const summe = spalten.reduce((a, sp) => a + sp.breite, 0);
+  document.getElementById('mon-cols').innerHTML = spalten
+    .map(sp => `<col style="width:${(sp.breite / summe * 100).toFixed(2)}%">`).join('');
+  document.getElementById('mon-kopf').innerHTML = spalten.map(sp => sp.sort
+    ? `<th data-sort="${sp.sort}">${_esc(sp.titel)}<span class="sort-ind"></span></th>`
+    : `<th>${_esc(sp.titel)}</th>`).join('');
+  const tab = document.querySelector('table.mon-table');
+  if (tab) tab.style.minWidth = Math.max(1040, spalten.length * 86) + 'px';
+}
+
+function _monGeld(v, r) {
+  return v == null ? '' : v.toLocaleString('de-DE', { style: 'currency', currency: r.waehrung || 'EUR' });
+}
+
+function _monKlein(r) {
+  return typeof ugKleinbetrag === 'function' ? ugKleinbetrag(r) : (r.brutto != null && Math.abs(r.brutto) <= 250);
+}
+
+// Eine Zelle der Tabelle
+function _monZelle(id, r, idx) {
+  const bh = r.bh;
+  switch (id) {
+    case 'datum':    return `<td style="white-space:nowrap;">${_esc(_monDate(r.datum))}</td>`;
+    case 'werk':     return `<td><span class="pill pill-werk">${_esc(r.werk)}</span></td>`;
+    case 'richtung': return `<td><span class="pill ${r.richtung === 'Eingang' ? 'pill-in' : 'pill-out'}">${_esc(r.richtung)}</span></td>`;
+    case 'nummer':
+      return `<td>${_esc(r.nummer)}${r.dublette
+        ? `<div class="mon-dupe" title="${_esc(r.dubletteInfo || '')}" style="display:inline-block;margin-top:2px;font-size:11px;font-weight:600;color:#fff;background:#b40000;border-radius:3px;padding:1px 6px;">⚠ Dublette</div>`
+        : ''}</td>`;
+    case 'partner':  return `<td>${_monPartnerCell(r)}</td>`;
+    case 'netto':    return `<td style="text-align:right;white-space:nowrap;">${_esc(_monGeld(r.netto, r))}</td>`;
+    case 'brutto':   return `<td style="text-align:right;white-space:nowrap;">${_esc(_monGeld(r.brutto, r))}</td>`;
+    case 'faellig': {
+      // überfällige, noch nicht gebuchte Rechnungen rot + ⚠
+      const faellig = _monDate(r.faelligkeit);
+      const fDate = String(r.faelligkeit || '').slice(0, 10);
+      const overdue = /^\d{4}-\d{2}-\d{2}$/.test(fDate) && fDate < _monTodayIso()
+                      && !['Gebucht', 'Archiviert'].includes(r.status);
+      return `<td>${faellig
+        ? `<span style="white-space:nowrap;${overdue ? 'color:#b40000;font-weight:600;' : ''}">${_esc(faellig)}${overdue ? ' ⚠' : ''}</span>`
+        : '<span style="color:#9ca3af;">–</span>'}</td>`;
+    }
+    case 'klass':    return `<td>${_esc(_monKlass(r))}</td>`;
+    case 'status': {
+      const stat = r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : '';
+      const gobd = r.gobdArchiviert
+        ? `<div title="${_esc(r.complianceTag ? 'Aufbewahrung: ' + r.complianceTag : 'GoBD-Aufbewahrung gesetzt')}" style="display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:#0a6b2e;background:#e3f5e9;border-radius:3px;padding:1px 6px;">🔒 GoBD</div>`
+        : '';
+      return `<td>${stat}${gobd}</td>`;
+    }
+    case 'buchung': {
+      // Buchungssteuerung + Prüfschritt-Flags (UStAE/GoBD) + 800k-Einschätzung
+      const flags = [];
+      if (r.formatmangel)     flags.push(['Formatmangel', '#8a5a00', '#fff3d6']);
+      if (r.manuellePruefung) flags.push([r.manuellePruefungGrund ? 'Manuell · ' + r.manuellePruefungGrund : 'Manuell', '#8a3b00', '#ffe6cc']);
+      if (r.rueckfrage)       flags.push(['Rückfrage', '#b40000', '#ffe0e0']);
+      if (r.konvertiert)      flags.push(['techn. konvertiert', '#334155', '#e2e8f0']);
+      const badges = flags.map(([t, c, bgc]) =>
+        `<div title="${_esc(t)}" style="display:inline-block;margin:3px 3px 0 0;font-size:11px;font-weight:600;color:${c};background:${bgc};border-radius:3px;padding:1px 6px;">${_esc(t.length > 28 ? t.slice(0, 26) + '…' : t)}</div>`).join('');
+      const ug = typeof ugZelle === 'function' ? ugZelle(r, idx) : '';
+      return `<td>${(r.buchung ? `<span class="pill pill-status">${_esc(r.buchung)}</span>` : '')
+        + (badges ? `<div>${badges}</div>` : '') + (ug ? `<div>${ug}</div>` : '') || '–'}</td>`;
+    }
+    case 'informiert': {
+      const v = typeof ugInformiert === 'function' ? ugInformiert(r) : '';
+      const cls = { Ja: 'bh-ja', Nein: 'bh-wartet', Automatik: 'bh-neutral' }[v] || '';
+      const tip = { Ja: 'Lieferant per Mail informiert', Nein: 'Eingeschätzt, Lieferant nicht informiert',
+        Automatik: 'Lieferant war schon eingeschätzt, keine Einschätzung an dieser Rechnung nötig' }[v] || '';
+      return `<td>${v ? `<span class="bh-pill ${cls}" title="${_esc(tip)}">${_esc(v)}</span>` : ''}</td>`;
+    }
+    case 'konform': {
+      const hinweis = _monHinweis(r);
+      return `<td>${_monKonPill(r)}${hinweis
+        ? `<div class="mon-hint" title="${_esc(hinweis)}" style="font-size:11px;color:var(--gray-600,#6b7280);margin-top:3px;max-width:100%;line-height:1.3;">${_esc(hinweis)}</div>`
+        : ''}</td>`;
+    }
+    case 'fehler':   return `<td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>`;
+    case 'bestellnr': return `<td>${_esc((bh && bh.bestellnr) || r.bestellnr || '')}</td>`;
+    case 'varial':   return `<td>${_esc(bh ? bh.varial : '')}</td>`;
+    case 'kontierung': return `<td class="mon-mehrzeilig">${_esc(bh ? bh.kontierung : '')}</td>`;
+    case 'bstatus':  return `<td>${bh && bh.bstatus ? `<span class="pill pill-status">${_esc(bh.bstatus)}</span>` : ''}</td>`;
+    case 'genehmigung': return `<td>${typeof bhZelle === 'function' ? bhZelle(r) : ''}</td>`;
+    case 'notiz':    return `<td class="mon-mehrzeilig">${_esc(bh ? bh.notiz : '')}</td>`;
+    case 'links': {
+      const extra = (r.dateien || [])
+        .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`).join(' · ');
+      const origLabel = r.ext ? `Original (${r.ext.toUpperCase()})` : 'Original';
+      const link = [r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">${origLabel} ↗</a>` : '', extra]
+        .filter(Boolean).join(' · ');
+      return `<td>${bh ? `<button type="button" class="bh-btn" data-bh="${idx}" title="Varialnummer, Kontierung, Genehmigung">Bearbeiten</button>` : ''}${link}</td>`;
+    }
+    default: return '<td></td>';
+  }
+}
+
 function _monRenderTable(rows) {
   // Sortierung erfolgt zentral in _monSortRows (vor dem Rendern). Gezeichnet werden
   // nur die ersten _monZeigen Zeilen, der Index bleibt der in _monRows.
   _monRows = rows;
+  const spalten = _monSichtbareSpalten();
+  _monRenderKopf(spalten);
+  const jeWerk = new Map();
   const sicht = rows.slice(0, _monZeigen);
   const body = sicht.map((r, idx) => {
-    const betrag = r.brutto == null ? '' :
-      r.brutto.toLocaleString('de-DE', { style: 'currency', currency: r.waehrung || 'EUR' });
-    const datum = _monDate(r.datum);
-    // Fälligkeit statt Format: überfällige, noch nicht gebuchte Rechnungen rot + ⚠.
-    const faellig = _monDate(r.faelligkeit);
-    const fDate = String(r.faelligkeit || '').slice(0, 10);
-    const overdue = /^\d{4}-\d{2}-\d{2}$/.test(fDate) && fDate < _monTodayIso()
-                    && !['Gebucht', 'Archiviert'].includes(r.status);
-    const faelligCell = faellig
-      ? `<span style="white-space:nowrap;${overdue ? 'color:#b40000;font-weight:600;' : ''}">${_esc(faellig)}${overdue ? ' ⚠' : ''}</span>`
-      : '<span style="color:#9ca3af;">–</span>';
-    const richtCls = r.richtung === 'Eingang' ? 'pill-in' : 'pill-out';
-    const kon = _monKonPill(r);
-    const hinweis = _monHinweis(r);
-    const konCell = kon + (hinweis
-      ? `<div class="mon-hint" title="${_esc(hinweis)}" style="font-size:11px;color:var(--gray-600,#6b7280);margin-top:3px;max-width:100%;line-height:1.3;">${_esc(hinweis)}</div>`
-      : '');
-    const stat = r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : '';
-    const gobdBadge = r.gobdArchiviert
-      ? `<div title="${_esc(r.complianceTag ? 'Aufbewahrung: ' + r.complianceTag : 'GoBD-Aufbewahrung gesetzt')}" style="display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:#0a6b2e;background:#e3f5e9;border-radius:3px;padding:1px 6px;">🔒 GoBD</div>`
-      : '';
-    // Buchungssteuerung + Prüfschritt-Flags (UStAE/GoBD).
-    const _flags = [];
-    if (r.formatmangel)     _flags.push(['Formatmangel', '#8a5a00', '#fff3d6']);
-    if (r.manuellePruefung) _flags.push([r.manuellePruefungGrund ? 'Manuell · ' + r.manuellePruefungGrund : 'Manuell', '#8a3b00', '#ffe6cc']);
-    if (r.rueckfrage)       _flags.push(['Rückfrage', '#b40000', '#ffe0e0']);
-    if (r.konvertiert)      _flags.push(['techn. konvertiert', '#334155', '#e2e8f0']);
-    const _flagBadges = _flags.map(([t, c, bg]) =>
-      `<div title="${_esc(t)}" style="display:inline-block;margin:3px 3px 0 0;font-size:11px;font-weight:600;color:${c};background:${bg};border-radius:3px;padding:1px 6px;">${_esc(t.length > 28 ? t.slice(0, 26) + '…' : t)}</div>`).join('');
-    const ugCell = typeof ugZelle === 'function' ? ugZelle(r, idx) : '';
-    const buchungCell = (r.buchung ? `<span class="pill pill-status">${_esc(r.buchung)}</span>` : '')
-      + (_flagBadges ? `<div>${_flagBadges}</div>` : '')
-      + (ugCell ? `<div>${ugCell}</div>` : '') || '–';
-    const extra = (r.dateien || [])
-      .map(d => `<a href="${_esc(d.url)}" target="_blank" rel="noopener">${_esc(d.label)} ↗</a>`)
-      .join(' · ');
-    const origLabel = r.ext ? `Original (${r.ext.toUpperCase()})` : 'Original';
-    const link = [
-      r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">${origLabel} ↗</a>` : '',
-      extra,
-    ].filter(Boolean).join(' · ');
-    return `<tr>
-      <td style="white-space:nowrap;">${_esc(datum)}</td>
-      <td><span class="pill pill-werk">${_esc(r.werk)}</span></td>
-      <td><span class="pill ${richtCls}">${_esc(r.richtung)}</span></td>
-      <td>${_esc(r.nummer)}${r.bh && r.bh.varial ? `<div class="bh-varial" title="Varialnummer">V ${_esc(r.bh.varial)}</div>` : ''}${r.dublette
-        ? `<div class="mon-dupe" title="${_esc(r.dubletteInfo || '')}" style="display:inline-block;margin-top:2px;font-size:11px;font-weight:600;color:#fff;background:#b40000;border-radius:3px;padding:1px 6px;">⚠ Dublette</div>`
-        : ''}</td>
-      <td>${_monPartnerCell(r)}</td>
-      <td style="text-align:right;white-space:nowrap;">${_esc(betrag)}</td>
-      <td>${faelligCell}</td>
-      <td>${_esc(_monKlass(r))}</td>
-      <td>${stat}${gobdBadge}${typeof bhZelle === 'function' ? bhZelle(r) : ''}</td>
-      <td>${buchungCell}</td>
-      <td>${konCell}</td>
-      <td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>
-      <td>${r.bh ? `<button type="button" class="bh-btn" data-bh="${idx}" title="Varialnummer, Kontierung, Genehmigung">Bearbeiten</button>` : ''}${link}</td>
-    </tr>`;
+    if (!jeWerk.has(r.werk)) jeWerk.set(r.werk, _monWerkSpalten(r.werk));
+    const ids = jeWerk.get(r.werk);
+    return '<tr>' + spalten.map(sp => ids.has(sp.id) ? _monZelle(sp.id, r, idx) : '<td></td>').join('') + '</tr>';
   }).join('');
 
   const rest = rows.length - sicht.length;
   const mehr = rest > 0
-    ? `<tr><td colspan="13" class="mon-mehr"><button type="button" data-mehr>Weitere ${Math.min(rest, MON.tabelleSeite)} anzeigen</button>`
+    ? `<tr><td colspan="${spalten.length}" class="mon-mehr"><button type="button" data-mehr>Weitere ${Math.min(rest, MON.tabelleSeite)} anzeigen</button>`
       + `<span>noch ${rest} Treffer</span></td></tr>`
     : '';
   const leer = _monLaedt ? 'Rechnungen werden geladen…' : 'Keine Treffer für die aktuellen Filter.';
   document.getElementById('mon-tbody').innerHTML = (body + mehr)
-    || `<tr><td colspan="13" style="text-align:center;color:var(--gray-500);padding:28px;">${leer}</td></tr>`;
+    || `<tr><td colspan="${spalten.length}" style="text-align:center;color:var(--gray-500);padding:28px;">${leer}</td></tr>`;
   document.getElementById('mon-count').textContent =
     (rest > 0 ? `${sicht.length} von ${rows.length} Treffern angezeigt (${_monRecords.length} gesamt)`
               : `${rows.length} von ${_monRecords.length} angezeigt`)
     + (_monLaedt ? ' · lädt…' : '');
+}
+
+/* ── Spalten je Werk festlegen (Admin) ──────────────────────────────── */
+
+function _monSpaltenDialog(werk) {
+  const dlg = document.getElementById('sp-dialog');
+  if (!dlg || typeof bhEinstSpeichern !== 'function') return;
+  const werke = Array.from(new Set(_monLibs.map(l => l.werk).filter(Boolean))).sort();
+  let w = werk && werke.includes(werk) ? werk : werke[0];
+  const zeichnen = () => {
+    const e = bhWerkEinst(w);
+    const ids = Array.isArray(e.spalten) && e.spalten.length ? e.spalten : MON_STANDARD;
+    const bh = bhBearbeitenAn(w);
+    dlg.innerHTML = `
+      <form method="dialog" class="ug-form">
+        <div class="ug-kopf"><h3>Spalten je Werk</h3><button type="button" class="ug-x" data-sp-zu aria-label="Schließen">✕</button></div>
+        <label class="ug-lbl">Werk<select id="sp-werk">${werke.map(x => `<option${x === w ? ' selected' : ''}>${_esc(x)}</option>`).join('')}</select></label>
+        <label class="bh-check"><input type="checkbox" id="sp-bh"${bh ? ' checked' : ''}> Bearbeiten-Funktion (Varialnummer, Kontierung, Genehmigung)</label>
+        <div class="sp-raster">${MON_SPALTEN.filter(sp => !sp.fest).map(sp => `
+          <label class="bh-check${sp.bh ? ' sp-bh' : ''}"><input type="checkbox" data-sp="${sp.id}"${ids.includes(sp.id) ? ' checked' : ''}${sp.bh && !bh ? ' disabled' : ''}> ${_esc(sp.titel)}</label>`).join('')}
+        </div>
+        <p class="ug-hinweis">Gilt für alle, die das Monitoring nutzen. Ist kein Werk gefiltert, zeigt die Tabelle die Spalten aller Werke, Zellen eines Werks ohne die Spalte bleiben leer.</p>
+        <p class="ug-meldung" id="sp-meldung" role="status"></p>
+        <div class="ug-aktionen">
+          <button type="button" class="ug-sek" data-sp-standard>Standard</button>
+          <button type="button" class="ug-sek" data-sp-zu>Abbrechen</button>
+          <button type="button" class="ug-prim" data-sp-speichern>Speichern</button>
+        </div>
+      </form>`;
+    dlg.querySelector('#sp-werk').addEventListener('change', ev => { w = ev.target.value; zeichnen(); });
+    dlg.querySelector('#sp-bh').addEventListener('change', ev => {
+      dlg.querySelectorAll('.sp-bh input').forEach(i => { i.disabled = !ev.target.checked; });
+    });
+    dlg.querySelectorAll('[data-sp-zu]').forEach(x => x.addEventListener('click', () => dlg.close()));
+    dlg.querySelector('[data-sp-standard]').addEventListener('click', () => {
+      dlg.querySelectorAll('[data-sp]').forEach(i => { i.checked = MON_STANDARD.includes(i.getAttribute('data-sp')); });
+    });
+    dlg.querySelector('[data-sp-speichern]').addEventListener('click', async () => {
+      const spalten = Array.from(dlg.querySelectorAll('[data-sp]')).filter(i => i.checked).map(i => i.getAttribute('data-sp'));
+      const meldung = dlg.querySelector('#sp-meldung');
+      dlg.querySelectorAll('.ug-aktionen button').forEach(b => { b.disabled = true; });
+      meldung.textContent = 'Wird gespeichert…';
+      try {
+        await bhEinstSpeichern(w, { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked });
+        dlg.close();
+        _monUpdate(_monDateien);
+        _monBuildFilterOptions(_monLibs);
+        _monSyncControls();
+        _monApply();
+      } catch (err) {
+        meldung.textContent = err.message || String(err);
+        meldung.className = 'ug-meldung nicht';
+        dlg.querySelectorAll('.ug-aktionen button').forEach(b => { b.disabled = false; });
+      }
+    });
+  };
+  zeichnen();
+  if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
 }
 
 // Geschaeftspartner der Zeile: Eingang = Steller, Ausgang = Empfaenger. Bringt eine
@@ -642,7 +811,11 @@ function _monPartnerCell(r) {
 // _hinweisAusBefunden in api/src/kosit.js wider. Leer bei grün/ohne Meldung.
 function _monHinweis(r) {
   const s = (r.meldung || '').trim();
-  if ((r.konform || '').toLowerCase().startsWith('gr')) return '';
+  const k = (r.konform || '').toLowerCase();
+  if (k.startsWith('gr')) return '';
+  // Bis 10/2026 schrieb die Prüfung bei Warnungen (und manchen Fehlern) keinen Text.
+  if (!s && k.startsWith('gel')) return 'Nur Warnungen, die Rechnung ist gültig. Details im Prüfbericht.';
+  if (!s && k.startsWith('rot')) return 'Nicht konform. Details im Prüfbericht.';
   if (!s) return '';
   if (!/BR-[A-Z0-9]|CII-(SR|DT)-/i.test(s)) return s; // schon Klartext -> so anzeigen
   const regeln = [
@@ -733,7 +906,7 @@ function _monRenderChips() {
   if (f.richtung) chips.push(['richtung', f.richtung]);
   if (f.klass)    chips.push(['klass', 'Typ: ' + f.klass]);
   if (f.konform)  chips.push(['konform', 'Konform.: ' + (KONF[f.konform] || f.konform)]);
-  if (f.buchung)  chips.push(['buchung', 'Buchung: ' + f.buchung]);
+  if (f.buchung)  chips.push(['buchung', f.buchung === '__klein' ? 'Kleinbetrag' : 'Buchung: ' + f.buchung]);
   if (f.status)   chips.push(['status', 'Status: ' + f.status]);
   if (f.bstatus)  chips.push(['bstatus', 'Bearbeitung: ' + f.bstatus]);
   if (f.genehmigt) chips.push(['genehmigt', 'Genehmigt: ' + f.genehmigt]);
@@ -841,15 +1014,24 @@ function monInitFilterEvents() {
     if (r) ugDialogOeffnen(r, () => _monApply());
   });
 
-  // Spalten sortieren (Klick auf Kopfzeile toggelt Richtung).
-  document.querySelectorAll('table.mon-table th[data-sort]').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.getAttribute('data-sort');
-      if (_monSort.key === key) _monSort.dir = -_monSort.dir;
-      else _monSort = { key, dir: (key === 'datum' || key === 'brutto') ? -1 : 1 };
-      _monApply();
-    });
+  // Spalten sortieren (Klick auf Kopfzeile toggelt Richtung). Die Kopfzeile wird je
+  // nach Spaltenauswahl neu gezeichnet, deshalb per Delegation.
+  const kopf = document.querySelector('table.mon-table thead');
+  if (kopf) kopf.addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]');
+    if (!th) return;
+    const key = th.getAttribute('data-sort');
+    if (_monSort.key === key) _monSort.dir = -_monSort.dir;
+    else _monSort = { key, dir: ['datum', 'brutto', 'netto'].includes(key) ? -1 : 1 };
+    _monApply();
   });
+
+  // Spalten je Werk festlegen (nur Admins)
+  const spaltenKnopf = document.getElementById('mon-spalten');
+  if (spaltenKnopf) {
+    spaltenKnopf.style.display = typeof isCurrentUserAdmin === 'function' && isCurrentUserAdmin() ? '' : 'none';
+    spaltenKnopf.addEventListener('click', () => _monSpaltenDialog(_monFilter.werk));
+  }
 }
 
 function _esc(s) {

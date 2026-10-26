@@ -258,6 +258,14 @@ Keine Mail nötig:
      Werks-Postfach ein.
    - **„Nur speichern“** sichert die Einschätzung ohne Mail.
 
+   **Lieferant informiert** hält fest, ob der Lieferant Bescheid bekommen hat. Senden und
+   „In Outlook öffnen“ setzen Ja. Bei „Nur speichern“ gilt der Wert im Feld, Standard ist
+   Nein. Wurde der Lieferant anders informiert, zum Beispiel am Telefon, Ja wählen. In der
+   Tabelle steht das in der Spalte „Lieferant informiert“:
+   - **Ja** oder **Nein**: an dieser Rechnung eingeschätzt, mit oder ohne Info an den Lieferanten
+   - **Automatik**: Der Lieferant war schon eingeschätzt, an dieser Rechnung war nichts zu tun
+   - leer: noch nicht eingeschätzt, Kleinbetrag oder E-Rechnung
+
 8. **Danach**
    - 2026 und 2027 mit Variante 2: Die Rechnung normal weiterverarbeiten.
    - 2027 mit Variante 1: Die PDF nicht als Eingangsrechnung buchen. Warten auf die E-Rechnung,

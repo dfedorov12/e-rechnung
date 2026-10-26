@@ -98,9 +98,9 @@
     .ug-badge.ug-klein { background:var(--gray-100); color:var(--gray-600); cursor:default; }
     button.ug-badge:hover { border-color:currentColor; }
 
-    #ug-dialog, #bh-dialog { margin:auto; border:none; border-radius:12px; padding:0; width:min(680px, calc(100vw - 32px));
+    #ug-dialog, #bh-dialog, #sp-dialog { margin:auto; border:none; border-radius:12px; padding:0; width:min(680px, calc(100vw - 32px));
                 max-height:calc(100vh - 48px); box-shadow:0 20px 50px rgba(0,0,0,.25); }
-    #ug-dialog::backdrop, #bh-dialog::backdrop { background:rgba(17,24,39,.45); }
+    #ug-dialog::backdrop, #bh-dialog::backdrop, #sp-dialog::backdrop { background:rgba(17,24,39,.45); }
     .ug-form { padding:20px 22px; display:flex; flex-direction:column; gap:12px; }
     .ug-kopf { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
     .ug-kopf h3 { margin:0; font-size:17px; color:var(--gray-900); }
@@ -168,7 +168,11 @@
               border:1px solid var(--gray-200); border-radius:8px; }
     .bh-stand { margin:0; font-size:13px; color:var(--gray-700); }
     #bh-anf { display:flex; flex-direction:column; gap:10px; }
-    @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas { grid-template-columns:1fr; } }
+    .sp-raster { display:grid; grid-template-columns:repeat(3, 1fr); gap:0 12px; }
+    .sp-raster .bh-check { padding:4px 0; }
+    .sp-raster .bh-check:has(input:disabled) { color:var(--gray-400); cursor:default; }
+    td.mon-mehrzeilig { white-space:pre-line; font-size:12px; }
+    @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas, .sp-raster { grid-template-columns:1fr; } }
   </style>
 </head>
 <body class="auth-guard">
@@ -234,6 +238,7 @@
         <input type="date" id="mon-f-from" aria-label="Datum von" title="Datum von">
         <input type="date" id="mon-f-to" aria-label="Datum bis" title="Datum bis">
         <button type="button" id="mon-reset" class="mon-reset">Zurücksetzen</button>
+        <button type="button" id="mon-spalten" class="mon-reset" style="display:none;" title="Spalten und Bearbeiten-Funktion je Werk festlegen">Spalten</button>
       </div>
       <span class="mon-count" id="mon-count"></span>
     </div>
@@ -241,27 +246,8 @@
 
     <div class="mon-table-wrap">
       <table class="mon-table">
-        <colgroup>
-          <col style="width:6%"><col style="width:5%"><col style="width:6%"><col style="width:9%">
-          <col style="width:14%"><col style="width:7%"><col style="width:7%"><col style="width:9%">
-          <col style="width:8%"><col style="width:8%"><col style="width:10%"><col style="width:6%"><col style="width:5%">
-        </colgroup>
-        <thead>
-          <tr>
-            <th data-sort="datum">Datum<span class="sort-ind"></span></th>
-            <th data-sort="werk">Werk<span class="sort-ind"></span></th>
-            <th data-sort="richtung">Richtung<span class="sort-ind"></span></th>
-            <th data-sort="nummer">Rechnungsnr.<span class="sort-ind"></span></th>
-            <th data-sort="partner">Steller / Empfänger<span class="sort-ind"></span></th>
-            <th data-sort="brutto">Brutto<span class="sort-ind"></span></th>
-            <th data-sort="faellig">Fällig am<span class="sort-ind"></span></th>
-            <th data-sort="klass">Klassifizierung<span class="sort-ind"></span></th>
-            <th data-sort="status">Status<span class="sort-ind"></span></th>
-            <th data-sort="buchung">Buchung<span class="sort-ind"></span></th>
-            <th data-sort="konform">Konform.<span class="sort-ind"></span></th>
-            <th>Fehler</th><th></th>
-          </tr>
-        </thead>
+        <colgroup id="mon-cols"></colgroup>
+        <thead><tr id="mon-kopf"></tr></thead>
         <tbody id="mon-tbody"></tbody>
       </table>
     </div>
@@ -272,6 +258,7 @@
 <!-- 800k-Umsatzgrenze: Einschaetzung + Mailvorlage (js/umsatzgrenze.js) -->
 <dialog id="ug-dialog" aria-label="Umsatzgrenze 800.000 €"></dialog>
 <dialog id="bh-dialog" aria-label="Rechnung bearbeiten"></dialog>
+<dialog id="sp-dialog" aria-label="Spalten je Werk"></dialog>
 
 <script src="js/vendor/msal-browser.min.js"></script>
 <script src="js/auth.js"></script>

@@ -62,4 +62,28 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   ok(ug.UG_MAIL_ART[art] && ug.UG_MAIL_ART[art].length < 40, art + ': Art fuer die Liste');
 }
 
+// Lieferant informiert: Ja/Nein an der Rechnung, Automatik bei schon eingeschaetztem Lieferanten
+{
+  const d = ug._ug.daten;
+  d.lieferanten = { 'muster werkzeuge': { name: 'Muster Werkzeuge GmbH', vermutung: 'bis', vat: 'DE123456789' } };
+  d.rechnungen = {};
+  ug._ug.mails = {};
+  const pdf = (nr, extra) => Object.assign({ richtung: 'Eingang', formatmangel: true, brutto: 900, baseKey: nr, steller: '' }, extra);
+  const a = pdf('RE-1'), b = pdf('RE-2', { ustid: 'DE123456789' }), c = pdf('RE-3'), klein = pdf('RE-4', { brutto: 120 });
+  ok(ug.ugInformiert(a) === '', 'nicht eingeschaetzt = offen');
+  ok(ug.ugInformiert(b) === 'Automatik', 'Lieferant ueber USt-IdNr. schon eingeschaetzt');
+  d.rechnungen[ug.ugRechnungKey(a)] = { lieferant: 'muster werkzeuge', informiert: 'Nein' };
+  ok(ug.ugInformiert(a) === 'Nein', 'eingeschaetzt, nicht informiert');
+  d.rechnungen[ug.ugRechnungKey(a)].informiert = 'Ja';
+  ok(ug.ugInformiert(a) === 'Ja', 'eingeschaetzt und informiert');
+  d.rechnungen[ug.ugRechnungKey(c)] = { lieferant: 'muster werkzeuge' };
+  ok(ug.ugInformiert(c) === '', 'alte Einschaetzung ohne Angabe');
+  ug._ug.mails[ug.ugRechnungKey(c)] = [{ status: 'Gesendet' }];
+  ok(ug.ugInformiert(c) === 'Ja', 'Mail ueber den Flow = Ja');
+  ug._ug.mails[ug.ugRechnungKey(c)] = [{ status: 'Fehler' }];
+  ok(ug.ugInformiert(c) === '', 'fehlgeschlagene Mail zaehlt nicht');
+  ok(ug.ugInformiert(klein) === '', 'Kleinbetrag braucht keine Info');
+  ok(ug.ugInformiert(pdf('RE-5', { formatmangel: false })) === '', 'E-Rechnung braucht keine Info');
+}
+
 console.log(`umsatzgrenze: ${n} Pruefungen gruen`);

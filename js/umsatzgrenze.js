@@ -234,6 +234,20 @@ function ugFuer(r) {
   return key && d.lieferanten[key] ? Object.assign({ key }, d.lieferanten[key]) : null;
 }
 
+/**
+ * Lieferant informiert? Ja oder Nein hält die Buchhaltung bei der Einschätzung an dieser
+ * Rechnung fest (Mail gesendet oder nicht). Automatik: Der Lieferant war schon
+ * eingeschätzt, an dieser Rechnung war keine Einschätzung nötig. Eine Mail über den
+ * Flow zählt immer als Ja. Leer: noch offen, Kleinbetrag oder keine sonstige Rechnung.
+ */
+function ugInformiert(r) {
+  if (!ugSonstige(r) || ugKleinbetrag(r)) return '';
+  if (ugMailsFuer(r).some(m => m.status !== 'Fehler')) return 'Ja';
+  const zu = _ug.daten.rechnungen[ugRechnungKey(r)];
+  if (zu) return zu.informiert || '';
+  return ugFuer(r) ? 'Automatik' : '';
+}
+
 /** Lieferantenname für Rechnungen, die keinen mitbringen (PDF ohne XML). */
 function ugLieferantName(r) {
   if (r.steller) return r.steller;
@@ -245,7 +259,7 @@ function ugLieferantName(r) {
  * Einschätzung speichern: Eintrag mergen und mit If-Match schreiben. Hat jemand
  * anderes zwischendurch gespeichert (412), neu laden und einmal wiederholen.
  */
-async function ugSpeichern(r, name, vermutung, vat, nummer) {
+async function ugSpeichern(r, name, vermutung, vat, nummer, informiert) {
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
   const key = ugKey(name);
   if (!key) throw new Error('Bitte den Lieferanten angeben.');
@@ -259,6 +273,7 @@ async function ugSpeichern(r, name, vermutung, vat, nummer) {
     rechnung: nummer || r.nummer || '',
   };
   const zuordnung = { lieferant: key, am: eintrag.am, von: eintrag.von };
+  if (informiert === 'Ja' || informiert === 'Nein') zuordnung.informiert = informiert;
 
   for (let versuch = 0; versuch < 2; versuch++) {
     const token = await acquireToken(SP.scopes);
@@ -435,6 +450,7 @@ function ugDialogOeffnen(r, onGespeichert) {
     phase: ugPhase(r.datum),
     absender: user.name || '',
     an: r.absenderMail || ((ugMailsFuer(r)[0] || {}).an) || '',
+    informiert: ((_ug.daten.rechnungen[ugRechnungKey(r)] || {}).informiert) || 'Nein',
     kannSenden: ugKannSenden(r),
     bearbeitet: {},          // Felder, die jemand selbst geändert hat, überschreibt das Lesen nicht
     gelesen: null,           // Ergebnis aus dem PDF-Text
@@ -473,6 +489,9 @@ function _ugRender() {
       </div>
       <datalist id="ug-namen">${Object.values(_ug.daten.lieferanten).map(l => `<option value="${_esc(l.name)}">`).join('')}</datalist>
       <label class="ug-lbl">An (Mailadresse des Lieferanten)<input id="ug-an" type="email" value="${_esc(a.an)}" placeholder="rechnung@lieferant.de" autocomplete="off"></label>
+      ${phase === 'pflicht' ? '' : `<label class="ug-lbl ug-inf">Lieferant informiert<select id="ug-informiert">
+        ${['Nein', 'Ja'].map(v => `<option${v === a.informiert ? ' selected' : ''}>${v}</option>`).join('')}</select>
+        <span class="ug-hinweis">Senden und „In Outlook öffnen“ setzen Ja. „Nur speichern“ nimmt den Wert hier, z. B. Ja nach einem Anruf.</span></label>`}
       <p class="ug-mailstand">${a.kannSenden
         ? `Senden geht aus dem Rechnungspostfach des Werks ${_esc(a.r.werk)}.${a.r.absenderMail ? ' Die Adresse ist der Absender der Rechnungsmail, bitte prüfen.' : ''}`
         : 'Der Versand aus dem Werks-Postfach ist hier nicht eingerichtet. Die Mail öffnet sich in Outlook.'}</p>
@@ -700,7 +719,9 @@ async function _ugAbschliessen(modus) {
   try {
     if (a.phase !== 'pflicht') {
       _ugMeldung('Wird gespeichert…');
-      await ugSpeichern(a.r, dlg.querySelector('#ug-name').value.trim(), a.vermutung, a.vat, a.nr);
+      const sel = dlg.querySelector('#ug-informiert');
+      const informiert = modus === 'nur' ? (sel ? sel.value : 'Nein') : 'Ja';
+      await ugSpeichern(a.r, dlg.querySelector('#ug-name').value.trim(), a.vermutung, a.vat, a.nr, informiert);
     }
     if (modus === 'outlook') _ugMailOeffnen();
     if (modus === 'senden') {
@@ -721,5 +742,5 @@ async function _ugAbschliessen(modus) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { UG, UG_MAIL_ART, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage,
-    ugMailOk, ugMailHtml };
+    ugMailOk, ugMailHtml, ugInformiert, _ug };
 }

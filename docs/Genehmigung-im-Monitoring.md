@@ -201,6 +201,28 @@ Läuft schon eine Genehmigung, fragt der Dialog vor einer neuen nach. Steht an e
 länger als einige Minuten „Angefordert bei …, wartet auf den Flow“, läuft der Flow für dieses
 Werk nicht. Dann die IT informieren.
 
+## Spalten und Bearbeiten je Werk
+
+Der Knopf **„Spalten“** neben „Zurücksetzen“ ist nur für Admins sichtbar
+(`administrator@dihag.com`, js/access.js). Dort wird je Werk festgelegt:
+- **Bearbeiten-Funktion** an oder aus. Aus heißt kein „Bearbeiten“-Knopf, keine Spalten
+  Varialnummer, Kontierung, Bearbeitung, Genehmigung und Notiz. Das passt für Werke, die über
+  SAP buchen und nie mit der Eingangsrechnungsliste gearbeitet haben, zum Beispiel ZAI.
+- **Welche Spalten** das Werk zeigt, aus: Datum, Werk, Richtung, Rechnungsnr., Steller /
+  Empfänger, Netto, Brutto, Fällig am, Klassifizierung, Status, Buchung, Lieferant informiert,
+  Konform., Fehler, Bestellnummer, Varialnummer, Kontierung, Bearbeitung, Genehmigung, Notiz.
+  „Standard“ setzt die Auswahl zurück (Netto statt Brutto, mit Lieferant informiert und den
+  Spalten der Bearbeitung).
+
+Ist im Filter ein Werk gewählt, zeigt die Tabelle genau dessen Spalten. Ohne Werkfilter zeigt
+sie die Spalten aller Werke zusammen, Zellen eines Werks ohne die Spalte bleiben leer. Die
+Auswahl gilt für alle, die das Monitoring nutzen, und liegt in
+`Monitoring/monitoring-einstellungen.json` auf der Monitoring-Site.
+
+Unter „Alle Buchung“ gibt es zusätzlich **„Kleinbetrag (bis 250 € brutto)“**. Der Filter
+findet nur Rechnungen, deren Bruttobetrag bekannt ist, bei PDF-Rechnungen ohne XML fehlt er
+meist.
+
 ## Hinweise
 
 - „GF gesehen“ steht in der alten Liste bei 98 % der Einträge auf Ja, vermutlich als

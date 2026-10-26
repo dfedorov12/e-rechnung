@@ -186,19 +186,36 @@ async function bhLaden(siteId, token) {
   }
 }
 
-function bhVorgabeAbas(werk) {
-  const w = _bh.einst.werke[String(werk || '').toUpperCase()];
-  return (w && w.abasInfoAn) || '';
+/**
+ * Einstellungen eines Werks: { abasInfoAn, spalten: [Spalten-IDs], bearbeiten: true|false }.
+ * Fehlt etwas, gilt der Standard (alle Standardspalten, Bearbeiten an).
+ */
+function bhWerkEinst(werk) {
+  return _bh.einst.werke[String(werk || '').toUpperCase()] || {};
 }
 
-async function bhVorgabeSpeichern(werk, abasInfoAn) {
+/** Ist die Bearbeitung (Knopf, Spalten, Genehmigung) für das Werk eingeschaltet? */
+function bhBearbeitenAn(werk) {
+  return bhWerkEinst(werk).bearbeiten !== false;
+}
+
+function bhVorgabeAbas(werk) {
+  return bhWerkEinst(werk).abasInfoAn || '';
+}
+
+function bhVorgabeSpeichern(werk, abasInfoAn) {
+  return bhEinstSpeichern(werk, { abasInfoAn });
+}
+
+/** Teil der Werk-Einstellungen speichern (mit If-Match, bei Konflikt neu laden und wiederholen). */
+async function bhEinstSpeichern(werk, teil) {
   const key = String(werk || '').toUpperCase();
   for (let versuch = 0; versuch < 2; versuch++) {
     const token = await acquireToken(SP.scopes);
     if (!token) throw new Error('Nicht angemeldet.');
     if (versuch > 0) await bhLaden(_bh.siteId, token);
     const neu = { version: 1, werke: Object.assign({}, _bh.einst.werke, {
-      [key]: Object.assign({}, _bh.einst.werke[key], { abasInfoAn }),
+      [key]: Object.assign({}, _bh.einst.werke[key], teil),
     }) };
     const url = _bh.einstItemId
       ? `${SP.graphBase}/sites/${_bh.siteId}/drive/items/${_bh.einstItemId}/content`
