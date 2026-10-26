@@ -10,7 +10,7 @@ const ctx = { console: { log() {}, warn() {}, error() {} }, window: {}, Math, Da
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/parser.js'), 'utf8')
   + fs.readFileSync(path.join(__dirname, '../js/xrechnung.js'), 'utf8')
-  + '\nthis.parse = extractInvoiceDataFromItems; this.skonto = _skontoZeile; this.buildXML = buildXML;', ctx);
+  + '\nthis.parse = extractInvoiceDataFromItems; this.skonto = _skontoZeile; this.buildXML = buildXML; this.nurInland = werkNurInland;', ctx);
 
 let n = 0;
 const gleich = (ist, soll, m) => { assert.deepStrictEqual(ist, soll, m + ': ' + JSON.stringify(ist)); n++; };
@@ -194,5 +194,7 @@ gleich([r.kaeufer, r.kaeuferstrasse, r.kaeuferplz, r.kaeuferstadt], ['EXEMPLE SA
 gleich([r.positionen[0].menge, r.positionen[0].einzelpreis, r.gesamtbetrag], [1800, 19.12, 34416], 'Leerzeichen als Tausendertrenner');
 gleich(/marchandises/.test(r.positionen[0].details), false, 'zweite Zeile der Warennummer nicht in der Beschreibung');
 gleich(r.faelligkeitsdatum, '2026-09-20', 'Fälligkeit französisch');
+
+gleich([ctx.nurInland('EWA'), ctx.nurInland('EIS'), ctx.nurInland('ZAI')], [true, true, false], 'EWA wie EIS nur Inland ohne Rückfrage');
 
 console.log(`ewa-ausgang: ${n} Prüfungen grün`);

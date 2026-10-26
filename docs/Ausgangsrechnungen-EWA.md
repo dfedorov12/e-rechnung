@@ -4,6 +4,14 @@ Stand: 26.10.2026
 
 Die Belege des Eisenwerks Arnstadt kommen aus SAP als Adobe-Formular, auf Deutsch, Englisch oder Französisch und in der Währung des Kunden (EUR, GBP, CZK). Der Konverter erkennt sie an der Absenderzeile („Eisenwerk Arnstadt GmbH | Bierweg …") und legt sie unter dem Werk EWA ab. Grundlage waren elf Musterbelege: Rechnungen und Gutschriften, Inland, EU und Großbritannien, mit Skonto, Teuerungszuschlag, 100-%-Abschlag und Verpackungszuschlag.
 
+## Welche Belege ohne Rückfrage umgewandelt werden
+
+Wie bei EIS (Gienanth): Pflicht ist die E-Rechnung nur für Kunden mit Sitz im Inland (§ 14 UStG). Maßgeblich ist das Land in der Rechnungsadresse.
+
+- Rechnungsadresse in Deutschland: Der Konverter wandelt ohne Rückfrage um.
+- EU-Ausland: Er weist beim Laden darauf hin und fragt beim Export, ob trotzdem eine E-Rechnung entstehen soll.
+- Drittland (auch Großbritannien): Er erinnert an das unterschriebene Original als Anlage und fragt beim Export nur nach, wenn keine Anlage dabei ist.
+
 ## Wie der Beleg gelesen wird
 
 Im Kopf stehen links die Anschriften und rechts Beschriftung und Wert in zwei Spalten. Weil pdf.js die Zeilen beider Seiten mischt, liest der Konverter den Kopf über die Position der Textstücke. Positionen und Summen liest er über die Zeilen. Zahlen werden im Format der Belegsprache gelesen: englisch 32,400.00, deutsch 32.400,00, französisch 32 400,00.
@@ -46,6 +54,5 @@ Diese drei Teile gelten für alle Werke:
 
 ## Grenzen
 
-- EWA wandelt alle Belege um, auch an Kunden im Ausland. Soll es wie bei EIS (Gienanth) nur das Inland sein, reicht in js/parser.js beim Werk EWA der Eintrag `_nurInland: true`.
 - Eine Rechnung in Fremdwährung mit deutscher Umsatzsteuer bekommt keine zusätzliche Steuerangabe in Euro (BT-6, BT-111). In den Mustern kam Fremdwährung nur steuerfrei vor.
 - Rechnungsadressen der Kunden lernt der Konverter beim Export (siehe [Ausgangsrechnungen-ZAI.md](Ausgangsrechnungen-ZAI.md)). Eine Liste wie bei Gienanth gab es für EWA nicht.
