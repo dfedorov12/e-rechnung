@@ -33,9 +33,9 @@ Auch beim Einzelpreis rechnet ALF mit mehr Stellen, als es druckt. Der Konverter
 
 ## Rechnungsadresse des Kunden
 
-Im ALF-PDF steht keine Rechnungsadresse des Kunden, nur die Mail der Sachbearbeitung im eigenen Haus. Die XRechnung braucht aber eine elektronische Adresse des Empfängers (BT-49), und das muss das Rechnungspostfach des Kunden sein. Der Konverter übernimmt die Mail aus dem PDF deshalb nicht mehr.
+Im ALF-PDF steht keine Rechnungsadresse des Kunden, nur die Mail der Sachbearbeitung im eigenen Haus. Die XRechnung braucht aber eine elektronische Adresse des Empfängers (BT-49), und das muss das Rechnungspostfach des Kunden sein. Die Mail aus dem PDF geht deshalb nur zum Rechnungssteller. Das Empfängerfeld wird beim Laden eines PDFs geleert, damit keine Adresse aus einem früheren Beleg stehen bleibt.
 
-Stattdessen merkt sich die App je Werk und Kunde die Adresse, an die exportiert wurde. Beim nächsten Beleg desselben Kunden schlägt sie die Adresse vor. Gesucht wird nach Kunden-Nr., dann nach USt-IdNr., dann nach dem Namen. Gespeichert wird in SharePoint (Dokumente/E-Rechnung/kunden-rechnungsmail.json), nicht im Code, weil die Seite öffentlich ist.
+Stattdessen merkt sich die App je Werk und Kunde die Adresse, an die exportiert wurde. Beim nächsten Beleg desselben Kunden schlägt sie die Adresse vor. Wird für einen bekannten Kunden eine andere Adresse eingetragen, ersetzt sie nach dem Export die gemerkte, ohne Nachfrage. Gesucht wird nach Kunden-Nr., dann nach USt-IdNr., dann nach dem Namen. Gespeichert wird in SharePoint (Dokumente/E-Rechnung/kunden-rechnungsmail.json), nicht im Code, weil die Seite öffentlich ist.
 
 Trägt jemand eine Adresse der eigenen Firma ein (gleiche Domain wie die Verkäufer-Mail oder die eigene Anmeldung), fragt der Export nach. Solche Adressen merkt sich die App nicht. Kunden mit Leitweg-ID brauchen keine Mail und werden nicht gemerkt.
 
