@@ -57,6 +57,12 @@
     .mon-scroll-oben { overflow-x:auto; overflow-y:hidden; height:16px; margin:0 0 3px; flex:none; }
     .mon-scroll-oben > div { height:1px; }
     .mon-scroll-oben[hidden] { display:none; }
+    .mon-griff { position:absolute; top:0; right:-4px; width:9px; height:100%; cursor:col-resize; z-index:4; touch-action:none; }
+    .mon-griff::after { content:''; position:absolute; top:25%; bottom:25%; left:4px; width:1px; background:var(--gray-300); }
+    th:hover .mon-griff::after, .mon-griff:hover::after { background:var(--primary); width:2px; left:3px; }
+    body.mon-zieht, body.mon-zieht * { cursor:col-resize !important; user-select:none !important; }
+    table.mon-table th.mon-fueller, table.mon-table td.mon-fueller { padding:0 !important; }
+    .mon-ansicht [hidden] { display:none; }
     .mon-table-wrap { overflow:auto; max-height:calc(100vh - 150px); min-height:240px; background:#fff;
                 border:1px solid var(--gray-200); border-radius:var(--border-radius); box-shadow:var(--shadow-sm);
                 scrollbar-gutter:stable; }
@@ -326,6 +332,7 @@
       </div>
       <button type="button" class="mon-reset" id="mon-alle-auf" title="Details aller angezeigten Zeilen auf- oder zuklappen">Alle aufklappen</button>
       <span class="mon-ansicht-tipp">Zeile anklicken zeigt alle Angaben zur Rechnung</span>
+      <button type="button" class="mon-reset" id="mon-breiten-zurueck" title="Selbst gezogene Spaltenbreiten zurücksetzen" hidden>Breiten zurücksetzen</button>
       <button type="button" class="mon-reset" id="mon-vollbild" title="Tabelle auf den ganzen Bildschirm, Esc beendet">⛶ Vollbild</button>
     </div>
 
@@ -367,7 +374,11 @@ onAuthReady(async () => {
   // ist, sieht nur diese. Admins und Benutzer ohne Zuweisung sehen alle Werke, die
   // SharePoint sie lesen lässt.
   try { await loadRuntimeAccessConfig(); } catch (e) { /* Standard greift */ }
-  loadMonitoring(isCurrentUserAdmin() ? [] : getCurrentUserAccess());
+  // Das zugewiesene Werk ist beim Öffnen vorgewählt (bei mehreren das erste der Liste)
+  const zugewiesen = getCurrentUserAccess();
+  const standardWerk = (WERKE_ALLE.map(w => w[0]).find(c => zugewiesen.includes(c.toLowerCase()))
+    || (zugewiesen[0] || '')).toUpperCase();
+  loadMonitoring(isCurrentUserAdmin() ? [] : zugewiesen, { standardWerk });
 });
 </script>
 <script>authInit();</script>

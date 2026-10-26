@@ -215,6 +215,11 @@ Der Knopf **„Spalten“** neben „Zurücksetzen“ ist nur für Admins sichtb
   „Standard“ setzt die Auswahl zurück (Netto statt Brutto, mit Lieferant informiert und den
   Spalten der Bearbeitung).
 
+Unter **„Speichern für“** gilt die Einstellung nur für das gewählte Werk oder für alle Werke
+auf einmal. Mit **„Meine Spaltenbreiten als Standard für alle übernehmen“** werden die
+Breiten, die der Admin im Kopf gezogen hat, zum Standard für alle Benutzer. Wer selbst
+zieht, behält seine eigenen Breiten.
+
 Ist im Filter ein Werk gewählt, zeigt die Tabelle genau dessen Spalten in dessen
 Reihenfolge. Ohne Werkfilter zeigt sie die Spalten aller Werke zusammen, in der Reihenfolge
 des Werks mit den meisten Rechnungen. Zellen eines Werks ohne die Spalte bleiben leer. Die

@@ -18,7 +18,8 @@ Welche Werke ein Benutzer sieht, steht in den **Einstellungen** (`einstellungen.
 Admins): Dort werden Werke angelegt und Benutzer (UPN) je Werk eingetragen. Die Zuweisung
 gilt für Exportverlauf, Monitoring und die Werkauswahl im Konverter (`erlaubteWerke` in
 `js/access.js`). Wer keinem Werk zugewiesen ist, sieht im Monitoring und im Konverter alle
-Werke, Admins immer. Die zentrale `Rechnungseingang`-Stufe ist werkübergreifend sichtbar,
+Werke, Admins immer. Beim Öffnen ist das zugewiesene Werk im Filter vorgewählt (bei mehreren
+das erste), „Alle Werke“ bleibt wählbar. Die zentrale `Rechnungseingang`-Stufe ist werkübergreifend sichtbar,
 den tatsächlichen Zugriff regeln die SharePoint-Rechte.
 
 ## Laden
@@ -65,6 +66,10 @@ Tooltip nennt den gespeicherten Wert.
   Lieferant, Beträge, Prüfung mit vollem Hinweis, 800.000 €, Bearbeitung, Dateien, auch aus
   Spalten, die gerade ausgeblendet sind. **„Alle aufklappen“** gilt für die angezeigten
   Zeilen.
+- **Spaltenbreite** per Ziehen am rechten Rand einer Kopfzelle, Doppelklick setzt die Spalte
+  zurück, „Breiten zurücksetzen“ alle. Eigene Breiten merkt sich der Browser je Werk. Der
+  Admin kann seine Breiten im Dialog „Spalten“ als Standard für alle speichern, eigene
+  Breiten gehen vor.
 - **Kompakt / Groß**: Kompakt zeigt eine Rechnung möglichst auf einer Zeile (Hinweise
   einzeilig, Abzeichen nebeneinander), Groß hat viel Luft und größere Schrift. Der Browser
   merkt sich die Wahl.

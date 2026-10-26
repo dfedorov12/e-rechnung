@@ -30,12 +30,14 @@ let _monDateien = [];               // alle geladenen Dateien (neu zusammenfasse
 const _monOffen = new Set();        // aufgeklappte Zeilen (Schlüssel: Werk|Richtung|Datei)
 let _monBeobachter = null;          // lädt beim Scrollen die nächste Seite der Tabelle
 let _monDichte = 'kompakt';         // kompakt | gross (im Browser gemerkt)
+let _monAnsichtWerk = '';           // Werk, dessen Reihenfolge und Breiten die Tabelle gerade nutzt
+let _monGriffZeit = 0;              // Ende des letzten Ziehens (danach kein Sortier-Klick)
 const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' };
 let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
 /* ── Laden ──────────────────────────────────────────────────────────── */
 
-async function loadMonitoring(accessList) {
+async function loadMonitoring(accessList, optionen) {
   const sub = document.getElementById('mon-subtitle');
   if (sub) sub.textContent = 'Rechnungsbibliotheken werden geladen…';
 
@@ -95,6 +97,9 @@ async function loadMonitoring(accessList) {
     // Vorgaben für die Bearbeitung (abas-Info je Werk, js/bearbeitung.js)
     if (typeof bhLaden === 'function') await bhLaden(siteId, token);
     _monLibs = libs;
+    // Zugewiesenes Werk vorwählen (Einstellungen), sonst „Alle Werke“
+    const standardWerk = String((optionen && optionen.standardWerk) || '').toUpperCase();
+    if (standardWerk && libs.some(l => l.werk === standardWerk)) _monFilter.werk = standardWerk;
 
     // Bibliotheken NACHEINANDER und seitenweise laden, nicht alle parallel. So läuft
     // immer nur ein Abruf, SharePoint drosselt nicht, und die Tabelle füllt sich
@@ -630,6 +635,7 @@ function _monSichtbareSpalten() {
   const werke = _monFilter.werk ? [_monFilter.werk] : Array.from(anzahl.keys());
   if (!werke.length) werke.push('');
   werke.sort((a, b) => (anzahl.get(b) || 0) - (anzahl.get(a) || 0));
+  _monAnsichtWerk = werke[0];
   const ids = [];
   werke.forEach(w => {
     const liste = _monWerkSpaltenListe(w);
@@ -646,15 +652,43 @@ function _monSichtbareSpalten() {
 // den Rest anteilig; ist er schmaler, scrollt die Tabelle waagerecht.
 const MON_EINHEIT = 12;
 
-function _monRenderKopf(spalten) {
-  const summe = spalten.reduce((a, sp) => a + sp.breite, 0) * MON_EINHEIT;
-  document.getElementById('mon-cols').innerHTML = spalten
-    .map(sp => `<col style="width:${sp.breite * MON_EINHEIT}px">`).join('');
-  document.getElementById('mon-kopf').innerHTML = spalten.map(sp => sp.sort
-    ? `<th data-sort="${sp.sort}">${_esc(sp.titel)}<span class="sort-ind"></span></th>`
-    : `<th>${_esc(sp.titel)}</th>`).join('');
+// Eigene Breiten (per Ziehen, nur in diesem Browser): { <Werk>: { <Spalte>: px } }
+function _monEigeneBreiten() {
+  try { return JSON.parse(localStorage.getItem('mon-breiten') || '{}') || {}; } catch (e) { return {}; }
+}
+function _monEigeneBreitenSpeichern(alle) {
+  try { localStorage.setItem('mon-breiten', JSON.stringify(alle)); } catch (e) { /* ohne Speicher */ }
+}
+
+/** Breite einer Spalte: eigene, sonst Standard des Werks (vom Admin), sonst Vorgabe. */
+function _monBreite(sp) {
+  const w = _monAnsichtWerk || '';
+  const eigen = (_monEigeneBreiten()[w] || {})[sp.id];
+  if (eigen) return eigen;
+  const std = (typeof bhWerkEinst === 'function' && bhWerkEinst(w).breiten) || {};
+  return std[sp.id] || sp.breite * MON_EINHEIT;
+}
+
+function _monTabBreiteSetzen() {
+  const summe = Array.from(document.querySelectorAll('#mon-cols col[data-sp]'))
+    .reduce((a, c) => a + (parseFloat(c.style.width) || 0), 0);
   const tab = document.querySelector('table.mon-table');
   if (tab) tab.style.minWidth = summe + 'px';
+}
+
+// Die letzte, leere Spalte nimmt den restlichen Platz auf. So ändert Ziehen nur die
+// gezogene Spalte und verteilt nichts auf die anderen.
+function _monRenderKopf(spalten) {
+  document.getElementById('mon-cols').innerHTML = spalten
+    .map(sp => `<col data-sp="${sp.id}" style="width:${_monBreite(sp)}px">`).join('') + '<col>';
+  const griff = sp => `<span class="mon-griff" data-griff="${sp.id}" title="Breite ändern: ziehen. Doppelklick: Standardbreite"></span>`;
+  document.getElementById('mon-kopf').innerHTML = spalten.map(sp => sp.sort
+    ? `<th data-sort="${sp.sort}">${_esc(sp.titel)}<span class="sort-ind"></span>${griff(sp)}</th>`
+    : `<th>${_esc(sp.titel)}${griff(sp)}</th>`).join('') + '<th class="mon-fueller"></th>';
+  _monTabBreiteSetzen();
+  const eigene = _monEigeneBreiten()[_monAnsichtWerk || ''];
+  const zurueck = document.getElementById('mon-breiten-zurueck');
+  if (zurueck) zurueck.hidden = !(eigene && Object.keys(eigene).length);
 }
 
 function _monGeld(v, r) {
@@ -757,18 +791,18 @@ function _monRenderTable(rows) {
     const zellen = spalten.map(sp => ids.has(sp.id) ? _monZelle(sp.id, r, idx) : '<td></td>');
     if (zellen.length) zellen[0] = zellen[0].replace(/^<td([^>]*)>/, '<td$1><span class="mon-auf" aria-hidden="true"></span>');
     return `<tr class="mon-zeile${idx % 2 ? ' z' : ''}${offen ? ' offen' : ''}" data-zeile="${idx}" tabindex="0" aria-expanded="${offen}">`
-      + zellen.join('') + '</tr>'
-      + (offen ? _monDetailZeile(r, idx, spalten.length) : '');
+      + zellen.join('') + '<td class="mon-fueller"></td></tr>'
+      + (offen ? _monDetailZeile(r, idx, spalten.length + 1) : '');
   }).join('');
 
   const rest = rows.length - sicht.length;
   const mehr = rest > 0
-    ? `<tr><td colspan="${spalten.length}" class="mon-mehr"><button type="button" data-mehr>Weitere ${Math.min(rest, MON.tabelleSeite)} anzeigen</button>`
+    ? `<tr><td colspan="${spalten.length + 1}" class="mon-mehr"><button type="button" data-mehr>Weitere ${Math.min(rest, MON.tabelleSeite)} anzeigen</button>`
       + `<span>noch ${rest} Treffer</span></td></tr>`
     : '';
   const leer = _monLaedt ? 'Rechnungen werden geladen…' : 'Keine Treffer für die aktuellen Filter.';
   document.getElementById('mon-tbody').innerHTML = (body + mehr)
-    || `<tr><td colspan="${spalten.length}" style="text-align:center;color:var(--gray-500);padding:28px;">${leer}</td></tr>`;
+    || `<tr><td colspan="${spalten.length + 1}" style="text-align:center;color:var(--gray-500);padding:28px;">${leer}</td></tr>`;
   document.getElementById('mon-count').textContent =
     (rest > 0 ? `${sicht.length} von ${rows.length} Treffern angezeigt (${_monRecords.length} gesamt)`
               : `${rows.length} von ${_monRecords.length} angezeigt`)
@@ -954,6 +988,62 @@ function _monAnsichtEvents() {
     }, { passive: true });
   }
 
+  // Spaltenbreite per Ziehen am rechten Rand der Kopfzelle, Doppelklick = Standard
+  const kopfBereich = document.querySelector('table.mon-table thead');
+  let zug = null;
+  if (kopfBereich) {
+    kopfBereich.addEventListener('pointerdown', e => {
+      const g = e.target.closest('[data-griff]');
+      if (!g) return;
+      e.preventDefault();
+      const col = document.querySelector(`#mon-cols col[data-sp="${g.dataset.griff}"]`);
+      if (!col) return;
+      zug = { id: g.dataset.griff, col, start: e.clientX, breite: parseFloat(col.style.width) || 100, neu: 0 };
+      try { g.setPointerCapture(e.pointerId); } catch (_) { /* ohne Capture weiter */ }
+      document.body.classList.add('mon-zieht');
+    });
+    kopfBereich.addEventListener('pointermove', e => {
+      if (!zug) return;
+      zug.neu = Math.max(48, Math.min(900, Math.round(zug.breite + e.clientX - zug.start)));
+      zug.col.style.width = zug.neu + 'px';
+      _monTabBreiteSetzen();
+    });
+    const ende = () => {
+      if (!zug) return;
+      if (zug.neu) {
+        const alle = _monEigeneBreiten();
+        const w = _monAnsichtWerk || '';
+        alle[w] = Object.assign({}, alle[w], { [zug.id]: zug.neu });
+        _monEigeneBreitenSpeichern(alle);
+        _monGriffZeit = Date.now();
+        const zurueck = document.getElementById('mon-breiten-zurueck');
+        if (zurueck) zurueck.hidden = false;
+      }
+      zug = null;
+      document.body.classList.remove('mon-zieht');
+      _monScrollObenAbgleichen();
+      if (wrap) wrap.style.setProperty('--mon-wrap-breite', wrap.clientWidth + 'px');
+    };
+    kopfBereich.addEventListener('pointerup', ende);
+    kopfBereich.addEventListener('pointercancel', ende);
+    kopfBereich.addEventListener('dblclick', e => {
+      const g = e.target.closest('[data-griff]');
+      if (!g) return;
+      const alle = _monEigeneBreiten();
+      const w = _monAnsichtWerk || '';
+      if (alle[w]) { delete alle[w][g.dataset.griff]; _monEigeneBreitenSpeichern(alle); }
+      _monGriffZeit = Date.now();
+      _monRenderTable(_monRows);
+    });
+  }
+  const breitenZurueck = document.getElementById('mon-breiten-zurueck');
+  if (breitenZurueck) breitenZurueck.addEventListener('click', () => {
+    const alle = _monEigeneBreiten();
+    delete alle[_monAnsichtWerk || ''];
+    _monEigeneBreitenSpeichern(alle);
+    _monRenderTable(_monRows);
+  });
+
   // Zeile per Tastatur auf- und zuklappen
   const tbody = document.getElementById('mon-tbody');
   if (tbody) tbody.addEventListener('keydown', e => {
@@ -994,7 +1084,11 @@ function _monSpaltenDialog(werk) {
             <button type="button" class="sp-pfeil" data-sp-runter title="nach unten" aria-label="${_esc(sp.name || sp.titel)} nach unten">▼</button>
           </li>`;
         }).join('')}</ul>
-        <p class="ug-hinweis">Gilt für alle, die das Monitoring nutzen. Ist kein Werk gefiltert, zeigt die Tabelle die Spalten aller Werke, Zellen eines Werks ohne die Spalte bleiben leer.</p>
+        <label class="ug-lbl">Speichern für<select id="sp-umfang">
+          <option value="werk">nur ${_esc(w)}</option>
+          <option value="alle">alle Werke (${_esc(werke.join(', '))})</option></select></label>
+        <label class="bh-check"><input type="checkbox" id="sp-breiten"${Object.keys(_monEigeneBreiten()[w] || {}).length ? '' : ' disabled'}> Meine Spaltenbreiten als Standard für alle übernehmen${Object.keys(_monEigeneBreiten()[w] || {}).length ? '' : ' <small>(noch keine gezogen)</small>'}</label>
+        <p class="ug-hinweis">Die Einstellungen gelten für alle, die das Monitoring nutzen. Eigene Breiten, die jemand selbst zieht, gehen vor. Ist kein Werk gefiltert, zeigt die Tabelle die Spalten aller Werke, Zellen eines Werks ohne die Spalte bleiben leer.</p>
         <p class="ug-meldung" id="sp-meldung" role="status"></p>
         <div class="ug-aktionen">
           <button type="button" class="ug-sek" data-sp-standard>Standard</button>
@@ -1041,7 +1135,12 @@ function _monSpaltenDialog(werk) {
       dlg.querySelectorAll('.ug-aktionen button').forEach(b => { b.disabled = true; });
       meldung.textContent = 'Wird gespeichert…';
       try {
-        await bhEinstSpeichern(w, { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked });
+        const teil = { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked };
+        const breitenWahl = dlg.querySelector('#sp-breiten');
+        if (breitenWahl && breitenWahl.checked) {
+          teil.breiten = Object.assign({}, bhWerkEinst(w).breiten, _monEigeneBreiten()[w]);
+        }
+        await bhEinstSpeichern(dlg.querySelector('#sp-umfang').value === 'alle' ? werke : w, teil);
         dlg.close();
         _monUpdate(_monDateien);
         _monBuildFilterOptions(_monLibs);
@@ -1312,6 +1411,7 @@ function monInitFilterEvents() {
   // nach Spaltenauswahl neu gezeichnet, deshalb per Delegation.
   const kopf = document.querySelector('table.mon-table thead');
   if (kopf) kopf.addEventListener('click', e => {
+    if (e.target.closest('[data-griff]') || Date.now() - _monGriffZeit < 400) return;
     const th = e.target.closest('th[data-sort]');
     if (!th) return;
     const key = th.getAttribute('data-sort');

@@ -207,16 +207,19 @@ function bhVorgabeSpeichern(werk, abasInfoAn) {
   return bhEinstSpeichern(werk, { abasInfoAn });
 }
 
-/** Teil der Werk-Einstellungen speichern (mit If-Match, bei Konflikt neu laden und wiederholen). */
+/**
+ * Teil der Werk-Einstellungen speichern, für ein Werk oder eine Liste von Werken in einem
+ * Schritt (mit If-Match, bei Konflikt neu laden und wiederholen).
+ */
 async function bhEinstSpeichern(werk, teil) {
-  const key = String(werk || '').toUpperCase();
+  const keys = (Array.isArray(werk) ? werk : [werk]).map(w => String(w || '').toUpperCase());
   for (let versuch = 0; versuch < 2; versuch++) {
     const token = await acquireToken(SP.scopes);
     if (!token) throw new Error('Nicht angemeldet.');
     if (versuch > 0) await bhLaden(_bh.siteId, token);
-    const neu = { version: 1, werke: Object.assign({}, _bh.einst.werke, {
-      [key]: Object.assign({}, _bh.einst.werke[key], teil),
-    }) };
+    const werke = Object.assign({}, _bh.einst.werke);
+    keys.forEach(k => { werke[k] = Object.assign({}, werke[k], teil); });
+    const neu = { version: 1, werke };
     const url = _bh.einstItemId
       ? `${SP.graphBase}/sites/${_bh.siteId}/drive/items/${_bh.einstItemId}/content`
       : `${SP.graphBase}/sites/${_bh.siteId}/drive/root:/${BH_EINSTELLUNGEN}:/content?@microsoft.graph.conflictBehavior=fail`;
