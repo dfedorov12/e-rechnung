@@ -5,6 +5,8 @@ liegt, und bekommt dazu die passende Mailvorlage (Variante 1 Rücksendung, Varia
 Akzeptanz, für 2026 und ab 2028 eigene Texte). Mit **„Speichern und senden“** geht diese Mail
 ohne Outlook direkt aus dem Rechnungspostfach des Werks an den Lieferanten.
 
+Klick für Klick, mit dem Ablauf in der Buchhaltung: [Lieferanten-Mails-Anleitung.md](Lieferanten-Mails-Anleitung.md)
+
 ## So läuft es
 
 ```
@@ -46,7 +48,7 @@ cd scripts
 ## 2. Rechte
 
 1. **Liste KreditorMails:** Vererbung unterbrechen. Die Buchhaltung bekommt
-   „Bearbeiten“ (zum Anlegen der Aufträge), das Konto der Flow-Verbindung ebenfalls. Alle
+   „Mitwirken“ (zum Anlegen der Aufträge), das Konto der Flow-Verbindung ebenfalls. Alle
    anderen lesen höchstens. Wer hier einen Eintrag anlegen darf, kann über den Flow aus dem
    Werks-Postfach senden.
 2. **Werks-Postfächer:** Das Konto, mit dem die Outlook-Verbindung im Flow angelegt ist,
