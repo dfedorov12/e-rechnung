@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupAnlagen();
   setupKontaktMail();
   document.getElementById('gezahlt').addEventListener('input', updateTotals);
+  document.getElementById('waehrung').addEventListener('change', updateTotals);
   document.getElementById('btn-add-row').addEventListener('click', addPositionRow);
   document.getElementById('btn-export-xrechnung').addEventListener('click', () => exportInvoice('xrechnung'));
   document.getElementById('btn-export-zugferd').addEventListener('click', () => exportInvoice('zugferd'));
@@ -234,12 +235,18 @@ function fillFormFromExtracted(data) {
   _anlagen = [];
   _anlagenZeigen();
   ['bestellnummer', 'lieferscheinnummer', 'kundennummer', 'lieferantennummer', 'vorrechnungsnummer',
-    'vorrechnungsdatum', 'steuerbetrag-original', 'kaeufer-email', 'gezahlt'].forEach(id => {
+    'vorrechnungsdatum', 'steuerbetrag-original', 'kaeufer-email', 'gezahlt', 'kaeufer-zusatz'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = ''; el.classList.remove('autofilled'); }
   });
   const rechnungsart = document.getElementById('rechnungsart');
   if (rechnungsart) rechnungsart.value = data.rechnungsart || '380';
+  const waehrung = document.getElementById('waehrung');
+  if (waehrung) {
+    const w = /^[A-Z]{3}$/.test(data.waehrung || '') ? data.waehrung : 'EUR';
+    if (![...waehrung.options].some(o => o.value === w)) waehrung.add(new Option(w, w));
+    waehrung.value = w;
+  }
   const map = {
     'verkaeufer':          data.verkaeufer,
     'verkaeufer-strasse':  data.verkaeufstrasse,
@@ -258,6 +265,7 @@ function fillFormFromExtracted(data) {
     'verkaeufer-gf':              data.geschaeftsfuehrung,
     'kaeufer':             data.kaeufer,
     'kaeufer-strasse':     data.kaeuferstrasse,
+    'kaeufer-zusatz':      data.kaeuferzusatz,
     'kaeufer-plz':         data.kaeuferplz,
     'kaeufer-stadt':       data.kaeuferstadt,
     'kaeufer-land':        data.kaeuferland,
@@ -312,6 +320,12 @@ function fillFormFromExtracted(data) {
   updateTotals();
   lockSellerMaster();   // #1: Verkäufer-Stammdaten gegen versehentliche/böswillige Änderung sperren
   return count;
+}
+
+/** Währungszeichen hinter Beträgen: € oder der Code (GBP, CZK …) */
+function _wz() {
+  const w = v('waehrung') || 'EUR';
+  return w === 'EUR' ? ' €' : ' ' + w;
 }
 
 const _EU_LAENDER = new Set(['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'GR', 'EL', 'HU', 'IE', 'IT',
@@ -709,29 +723,29 @@ function updateTotals() {
     const rabatt = parseFloat(tr.querySelector('.pos-rabatt').value) || 0;
     const net = menge * preis * (1 - rabatt / 100);
     const cell = tr.querySelector('[data-total]');
-    cell.textContent = net !== 0 ? formatDE(net) + ' €' : '–';
+    cell.textContent = net !== 0 ? formatDE(net) + _wz() : '–';
   });
 
   const positionen = collectPositionen();
   const { netTotal, vatTotal, grossTotal, vatGroups, steuerLautOriginal } = calcTotals(positionen, v('steuerbetrag-original'));
 
-  document.getElementById('total-netto').textContent = formatDE(netTotal) + ' €';
+  document.getElementById('total-netto').textContent = formatDE(netTotal) + _wz();
 
   const vatContainer = document.getElementById('total-vat-container');
   vatContainer.innerHTML = '';
   Object.values(vatGroups).sort((a, b) => b.rate - a.rate).forEach(g => {
     const row = document.createElement('div');
     row.className = 'totals-row';
-    row.innerHTML = `<span>MwSt. ${g.rate.toFixed(0)} %${steuerLautOriginal ? ' <small title="Betrag aus dem Original übernommen, das ERP rundet anders">(laut Original)</small>' : ''}</span><span class="amount">${formatDE(g.amount)} €</span>`;
+    row.innerHTML = `<span>MwSt. ${g.rate.toFixed(0)} %${steuerLautOriginal ? ' <small title="Betrag aus dem Original übernommen, das ERP rundet anders">(laut Original)</small>' : ''}</span><span class="amount">${formatDE(g.amount)}${_wz()}</span>`;
     vatContainer.appendChild(row);
   });
 
-  document.getElementById('total-brutto').textContent = formatDE(grossTotal) + ' €';
+  document.getElementById('total-brutto').textContent = formatDE(grossTotal) + _wz();
   const gezahlt = parseFloat(v('gezahlt')) || 0;
   document.getElementById('total-gezahlt-zeile').hidden = !gezahlt;
   document.getElementById('total-zahlbetrag-zeile').hidden = !gezahlt;
-  document.getElementById('total-gezahlt').textContent = '−' + formatDE(gezahlt) + ' €';
-  document.getElementById('total-zahlbetrag').textContent = formatDE(grossTotal - gezahlt) + ' €';
+  document.getElementById('total-gezahlt').textContent = '−' + formatDE(gezahlt) + _wz();
+  document.getElementById('total-zahlbetrag').textContent = formatDE(grossTotal - gezahlt) + _wz();
 }
 
 /* ── Form Setup ── */
@@ -801,6 +815,8 @@ function collectFormData() {
     vorrechnungsdatum: v('vorrechnungsdatum'),   // BT-26
     steuerbetrag:      v('steuerbetrag-original'),   // MwSt laut Original (BT-110)
     gezahlt:           parseFloat(v('gezahlt')) || 0,  // BT-113
+    waehrung:          v('waehrung') || 'EUR',         // BT-5
+    kaeuferzusatz:     v('kaeufer-zusatz'),            // BT-163
     anlagen:           _anlagen.map(a => ({ ...a })),  // BG-24
     gesellschaft:      v('gesellschaft') || 'WGC',
     // Steuerbefreiung (bei 0%-Positionen): UNTDID 5305 + BT-120
@@ -1129,7 +1145,7 @@ function _mailSubjectBody(data, grossTotal, useZugferd) {
   const body =
 `Sehr geehrte Damen und Herren,
 
-anbei erhalten Sie unsere Rechnung ${data.rechnungsnummer}${datum ? ' vom ' + datum : ''} über ${betrag} €.
+anbei erhalten Sie unsere Rechnung ${data.rechnungsnummer}${datum ? ' vom ' + datum : ''} über ${betrag}${data.waehrung && data.waehrung !== 'EUR' ? ' ' + data.waehrung : ' €'}.
 
 Die Rechnung liegt als ${formatLabel} gemäß EN 16931 bei.
 

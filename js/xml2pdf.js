@@ -132,7 +132,8 @@ async function buildInvoicePdf(data) {
     return lines.length ? lines : [''];
   };
 
-  const fmtEur  = n => (n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const waehrung = data.waehrung && data.waehrung !== 'EUR' ? ' ' + data.waehrung : ' €';
+  const fmtEur  = n => (n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + waehrung;
   const fmtDate = s => s ? s.split('-').reverse().join('.') : '–';
 
   /* ── Seite 1: Kopf ── */
@@ -174,6 +175,7 @@ async function buildInvoicePdf(data) {
   const buyerLines = [
     [data.kaeufer, true],
     [data.kaeuferstrasse],
+    [data.kaeuferzusatz || ''],
     [[data.kaeuferplz, data.kaeuferstadt].filter(Boolean).join(' ')],
     [data.kaeuferland !== 'DE' ? data.kaeuferland : ''],
     [data.kaeufervat ? `USt-IdNr.: ${data.kaeufervat}` : ''],

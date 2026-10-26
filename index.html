@@ -220,6 +220,10 @@
               <input type="text" id="kaeufer-strasse" placeholder="Empfängerstraße 2">
             </div>
             <div class="form-group">
+              <label>Adresszusatz (BT-163)</label>
+              <input type="text" id="kaeufer-zusatz" placeholder="z. B. c/o, Abteilung, Postfach">
+            </div>
+            <div class="form-group">
               <label>PLZ <span class="required">*</span></label>
               <input type="text" id="kaeufer-plz" placeholder="54321" maxlength="10">
             </div>
@@ -392,6 +396,23 @@
             <div class="form-group full-width">
               <label>Notiz / Hinweise</label>
               <textarea id="notiz" placeholder="Zahlbar innerhalb von 30 Tagen ohne Abzug."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Währung (BT-5)</label>
+              <select id="waehrung">
+                <option value="EUR">EUR · Euro</option>
+                <option value="GBP">GBP · Britisches Pfund</option>
+                <option value="CZK">CZK · Tschechische Krone</option>
+                <option value="CHF">CHF · Schweizer Franken</option>
+                <option value="USD">USD · US-Dollar</option>
+                <option value="PLN">PLN · Polnischer Złoty</option>
+                <option value="HUF">HUF · Ungarischer Forint</option>
+                <option value="SEK">SEK · Schwedische Krone</option>
+                <option value="DKK">DKK · Dänische Krone</option>
+                <option value="NOK">NOK · Norwegische Krone</option>
+                <option value="RON">RON · Rumänischer Leu</option>
+              </select>
+              <span class="hint">Alle Beträge der Rechnung in dieser Währung. Wird aus dem Beleg gelesen.</span>
             </div>
             <div class="form-group">
               <label>Bereits gezahlt (BT-113)</label>

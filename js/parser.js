@@ -133,7 +133,25 @@ const _COMPANY_REGISTRY = {
   },
   DSO: _werkGeruest('DSO'),
   LEG: _werkGeruest('LEG'),
-  EWA: _werkGeruest('EWA'),
+  // ── EWA · Eisenwerk Arnstadt (SAP Adobe-Formular, Parser extractEwa) ──
+  EWA: {
+    verkaeufer:         'Eisenwerk Arnstadt GmbH',
+    verkaeufstrasse:    'Bierweg 4',
+    verkaeufplz:        '99310',
+    verkaeufstadt:      'Arnstadt',
+    verkaeufland:       'DE',
+    verkaeuftel:        '+49 3628 596 101',
+    verkaeuferemail:    'info@ewa-guss.de',
+    verkaeufervat:      'DE812737567',
+    verkaeufersteuernr: '',
+    iban:               'DE92820700000126644400',   // EUR-Konto; GBP-Rechnungen nennen ein eigenes, das aus dem PDF gilt
+    bic:                'DEUTDE8EXXX',
+    handelsregister:    'Amtsgericht Jena',
+    registernr:         'HRB 110887',
+    geschaeftsfuehrung: 'Viktor Babushchak',
+    _detect: /ewa-guss\.de|HRB\s*110887/i,
+    _aktiv: true,
+  },
   HOL: _werkGeruest('HOL'),
   MEG: _werkGeruest('MEG'),
   SCH: _werkGeruest('SCH'),
@@ -220,6 +238,10 @@ function extractInvoiceDataFromItems(allItems) {
       ...extractBuyerGermanSHB(buyerBlock, fullText),
       positionen: extractLineItemsGermanSHB(fullText),
     };
+  // EWA-Rechnung (Eisenwerk Arnstadt, SAP Adobe-Formular, de/en/fr)
+  } else if (_isEwaInvoice(fullText)) {
+    result = { ...extractSeller(footerText, fullText), ...extractEwa(fullText, allItems) };
+    eigenesLayout = true;
   // EIS-Rechnung (Gienanth, SAP-Formular mit Feldnummern (10) bis (34))
   } else if (_isEisInvoice(fullText)) {
     result = { ...extractSeller(footerText, fullText), ...extractEis(fullText) };
@@ -892,6 +914,11 @@ function extractLineItemsZai(fullText) {
 function _preisAusGesamt(gesamt, menge, gedruckt) {
   if (!(menge > 0)) return gedruckt;
   const r2 = x => Math.round(x * 100) / 100;
+  // Gedruckter Preis (ggf. je 3 Stück umgerechnet) mit so wenigen Stellen wie möglich
+  for (const st of [2, 3, 4, 6]) {
+    const f = Math.pow(10, st), p = Math.round(gedruckt * f) / f;
+    if (r2(menge * p) === r2(gesamt)) return p;
+  }
   if (r2(menge * gedruckt) === r2(gesamt)) return gedruckt;
   for (const st of [3, 4, 6]) {
     const f = Math.pow(10, st);
@@ -906,6 +933,280 @@ function _bestellposition(bestellung) {
   const z = (bestellung || []).find(x => /Best\.?\s*-?\s*Nr/i.test(x)) || '';
   const m = z.match(/\bPos\.?\s*(\d+(?:\s*[+,]\s*\d+)*)/i);
   return m ? m[1].replace(/\s+/g, '') : '';
+}
+
+/* ══════════════════════════════════════════════════════
+   EWA · Eisenwerk Arnstadt (SAP mit Adobe-Formular)
+   Deutsch, englisch, französisch; Währung laut Beleg (EUR, GBP, CZK …).
+   Im Kopf stehen links die Anschriften, rechts Beschriftung und Wert in
+   zwei Spalten. Die Zeilen mischt pdf.js, daher liest der Kopf über die
+   x-Position der Textstücke, Positionen und Summen über die Zeilen.
+══════════════════════════════════════════════════════ */
+function _isEwaInvoice(text) {
+  return /Eisenwerk Arnstadt GmbH\s*\|\s*Bierweg/i.test(text);
+}
+
+/** Zahl im Format der Belegsprache: en 32,400.00 · de 32.400,00 · fr 32 400,00 */
+function _ewaZahl(s, sprache) {
+  let t = String(s || '').trim().replace(/\s+/g, ' ');
+  if (sprache === 'en') t = t.replace(/,/g, '');
+  else t = t.replace(sprache === 'fr' ? / /g : /\./g, '').replace(/ /g, '').replace(',', '.');
+  const n = parseFloat(t);
+  return isFinite(n) ? n : 0;
+}
+
+const _EWA_LABEL = [
+  ['nummer', /^(?:Nummer|Number|Numéro)$/i],
+  ['datum', /^(?:Datum|Date)$/i],
+  ['auftrag', /^(?:Kundenauftrag|Order Number|notre no\. de commande)\b\s*(.*)$/i],
+  ['bestellung', /^(?:Referenznummer|Reference Number|votre no\. de commande)\b\s*(.*)$/i],
+  ['lieferung', /^(?:Lieferungsnummer|Delivery Number|Numéro de livraison)\b\s*(.*)$/i],
+  ['kunde', /^(?:Kundennummer|Customer Number|Numéro de client)\b\s*(.*)$/i],
+  ['leistung', /^(?:Liefer\/Leistungsdatum|Delivery\/Service date|Date de livraison\/?)\s*(.*)$/i],
+  ['ihreUst', /^(?:Ihre UST-ID|Your tax Number|Votre numéro de TVA)\b\s*(.*)$/i],
+  ['unsereUst', /^(?:Unsere UST-ID|Our tax Number|Notre numéro de TVA)\b\s*(.*)$/i],
+  ['bearbeiter', /^(?:Sachbearbeiter|Clerk|responsable du dossier)\b\s*(.*)$/i],
+];
+const _EWA_VERSAND = /^(?:Versandanschrift|Ship-to address|Adresse d'expédition)$/i;
+
+function extractEwa(fullText, items) {
+  const r = {};
+  const titel = (fullText.match(/^(Rechnung|Gutschrift|Invoice|Credit\s+memo|Credit\s+note|Facture|Avoir)$/im) || [])[1] || '';
+  const sprache = /^(?:Invoice|Credit)/i.test(titel) ? 'en' : /^(?:Facture|Avoir)/i.test(titel) ? 'fr' : 'de';
+  r.rechnungsart = /^(?:Gutschrift|Credit|Avoir)/i.test(titel) ? '381' : '380';
+  const zahl = s => _ewaZahl(s, sprache);
+  const BETRAG = sprache === 'en' ? '-?\\d{1,3}(?:,\\d{3})*\\.\\d{2}' : sprache === 'fr' ? '-?\\d{1,3}(?: \\d{3})*,\\d{2}' : '-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}';
+  const MENGE = sprache === 'en' ? '\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?' : sprache === 'fr' ? '\\d{1,3}(?: \\d{3})*(?:,\\d+)?' : '\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?';
+  const datum = s => {
+    const de = String(s || '').match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    if (de) return `${de[3]}-${de[2]}-${de[1]}`;
+    const iso = String(s || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    return iso ? iso[0] : '';
+  };
+
+  // ── Kopf aus den Textstücken der ersten Seite ────────────────────────────
+  const s1 = (items || []).filter(it => (it.page || 1) === 1 && it.text && it.text.trim());
+  const rel = it => it.x / (it.pw || 595);
+  const iWaehrung = s1.find(it => /^(?:Währung|Currency|Monnaie)$/i.test(it.text.trim()));
+  const yGrenze = iWaehrung ? iWaehrung.y : 0;
+  if (iWaehrung) {
+    const w = s1.find(it => it !== iWaehrung && Math.abs(it.y - iWaehrung.y) < 3 && rel(it) > rel(iWaehrung));
+    if (w && /^[A-Z]{3}$/.test(w.text.trim())) r.waehrung = w.text.trim();
+  }
+  const kopf = s1.filter(it => it.y > yGrenze + 2 && rel(it) < 0.85 && !/Bierweg 4 \||Arnstadt GmbH \|/.test(it.text));
+  const zeilen = liste => {
+    const out = [];
+    liste.slice().sort((a, b) => b.y - a.y || a.x - b.x).forEach(it => {
+      const z = out[out.length - 1];
+      if (z && Math.abs(z.y - it.y) < 3) z.text += ' ' + it.text.trim();
+      else out.push({ y: it.y, text: it.text.trim() });
+    });
+    return out;
+  };
+  const links = zeilen(kopf.filter(it => rel(it) < 0.45)).map(z => z.text);
+  const labels = kopf.filter(it => rel(it) >= 0.45 && rel(it) < 0.70);
+  const werte = kopf.filter(it => rel(it) >= 0.70);
+  const kopfWerte = {};
+  const verbraucht = new Set();
+  for (const l of labels.sort((a, b) => b.y - a.y)) {
+    for (const [key, re] of _EWA_LABEL) {
+      const m = l.text.trim().match(re);
+      if (!m) continue;
+      let wert = (m[1] || '').trim();
+      if (!wert) {
+        const w = werte.filter(x => !verbraucht.has(x) && Math.abs(x.y - l.y) <= 9)
+          .sort((a, b) => Math.abs(a.y - l.y) - Math.abs(b.y - l.y))[0];
+        if (w) { verbraucht.add(w); wert = w.text.trim(); }
+      }
+      if (wert && !kopfWerte[key]) kopfWerte[key] = wert;
+      break;
+    }
+  }
+  if (kopfWerte.nummer) r.rechnungsnummer = kopfWerte.nummer;
+  if (kopfWerte.datum) r.rechnungsdatum = datum(kopfWerte.datum);
+  if (kopfWerte.bestellung) r.bestellnummer = kopfWerte.bestellung;
+  if (kopfWerte.lieferung) r.lieferscheinnummer = kopfWerte.lieferung;
+  if (kopfWerte.kunde) r.kundennummer = kopfWerte.kunde;
+  if (kopfWerte.leistung) r.lieferdatum = datum(kopfWerte.leistung);
+  if (kopfWerte.ihreUst) r.kaeufervat = kopfWerte.ihreUst.replace(/\s+/g, '');
+  if (kopfWerte.bearbeiter) r.verkaeufkontakt = kopfWerte.bearbeiter;
+
+  // Anschriften: Rechnungsempfänger, danach ggf. Versandanschrift
+  const iVersand = links.findIndex(l => _EWA_VERSAND.test(l));
+  const kaeuferZeilen = iVersand >= 0 ? links.slice(0, iVersand) : links;
+  const mails = [];
+  const ohneMail = kaeuferZeilen.filter(l => {
+    const m = l.match(/^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/);
+    if (m) mails.push(m[0]);
+    return !m;
+  });
+  if (mails.length) r.kaeufermail = mails[0];                 // BT-49 steht bei manchen Kunden im Anschriftfeld
+  const k = _ewaAnschrift(ohneMail);
+  Object.assign(r, { kaeufer: k.name, kaeuferzusatz: k.zusatz, kaeuferstrasse: k.strasse, kaeuferplz: k.plz, kaeuferstadt: k.stadt, kaeuferland: k.land });
+  if (iVersand >= 0) {
+    const v = _ewaAnschrift(links.slice(iVersand + 1));
+    if (v.name && !(v.strasse === k.strasse && v.plz === k.plz)) {
+      Object.assign(r, { lieferName: v.name, lieferStrasse: v.strasse, lieferPlz: v.plz, lieferStadt: v.stadt, lieferLand: v.land });
+    } else if (v.land) r.lieferLand = v.land;
+  }
+
+  // ── Zeilen unterhalb des Kopfs ───────────────────────────────────────────
+  const z = fullText.split('\n').map(l => l.trim()).filter(Boolean);
+  const SEITENKOPF = /^(?:Beleg|Document)\s+\d+$|^(?:Datum|Date)\s+\d{2}\.\d{2}\.\d{4}\s+(?:Seite|Page)|^(?:Seite|Page)\s*\d+\s*(?:von|of|de)\s*\d+$/i;
+  const FUSS = /^Eisenwerk Arnstadt GmbH\s*·|^Mail info@ewa-guss|^Geschäftsführung\s/;
+  const iZahl = z.findIndex(l => /^(?:Zahlungsbedingungen|Terms of payment|Conditions de paiement)\b/i.test(l));
+  const iLief = z.findIndex(l => /^(?:Lieferbedingungen|Terms of delivery|Conditions de livraison)\b/i.test(l));
+  let zahlung = '';
+  if (iZahl >= 0) {
+    const teile = [z[iZahl].replace(/^(?:Zahlungsbedingungen|Terms of payment|Conditions de paiement)\s*/i, '')];
+    for (let i = iZahl + 1; i < (iLief > iZahl ? iLief : iZahl + 3); i++) teile.push(z[i]);
+    zahlung = teile.filter(Boolean).join('; ');
+    // Fälligkeit: Datum „ohne Abzug", sonst das letzte Datum
+    const netto = zahlung.match(/(\d{2}\.\d{2}\.\d{4}|\d{4}-\d{2}-\d{2})[^;]*?(?:ohne Abzug|without deduction)|(?:Sans déduction jusqu'au|Up to)\s+(\d{2}\.\d{2}\.\d{4}|\d{4}-\d{2}-\d{2})\s*(?:without deduction)?(?:;|$)/i);
+    const alle = [...zahlung.matchAll(/\d{2}\.\d{2}\.\d{4}|\d{4}-\d{2}-\d{2}/g)].map(m => m[0]);
+    const f = netto ? (netto[1] || netto[2]) : alle[alle.length - 1];
+    if (f) r.faelligkeitsdatum = datum(f);
+  }
+  const lieferbedingung = iLief >= 0 ? z[iLief].replace(/^(?:Lieferbedingungen|Terms of delivery|Conditions de livraison)\s*/i, '') : '';
+
+  // ── Positionen ───────────────────────────────────────────────────────────
+  const posRe = /^(\d{1,4})\s+(?:Material|Matériel)\s+(.+)$/i;
+  const iErste = z.findIndex(l => posRe.test(l));
+  const iSumme = z.findIndex(l => /^(?:Gesamtbetrag ohne Steuer|Total net value|Total sans taxe)\b/i.test(l));
+  const bereich = iErste >= 0 ? z.slice(iErste, iSumme > iErste ? iSumme : z.length) : [];
+  const zeileBetrag = new RegExp('^(.*?)\\s*(' + BETRAG + ')$');
+  const mengeRe = new RegExp('^(?:Menge|Quantity|Quantité)\\s+(' + MENGE + ')\\s+(\\S+)$', 'i');
+  const proRe = new RegExp('(' + BETRAG + '|-?[\\d.,]+\\s*%)\\s*(?:[A-Z]{3}\\s+)?(?:pro|per|par)\\s+(' + MENGE + ')\\s+(\\S+)', 'i');
+  const items2 = [];
+  let p = null, imKond = false, warennr = false;
+  for (const l of bereich) {
+    if (SEITENKOPF.test(l) || FUSS.test(l)) continue;
+    let m;
+    if ((m = l.match(posRe))) {
+      p = { posnr: m[1], text: m[2].trim(), menge: 1, einheit: 'Stk', preis: null, preisMenge: 1, betraege: [], nettowert: null, details: [], notiz: [] };
+      items2.push(p); imKond = false; warennr = false;
+      continue;
+    }
+    if (!p) continue;
+    if ((m = l.match(/^(?:Kundenmaterial|Customer Material|Matériel du client)\s+(.+)$/i))) { p.details.push('Kundenmaterial ' + m[1]); continue; }
+    if ((m = l.match(mengeRe))) { p.menge = zahl(m[1]); p.einheit = /^(?:KG)$/i.test(m[2]) ? 'kg' : 'Stk'; continue; }
+    if ((m = l.match(/^(?:Konditionen|Conditions)\b\s*(.*)$/i))) { imKond = true; if (!m[1]) continue; }
+    if (imKond && (m = (/^(?:Konditionen|Conditions)\b/i.test(l) ? l.replace(/^(?:Konditionen|Conditions)\s*/i, '') : l).match(zeileBetrag)) && /(?:pro|per|par)\s|%/i.test(m[1])) {
+      const betrag = zahl(m[2]);
+      const name = m[1].replace(/\s+-?\d[\d.,\s]*\s*(?:%|[A-Z]{3}\s+(?:pro|per|par)\b.*)$/i, '').trim();
+      if (/^(?:Nettowert|Net value|Valeur nette)/i.test(name)) p.nettowert = betrag;
+      else {
+        p.betraege.push(betrag);
+        const pro = m[1].match(proRe);
+        // Erste Kondition mit „pro" ist der Grundpreis, alles Weitere (Zuschlag, Abschlag) steht in der Beschreibung
+        if (p.preis === null && pro && !/%$/.test(pro[1].trim())) { p.preis = zahl(pro[1]); p.preisMenge = zahl(pro[2]) || 1; }
+        else p.details.push(`${m[1].trim()} = ${m[2]}`);
+      }
+      continue;
+    }
+    imKond = false;
+    if (/^(?:Statistische Warennr\.|Commodity code|Code statistique des)\s*$/i.test(l)) { warennr = true; continue; }
+    if (/^marchandises$/i.test(l)) continue;                    // zweite Zeile von „Code statistique des marchandises“
+    if (warennr && /^\d{6,10}$/.test(l)) { p.details.push('Warennr. ' + l); warennr = false; continue; }
+    if ((m = l.match(/^(?:Statistische Warennr\.|Commodity code)\s+(\d+)$/i))) { p.details.push('Warennr. ' + m[1]); continue; }
+    if (/^(?:zu Bestellung|Gutschriftsanforderung|Charge|Lieferschein|Delivery note)\b/i.test(l)) { p.notiz.push(l); continue; }
+    p.details.push(l);
+  }
+
+  // ── Summen, Zuschläge auf Belegebene, Hinweise ───────────────────────────
+  let netto = null, satz = null;
+  const notiz = [];
+  let imBank = false;
+  for (let i = iSumme >= 0 ? iSumme : z.length; i < z.length; i++) {
+    const l = z[i];
+    let m;
+    if (SEITENKOPF.test(l) || FUSS.test(l)) continue;
+    if ((m = l.match(new RegExp('^(?:Gesamtbetrag ohne Steuer|Total net value|Total sans taxe)\\s+(' + BETRAG + ')$', 'i')))) { netto = zahl(m[1]); continue; }
+    if ((m = l.match(new RegExp('^(?:Umsatzsteuer|Value added tax|Taxe|TVA)\\s+([\\d.,]+)\\s*%\\s+(' + BETRAG + ')$', 'i')))) {
+      satz = zahl(m[1]); r.steuerbetrag = zahl(m[2]); continue;
+    }
+    if ((m = l.match(new RegExp('^(?:Endbetrag|Final amount|Montant final)\\s+(' + BETRAG + ')$', 'i')))) { r.gesamtbetrag = zahl(m[1]); continue; }
+    // Zuschlag auf Belegebene, z. B. „Verpackungszuschlag 1,14 EUR pro 1 ST 408,12"
+    if (satz === null && (m = l.match(zeileBetrag)) && /(?:pro|per|par)\s/i.test(m[1])) {
+      const pro = m[1].match(proRe);
+      const betrag = zahl(m[2]);
+      const name = m[1].replace(/\s*-?[\d.,]+.*$/, '').trim() || 'Zuschlag';
+      const menge = pro && zahl(pro[1]) ? Math.round(betrag / (zahl(pro[1]) / (zahl(pro[2]) || 1)) * 1000) / 1000 : 1;
+      items2.push({ posnr: '', text: name, menge, einheit: 'Stk', preis: pro ? zahl(pro[1]) : betrag, preisMenge: pro ? zahl(pro[2]) || 1 : 1,
+        betraege: [betrag], nettowert: null, details: [], notiz: [], belegebene: true });
+      continue;
+    }
+    if (/^(?:Bankverbindung|Bank details|coordonnées bancaires)\s*:?$/i.test(l)) { imBank = true; continue; }
+    if (imBank) { if (/^(?:Kontoinhaber|Account holder|propriétaire du compte)\b/i.test(l)) imBank = false; continue; }
+    notiz.push(l);
+  }
+  const mwst = satz !== null ? satz : 19;
+
+  // Steuerart
+  const text = fullText;
+  if (mwst > 0) r.steuerkategorie = 'S';
+  else if (/innergemeinschaftlich|intra-?community|intracommunautaire/i.test(text)) r.steuerkategorie = 'K';
+  else if (/export|Ausfuhr/i.test(text)) r.steuerkategorie = 'G';
+  if (r.steuerkategorie === 'K' && !r.lieferLand && r.kaeuferland && r.kaeuferland !== 'DE') r.lieferLand = r.kaeuferland;
+  if (r.steuerkategorie === 'K' && !r.lieferdatum) r.lieferdatum = r.rechnungsdatum;
+
+  // Gutschrift ohne Zahlungsziel (BR-CO-25)
+  if (!zahlung && !r.faelligkeitsdatum && r.rechnungsart === '381') zahlung = 'Gutschrift';
+
+  const kopfZeilen = [];
+  if (kopfWerte.auftrag) kopfZeilen.push('Unsere Auftragsnummer ' + kopfWerte.auftrag);
+  if (lieferbedingung) kopfZeilen.push('Lieferbedingung: ' + lieferbedingung);
+  r.notiz = [zahlung ? 'Zahlungsbedingung: ' + zahlung : '', ...kopfZeilen, notiz.join('\n')].filter(Boolean).join('\n');
+
+  const fertig = items2.map((x, i) => {
+    const gesamt = x.nettowert !== null ? x.nettowert : x.betraege.reduce((s, b) => s + b, 0);
+    const menge = x.menge || 1;
+    const gedruckt = x.preis !== null ? x.preis / (x.preisMenge || 1) : gesamt / menge;
+    return {
+      posnr: x.posnr || String((parseInt((items2[i - 1] || {}).posnr, 10) || 0) + 10),
+      beschreibung: x.text,
+      details: x.details.join('\n'),
+      positionsnotiz: x.notiz.join('\n'),
+      menge,
+      einheit: x.einheit,
+      einzelpreis: _preisAusGesamt(Math.round(gesamt * 100) / 100, menge, gedruckt),
+      mwst,
+    };
+  });
+  const erwartet = netto !== null ? netto + items2.filter(x => x.belegebene).reduce((s, x) => s + x.betraege[0], 0) : null;
+  r.positionen = _validateAndFallback(fertig, erwartet, mwst);
+  return r;
+}
+
+/**
+ * Anschriftzeilen: Name, ggf. Zusatz, Straße, PLZ und Ort, Land.
+ * Formate: „10115 Berlin", „SE-411 01 STADT / SCHWEDEN", „110 00 STADT",
+ * britisch Ort und Postcode auf eigenen Zeilen („SAMPLETON", „AB1 2CD").
+ */
+function _ewaAnschrift(zeilen) {
+  const a = zeilen.map(l => l.trim()).filter(Boolean);
+  const r = { name: '', zusatz: '', strasse: '', plz: '', stadt: '', land: 'DE' };
+  if (!a.length) return r;
+  const landCode = l => (/^[A-ZÄÖÜß ]{3,30}$/.test(l) ? _countryCode(l, true) : '');
+  if (a.length > 2 && landCode(a[a.length - 1])) r.land = landCode(a.pop());
+  let iOrt = -1;
+  for (let i = a.length - 1; i > 0; i--) {
+    if (/^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/.test(a[i]) && i > 1) {          // britischer Postcode
+      r.plz = a[i]; r.stadt = a[i - 1]; iOrt = i - 1; break;
+    }
+    const m = a[i].match(/^(?:[A-Z]{1,2}-)?(\d{3}\s\d{2}|\d{4,6})\s+(.+?)(?:\s*\/\s*[A-ZÄÖÜß ]+)?$/);
+    if (m) { r.plz = m[1]; r.stadt = m[2].trim(); iOrt = i; break; }
+  }
+  if (iOrt < 0) { r.name = a[0]; r.strasse = a.slice(1).join(', '); return r; }
+  r.strasse = iOrt >= 2 ? a[iOrt - 1] : '';
+  const vorStrasse = a.slice(0, iOrt >= 2 ? iOrt - 1 : iOrt);
+  const RECHTSFORM = /\b(?:GmbH|AG|KG|SE|Ltd\.?|Limited|S\.?A\.?|a\.\s?s\.|s\.r\.o\.|S\.p\.A\.|S\.r\.l\.|Inc\.?|AB|BV|NV|Co\.)\b/i;
+  r.name = vorStrasse[0] || '';
+  const rest = vorStrasse.slice(1);
+  // Rechtsform in der zweiten Zeile („Muster-Armaturen" / „Beispiel GmbH & Co. KG") gehört zum Namen
+  if (rest.length && !RECHTSFORM.test(r.name) && RECHTSFORM.test(rest[0])) r.name += ' ' + rest.shift();
+  r.zusatz = rest.join(', ');
+  return r;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -2109,7 +2410,7 @@ function _fixYear(dateStr) {
 /**
  * Ländername (englisch/deutsch) → ISO 3166-1 Alpha-2
  */
-function _countryCode(name) {
+function _countryCode(name, streng) {   // streng: unbekannter Name → ''
   const map = {
     'ITALIEN': 'IT', 'ITALY': 'IT',
     'DEUTSCHLAND': 'DE', 'GERMANY': 'DE',
@@ -2125,7 +2426,7 @@ function _countryCode(name) {
     'LUXEMBURG': 'LU', 'LUXEMBOURG': 'LU',
     'INDIEN': 'IN', 'INDIA': 'IN',
     'DÄNEMARK': 'DK', 'DAENEMARK': 'DK', 'DENMARK': 'DK',
-    'SCHWEDEN': 'SE', 'SWEDEN': 'SE',
+    'SCHWEDEN': 'SE', 'SWEDEN': 'SE', 'SUÈDE': 'SE',
     'NORWEGEN': 'NO', 'NORWAY': 'NO',
     'FINNLAND': 'FI', 'FINLAND': 'FI',
     'PORTUGAL': 'PT',
@@ -2142,5 +2443,6 @@ function _countryCode(name) {
     'CHINA': 'CN', 'JAPAN': 'JP', 'SÜDKOREA': 'KR', 'SOUTH KOREA': 'KR',
     'GROSSBRITANNIEN UND NORDIRLAND': 'GB',
   };
-  return map[name.toUpperCase()] || name.slice(0, 2).toUpperCase();
+  const n = name.toUpperCase().replace(/ß/g, 'SS');
+  return map[n] || map[name.toUpperCase()] || (streng ? '' : n.slice(0, 2));
 }

@@ -132,6 +132,7 @@ function _parseCII(root) {
     r.kaeufer        = _t(buyer, 'Name');
     r.kundennummer   = _t(buyer, 'ID');               // BT-46
     r.kaeuferstrasse = _t(buyer, 'PostalTradeAddress', 'LineOne');
+    r.kaeuferzusatz  = _t(buyer, 'PostalTradeAddress', 'LineTwo');
     r.kaeuferplz     = _t(buyer, 'PostalTradeAddress', 'PostcodeCode');
     r.kaeuferstadt   = _t(buyer, 'PostalTradeAddress', 'CityName');
     r.kaeuferland    = _t(buyer, 'PostalTradeAddress', 'CountryID') || 'DE';
@@ -174,7 +175,9 @@ function _parseCII(root) {
     r.bic               = _t(settle, 'SpecifiedTradeSettlementPaymentMeans', 'PayeeSpecifiedCreditorFinancialInstitution', 'BICID');
     r.faelligkeitsdatum = _xmlDate(_t(settle, 'SpecifiedTradePaymentTerms', 'DueDateDateTime', 'DateTimeString'));
     r.kontoinhaber        = _t(settle, 'SpecifiedTradeSettlementPaymentMeans', 'PayeePartyCreditorFinancialAccount', 'AccountName');   // BT-85
-    r.zahlungsbedingungen = _t(settle, 'SpecifiedTradePaymentTerms', 'Description');   // BT-20
+    r.zahlungsbedingungen = _t(settle, 'SpecifiedTradePaymentTerms', 'Description')    // BT-20
+      .replace(/^#SKONTO#[^\n]*\n?/gm, '').trim();                                          // Skonto-Zeile nur für Maschinen
+    r.waehrung            = _t(settle, 'InvoiceCurrencyCode') || 'EUR';                    // BT-5
     r.vorrechnungsnummer  = _t(settle, 'InvoiceReferencedDocument', 'IssuerAssignedID');   // BT-25
     r.vorrechnungsdatum   = _xmlDate(_t(settle, 'InvoiceReferencedDocument', 'FormattedIssueDateTime', 'DateTimeString'));   // BT-26
     r.abrZeitraumStart    = _xmlDate(_t(settle, 'BillingSpecifiedPeriod', 'StartDateTime', 'DateTimeString'));   // BT-73
@@ -246,6 +249,7 @@ function _parseUBL(root) {
 
   // Referenzen (BT-13/12/11), Abrechnungszeitraum (BT-73/74), Zahlungsbedingungen (BT-20)
   r.bestellnummer       = _t(root, 'OrderReference', 'ID');
+  r.waehrung            = _t(root, 'DocumentCurrencyCode') || 'EUR';                   // BT-5
   r.vorrechnungsnummer  = _t(root, 'BillingReference', 'InvoiceDocumentReference', 'ID');           // BT-25
   r.vorrechnungsdatum   = _xmlDate(_t(root, 'BillingReference', 'InvoiceDocumentReference', 'IssueDate'));   // BT-26
   r.lieferantennummer   = _t(root, 'AccountingSupplierParty', 'Party', 'PartyIdentification', 'ID');   // BT-29
@@ -368,7 +372,6 @@ function _extraCII(trans, agreement, delivery, settle, r) {
 
   // Käufer
   const buyer = _q(agreement, 'BuyerTradeParty');
-  push('Käufer', 'Adresszusatz', _t(buyer, 'PostalTradeAddress', 'LineTwo'));
 
   // Zahlung: weitere Konten
   const pmeans = _children(settle).filter(c => c.localName === 'SpecifiedTradeSettlementPaymentMeans');

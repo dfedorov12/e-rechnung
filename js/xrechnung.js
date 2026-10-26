@@ -54,6 +54,7 @@ function buildXML(data, profile = 'xrechnung') {
   const netTotal = Object.values(vatGroups).reduce((s, g) => s + g.base, 0);
   const vatTotal = Object.values(vatGroups).reduce((s, g) => s + g.amount, 0);
   const grossTotal = netTotal + vatTotal;
+  const waehrung = /^[A-Z]{3}$/.test(String(data.waehrung || '')) ? data.waehrung : 'EUR';   // BT-5
   const gezahlt = Math.round((parseFloat(data.gezahlt) || 0) * 100) / 100;   // BT-113 bereits gezahlt (Anzahlungen)
 
   const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -171,9 +172,12 @@ function buildXML(data, profile = 'xrechnung') {
   // ein Betrag zu zahlen ist (BR-CO-25); Gutschriften haben oft nur den Text („… in Abzug“).
   const zahlungstext = data.zahlungsbedingung
     || ((String(data.notiz || '').match(/^Zahlungsbedingung\s*:\s*(.+)$/m) || [])[1] || '').trim();
+  // Skonto maschinenlesbar nach XRechnung (#SKONTO#TAGE=…#PROZENT=…#, eigene Zeile vor dem Text)
+  const skonto = _skontoZeile(zahlungstext, data.rechnungsdatum);
+  const zahlungsbeschreibung = skonto ? skonto + '\n' + zahlungstext : zahlungstext;
   const dueDateXML = (data.faelligkeitsdatum || zahlungstext)
     ? `<ram:SpecifiedTradePaymentTerms>
-        ${zahlungstext ? `<ram:Description>${esc(zahlungstext)}</ram:Description>` : ''}
+        ${zahlungsbeschreibung ? `<ram:Description>${esc(zahlungsbeschreibung)}</ram:Description>` : ''}
         ${data.faelligkeitsdatum ? `<ram:DueDateDateTime>
           <udt:DateTimeString format="102">${fmtDate(data.faelligkeitsdatum)}</udt:DateTimeString>
         </ram:DueDateDateTime>` : ''}
@@ -246,6 +250,7 @@ function buildXML(data, profile = 'xrechnung') {
         <ram:PostalTradeAddress>
           <ram:PostcodeCode>${esc(data.kaeuferplz)}</ram:PostcodeCode>
           <ram:LineOne>${esc(data.kaeuferstrasse)}</ram:LineOne>
+          ${data.kaeuferzusatz ? `<ram:LineTwo>${esc(data.kaeuferzusatz)}</ram:LineTwo>` : ''}
           <ram:CityName>${esc(data.kaeuferstadt)}</ram:CityName>
           <ram:CountryID>${esc(data.kaeuferland || 'DE')}</ram:CountryID>
         </ram:PostalTradeAddress>
@@ -297,14 +302,14 @@ function buildXML(data, profile = 'xrechnung') {
 
     <ram:ApplicableHeaderTradeSettlement>
       <ram:PaymentReference>${esc(data.zahlungsreferenz || data.rechnungsnummer)}</ram:PaymentReference>
-      <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
+      <ram:InvoiceCurrencyCode>${esc(waehrung)}</ram:InvoiceCurrencyCode>
       ${ibanXML}
       ${vatXML}
       ${dueDateXML}
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
         <ram:LineTotalAmount>${fmt(netTotal)}</ram:LineTotalAmount>
         <ram:TaxBasisTotalAmount>${fmt(netTotal)}</ram:TaxBasisTotalAmount>
-        <ram:TaxTotalAmount currencyID="EUR">${fmt(vatTotal)}</ram:TaxTotalAmount>
+        <ram:TaxTotalAmount currencyID="${esc(waehrung)}">${fmt(vatTotal)}</ram:TaxTotalAmount>
         <ram:GrandTotalAmount>${fmt(grossTotal)}</ram:GrandTotalAmount>
         ${gezahlt ? `<ram:TotalPrepaidAmount>${fmt(gezahlt)}</ram:TotalPrepaidAmount>` : ''}
         <ram:DuePayableAmount>${fmt(grossTotal - gezahlt)}</ram:DuePayableAmount>
@@ -333,6 +338,21 @@ function _anlagenXML(anlagen, profile) {
         <ram:Name>${esc(a.beschreibung || a.name)}</ram:Name>
         ${profile !== 'zugferd' && a.base64 ? `<ram:AttachmentBinaryObject mimeCode="${esc(a.mime || 'application/pdf')}" filename="${esc(a.name)}">${a.base64}</ram:AttachmentBinaryObject>` : ''}
       </ram:AdditionalReferencedDocument>`).join('\n      ');
+}
+
+/**
+ * „Bis zum 05.11.2026 erhalten Sie 2,000 % Skonto" → #SKONTO#TAGE=14#PROZENT=2.00#
+ * (Tage ab Rechnungsdatum). Englisch „discount", französisch „escompte".
+ */
+function _skontoZeile(text, rechnungsdatum) {
+  const m = String(text || '').match(/(\d{2})\.(\d{2})\.(\d{4})[^;]*?(\d+(?:[.,]\d+)?)\s*%\s*(?:Skonto|cash discount|discount|escompte)/i);
+  if (!m || !rechnungsdatum) return '';
+  const bis = Date.UTC(+m[3], +m[2] - 1, +m[1]);
+  const [j, mo, t] = String(rechnungsdatum).split('-').map(Number);
+  const tage = Math.round((bis - Date.UTC(j, mo - 1, t)) / 86400000);
+  const prozent = parseFloat(m[4].replace(',', '.'));
+  if (!(tage > 0) || !(prozent > 0)) return '';
+  return `#SKONTO#TAGE=${tage}#PROZENT=${prozent.toFixed(2)}#`;
 }
 
 function mapUnit(einheit) {
