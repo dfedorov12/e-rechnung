@@ -86,4 +86,26 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   ok(ug.ugInformiert(pdf('RE-5', { formatmangel: false })) === '', 'E-Rechnung braucht keine Info');
 }
 
-console.log(`umsatzgrenze: ${n} Pruefungen gruen`);
+// Mailadresse des Lieferanten wird beim Speichern gemerkt
+(async () => {
+  const bodies = [];
+  global.SP = { graphBase: 'https://graph.test', scopes: [] };
+  global.acquireToken = async () => 'token';
+  global.getAuthUser = () => ({ username: 'test@dihag.com', name: 'Test' });
+  global.fetch = async (url, opt) => { bodies.push(JSON.parse(Buffer.from(opt.body).toString('utf8')));
+    return { ok: true, json: async () => ({ id: 'item1', eTag: 'e1' }) }; };
+  ug._ug.siteId = 'site'; ug._ug.itemId = 'item1'; ug._ug.eTag = 'e0';
+  ug._ug.daten = { version: 1, lieferanten: {}, rechnungen: {} };
+  const r = { nummer: 'RE-9', werk: 'WGC', datum: '2026-10-01', steller: 'Muster Werkzeuge GmbH', ustid: '' };
+  let e = await ug.ugSpeichern(r, 'Muster Werkzeuge GmbH', 'ja', '', 'RE-9', 'Ja', ' rechnung@muster-werkzeuge.de ');
+  ok(e.mail === 'rechnung@muster-werkzeuge.de', 'Mail aus An gespeichert');
+  ok(bodies[0].lieferanten[ug.ugKey('Muster Werkzeuge GmbH')].mail === 'rechnung@muster-werkzeuge.de', 'Mail in der Datei');
+  e = await ug.ugSpeichern(r, 'Muster Werkzeuge GmbH', 'nein', '', 'RE-10', 'Nein', '');
+  ok(e.mail === 'rechnung@muster-werkzeuge.de', 'leeres An behält die gemerkte Mail');
+  e = await ug.ugSpeichern(r, 'Muster Werkzeuge GmbH', 'nein', '', 'RE-11', 'Nein', 'kaputt');
+  ok(e.mail === 'rechnung@muster-werkzeuge.de', 'ungültiges An behält die gemerkte Mail');
+  e = await ug.ugSpeichern(r, 'Muster Werkzeuge GmbH', 'nein', '', 'RE-12', 'Nein', 'buchhaltung@muster-werkzeuge.de');
+  ok(e.mail === 'buchhaltung@muster-werkzeuge.de', 'neue Mail ersetzt die alte');
+  ok(e.verlauf.length === 3, 'Verlauf der Einschätzung bleibt');
+  console.log(`umsatzgrenze: ${n} Pruefungen gruen`);
+})().catch(err => { console.error(err); process.exit(1); });

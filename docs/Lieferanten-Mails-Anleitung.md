@@ -231,9 +231,11 @@ Keine Mail nötig:
 3. **Lieferant**: Beim Tippen schlägt das Feld bekannte Lieferanten vor. Ist der Lieferant schon
    eingeschätzt, steht im Dialog „Bisher: …“ mit Einschätzung, Name und Datum.
 
-4. **An** prüfen. Vorbelegt ist der Absender der Rechnungsmail. Ist das eine noreply-Adresse
-   oder ein Versanddienst, die Rechnungs- oder Buchhaltungsadresse des Lieferanten eintragen
-   (Briefkopf der Rechnung oder Kreditorenstamm).
+4. **An** prüfen. Vorbelegt ist die Adresse, die für diesen Lieferanten schon gemerkt ist,
+   sonst der Absender der Rechnungsmail. Ist das eine noreply-Adresse oder ein Versanddienst,
+   die Rechnungs- oder Buchhaltungsadresse des Lieferanten eintragen (Briefkopf der Rechnung
+   oder Kreditorenstamm). Beim Speichern merkt sich die App die Adresse beim Lieferanten und
+   schlägt sie bei seiner nächsten Rechnung vor.
 
 5. **Einschätzung wählen**: „Vermutlich über 800.000 €“ oder „Vermutlich bis 800.000 €“.
    Anhaltspunkte bei Rechnungen aus 2026: über heißt größerer Lieferant, Konzern, bekannte

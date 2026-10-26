@@ -203,10 +203,6 @@ function bhVorgabeAbas(werk) {
   return bhWerkEinst(werk).abasInfoAn || '';
 }
 
-function bhVorgabeSpeichern(werk, abasInfoAn) {
-  return bhEinstSpeichern(werk, { abasInfoAn });
-}
-
 /**
  * Teil der Werk-Einstellungen speichern, für ein Werk oder eine Liste von Werken in einem
  * Schritt (mit If-Match, bei Konflikt neu laden und wiederholen).
@@ -341,7 +337,6 @@ function bhDialogOeffnen(r, onGespeichert) {
             <div class="ug-lbl bh-such"><label for="bh-abasan">Adresse (Name oder Mail)</label>
               <input id="bh-abasan" value="${_esc(abasVorgabe)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bh-abasan-vorschlaege">
               <ul class="bh-vorschlaege" id="bh-abasan-vorschlaege" role="listbox" hidden></ul></div>
-            <label class="bh-check" title="Die Adresse steht dann bei jeder ${_esc(r.werk)}-Rechnung schon im Feld, für alle, die anfordern"><input type="checkbox" id="bh-vorgabe"> künftig bei ${_esc(r.werk)} vorschlagen</label>
           </div>
         </div>
       </div>
@@ -532,7 +527,6 @@ async function _bhSpeichern() {
   };
   let felder = bhAenderungen(a.b, neu);
   const anfordern = dlg.querySelector('#bh-anfordern').checked;
-  let vorgabe = null;
   try {
     if (anfordern) {
       const abas = dlg.querySelector('#bh-abas').checked;
@@ -540,7 +534,6 @@ async function _bhSpeichern() {
         genehmiger: wert('bh-genehmiger'), kommentar: wert('bh-anfkommentar'),
         abasInfo: abas, abasInfoAn: wert('bh-abasan'), von: a.user.username || '',
       }));
-      if (abas && dlg.querySelector('#bh-vorgabe').checked) vorgabe = felder.AbasInfoAn;
       if (bhInGenehmigung(a.b) && !window.confirm(`Es läuft schon eine Genehmigung (${bhGenehmigungsStand(a.b)}). Trotzdem neu anfordern?`)) return;
     }
   } catch (e) {
@@ -562,10 +555,6 @@ async function _bhSpeichern() {
       const mails = String(felder.GenehmigungAn || '').split(';').concat([felder.AbasInfoAn || ''])
         .map(m => m.trim()).filter(Boolean);
       _bhZuletztMerken(mails.map(m => ({ name: namen[m.toLowerCase()] || '', mail: m })));
-    }
-    if (vorgabe) {
-      try { await bhVorgabeSpeichern(a.r.werk, vorgabe); }
-      catch (e) { console.warn('[Bearbeitung] Vorgabe:', e.message || e); }
     }
     dlg.close();
     if (typeof a.onGespeichert === 'function') a.onGespeichert();

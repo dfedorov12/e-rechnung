@@ -45,9 +45,9 @@ Flow „Genehmigung WGC (Monitoring)“  (Trigger: Datei in ERAR_WGC geändert, 
 ```
 
 Das macht dasselbe wie der bisherige Flow „Genehmigung WGC“. Neu ist, dass die Adresse für
-die Info zum Austragen im abas wählbar ist. Vorbelegt ist sie mit der Vorgabe des Werks. Die
-Vorgabe setzt man im Dialog mit „als Vorgabe für WGC merken“, gespeichert wird sie in
-`Monitoring/monitoring-einstellungen.json` auf der Monitoring-Site.
+die Info zum Austragen im abas wählbar ist. Vorbelegt ist sie mit der Vorgabe des Werks aus
+`Monitoring/monitoring-einstellungen.json` auf der Monitoring-Site (für WGC Hr. Lang). Im Dialog
+lässt sich die Vorgabe nicht mehr ändern, eine andere Adresse gilt nur für diese Rechnung.
 
 Geschrieben wird an eine Datei je Rechnung: das Original-PDF, bei einer XRechnung das
 lesbare PDF. Diese Datei bekommt der Genehmiger als Anhang.
@@ -197,9 +197,8 @@ Für ein weiteres Werk den Flow kopieren („Speichern unter“) und im Trigger 
    - Beim Tippen von Name oder Mail schlägt das Feld Personen vor: zuletzt verwendete,
      Genehmiger aus dem Monitoring und, mit Freigabe, das Firmenverzeichnis. Pfeiltasten und
      Enter wählen aus.
-   - **„künftig bei WGC vorschlagen“** speichert die abas-Adresse als Vorgabe für das Werk.
-     Bei jeder weiteren Rechnung dieses Werks steht sie dann schon im Feld, für alle, die eine
-     Genehmigung anfordern. Ohne Haken gilt die Adresse nur für diese Rechnung.
+   - Die abas-Adresse ist mit der Vorgabe des Werks vorbelegt. Eine andere Adresse gilt nur
+     für diese Rechnung, taucht aber bei den zuletzt verwendeten Vorschlägen wieder auf.
 4. Die Kachel **„In Genehmigung“** zeigt alle offenen Genehmigungen. Die Filter
    „Bearbeitung“ und „Genehmigt“ ersetzen die Ansichten der alten Liste.
 

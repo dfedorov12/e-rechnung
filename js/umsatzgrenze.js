@@ -259,7 +259,7 @@ function ugLieferantName(r) {
  * Einschätzung speichern: Eintrag mergen und mit If-Match schreiben. Hat jemand
  * anderes zwischendurch gespeichert (412), neu laden und einmal wiederholen.
  */
-async function ugSpeichern(r, name, vermutung, vat, nummer, informiert) {
+async function ugSpeichern(r, name, vermutung, vat, nummer, informiert, mail) {
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
   const key = ugKey(name);
   if (!key) throw new Error('Bitte den Lieferanten angeben.');
@@ -280,6 +280,8 @@ async function ugSpeichern(r, name, vermutung, vat, nummer, informiert) {
     if (!token) throw new Error('Nicht angemeldet.');
     if (versuch > 0) await ugLaden(_ug.siteId, token);
     const alt = _ug.daten.lieferanten[key];
+    // Mailadresse aus „An“ merken; ohne gültige Eingabe bleibt die bisherige
+    eintrag.mail = ugMailOk(mail) ? String(mail).trim() : ((alt && alt.mail) || '');
     const neu = {
       version: 1,
       lieferanten: Object.assign({}, _ug.daten.lieferanten, {
@@ -449,7 +451,9 @@ function ugDialogOeffnen(r, onGespeichert) {
     vat: r.ustid || (e && e.vat) || '',
     phase: ugPhase(r.datum),
     absender: user.name || '',
-    an: r.absenderMail || ((ugMailsFuer(r)[0] || {}).an) || '',
+    // Adresse: Mail an diese Rechnung, sonst beim Lieferanten gemerkt, sonst Absender der Rechnungsmail
+    an: ((ugMailsFuer(r)[0] || {}).an) || (e && e.mail) || r.absenderMail || '',
+    anQuelle: (ugMailsFuer(r)[0] || {}).an ? 'mail' : (e && e.mail) ? 'gemerkt' : r.absenderMail ? 'absender' : '',
     informiert: ((_ug.daten.rechnungen[ugRechnungKey(r)] || {}).informiert) || 'Nein',
     kannSenden: ugKannSenden(r),
     bearbeitet: {},          // Felder, die jemand selbst geändert hat, überschreibt das Lesen nicht
@@ -493,7 +497,7 @@ function _ugRender() {
         ${['Nein', 'Ja'].map(v => `<option${v === a.informiert ? ' selected' : ''}>${v}</option>`).join('')}</select>
         <span class="ug-hinweis">Senden und „In Outlook öffnen“ setzen Ja. „Nur speichern“ nimmt den Wert hier, z. B. Ja nach einem Anruf.</span></label>`}
       <p class="ug-mailstand">${a.kannSenden
-        ? `Senden geht aus dem Rechnungspostfach des Werks ${_esc(a.r.werk)}.${a.r.absenderMail ? ' Die Adresse ist der Absender der Rechnungsmail, bitte prüfen.' : ''}`
+        ? `Senden geht aus dem Rechnungspostfach des Werks ${_esc(a.r.werk)}.${_ugAnHinweis(a)}`
         : 'Der Versand aus dem Werks-Postfach ist hier nicht eingerichtet. Die Mail öffnet sich in Outlook.'}</p>
       ${ugMailsFuer(a.r).length ? `<ul class="ug-mails">${ugMailsFuer(a.r).slice(0, 3).map(m => `<li class="${m.status === 'Fehler' ? 'nicht' : m.status === 'Gesendet' ? 'ok' : ''}">${_esc(_ugMailStand(m))}</li>`).join('')}</ul>` : ''}
       <p class="ug-gelesen" id="ug-gelesen" role="status"></p>
@@ -537,7 +541,15 @@ function _ugRender() {
     a.bearbeitet[key] = true;
     nachher();
   });
-  feld('ug-name', 'name', _ugKnoepfe);
+  feld('ug-name', 'name', () => {
+    // Anderer Lieferant gewählt: dessen gemerkte Adresse übernehmen, solange niemand „An“ geändert hat
+    const l = _ug.daten.lieferanten[ugKey(a.name)];
+    if (!a.bearbeitet.an && l && l.mail && l.mail !== a.an) {
+      a.an = l.mail; a.anQuelle = 'gemerkt';
+      dlg.querySelector('#ug-an').value = a.an;
+    }
+    _ugKnoepfe();
+  });
   feld('ug-nr', 'nr', _ugVorlageNeu);
   feld('ug-datum', 'datum', _ugVorlageNeu);
   feld('ug-an', 'an', _ugKnoepfe);
@@ -700,6 +712,14 @@ function _ugMailOeffnen() {
     + '&body=' + encodeURIComponent(text);
 }
 
+/** Woher die Adresse in „An“ stammt, als Satz für unter das Feld. */
+function _ugAnHinweis(a) {
+  if (a.bearbeitet.an) return '';
+  if (a.anQuelle === 'gemerkt') return ' Die Adresse ist für diesen Lieferanten gemerkt, bitte prüfen.';
+  if (a.anQuelle === 'absender') return ' Die Adresse ist der Absender der Rechnungsmail, bitte prüfen.';
+  return '';
+}
+
 /**
  * Abschließen: 'nur' speichert die Einschätzung, 'outlook' speichert und öffnet
  * die Mail in Outlook, 'senden' speichert und legt einen Mailauftrag an, den der
@@ -721,7 +741,7 @@ async function _ugAbschliessen(modus) {
       _ugMeldung('Wird gespeichert…');
       const sel = dlg.querySelector('#ug-informiert');
       const informiert = modus === 'nur' ? (sel ? sel.value : 'Nein') : 'Ja';
-      await ugSpeichern(a.r, dlg.querySelector('#ug-name').value.trim(), a.vermutung, a.vat, a.nr, informiert);
+      await ugSpeichern(a.r, dlg.querySelector('#ug-name').value.trim(), a.vermutung, a.vat, a.nr, informiert, a.an);
     }
     if (modus === 'outlook') _ugMailOeffnen();
     if (modus === 'senden') {
@@ -742,5 +762,5 @@ async function _ugAbschliessen(modus) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { UG, UG_MAIL_ART, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage,
-    ugMailOk, ugMailHtml, ugInformiert, _ug };
+    ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, _ug };
 }
