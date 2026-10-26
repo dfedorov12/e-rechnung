@@ -109,7 +109,28 @@ const _COMPANY_REGISTRY = {
   // _werkGeruest-Ausgabe ausfüllen bzw. Eintrag wie ZAI ausschreiben, _detect
   // setzen, _aktiv:true — UND je Werk einen Format-Parser (_is<Werk>Invoice +
   // extract*<Werk>) ergänzen und in extractInvoiceDataFromItems einhängen.
-  EIS: _werkGeruest('EIS'),
+  // ── EIS · DIHAG Gienanth, Eisenberg (SAP-Formular, Parser extractEis) ──
+  // E-Rechnung nur für Kunden mit Anschrift im Inland (_nurInland): EU-Ausland
+  // und Drittland bleiben PDF, Drittland zudem unterschrieben (Präferenzangaben).
+  EIS: {
+    verkaeufer:         'DIHAG Gienanth GmbH',
+    verkaeufstrasse:    'Ramsener Str. 1',
+    verkaeufplz:        '67304',
+    verkaeufstadt:      'Eisenberg (Pfalz)',
+    verkaeufland:       'DE',
+    verkaeuftel:        '',   // Durchwahl des Ansprechpartners aus Feld (13), sonst Zentrale aus dem Fuß
+    verkaeuferemail:    '',
+    verkaeufervat:      'DE368676368',
+    verkaeufersteuernr: '',
+    iban:               'DE46820700000154698501',
+    bic:                'DEUTDE8EXXX',
+    handelsregister:    'Amtsgericht Kaiserslautern',
+    registernr:         'HRB 34046',
+    geschaeftsfuehrung: 'Viktor Babushchak, Dr. Hans-Jürgen Brenninger',
+    _detect: /dihag-gienanth\.com|HRB\s*34046/i,
+    _nurInland: true,
+    _aktiv: true,
+  },
   DSO: _werkGeruest('DSO'),
   LEG: _werkGeruest('LEG'),
   EWA: _werkGeruest('EWA'),
@@ -173,6 +194,7 @@ function extractInvoiceDataFromItems(allItems) {
     _buildSections(allItems);
 
   let result;
+  let eigenesLayout = false;   // Parser liest Lieferanschrift und Lieferschein selbst
 
   // Englischsprachige WGC-Rechnung (Item/Product/pcs.-Format)
   if (_isEnglishIndustrialInvoice(fullText)) {
@@ -198,6 +220,10 @@ function extractInvoiceDataFromItems(allItems) {
       ...extractBuyerGermanSHB(buyerBlock, fullText),
       positionen: extractLineItemsGermanSHB(fullText),
     };
+  // EIS-Rechnung (Gienanth, SAP-Formular mit Feldnummern (10) bis (34))
+  } else if (_isEisInvoice(fullText)) {
+    result = { ...extractSeller(footerText, fullText), ...extractEis(fullText) };
+    eigenesLayout = true;
   // ZAI-Rechnung (Zaigler, combit-Layout: Beleg-Nr./Pos. Bezeichnung Menge …)
   } else if (_isZaiInvoice(fullText)) {
     result = {
@@ -215,11 +241,13 @@ function extractInvoiceDataFromItems(allItems) {
     };
   }
 
-  // Lieferanschrift (Shipping Address) — steht bei WGC/SHB am Rechnungsende
-  Object.assign(result, _extractShipTo(fullText));
+  if (!eigenesLayout) {
+    // Lieferanschrift (Shipping Address) — steht bei WGC/SHB am Rechnungsende
+    Object.assign(result, _extractShipTo(fullText));
 
-  // Lieferschein-/Versandavis-Nummer (BT-16), falls noch nicht gesetzt
-  if (!result.lieferscheinnummer) Object.assign(result, _extractLieferschein(fullText));
+    // Lieferschein-/Versandavis-Nummer (BT-16), falls noch nicht gesetzt
+    if (!result.lieferscheinnummer) Object.assign(result, _extractLieferschein(fullText));
+  }
 
   // Steuerkategorie für 0%-Positionen erkennen (UNTDID 5305: K/AE/G)
   Object.assign(result, _detectTaxCategory(fullText, result));
@@ -878,6 +906,297 @@ function _bestellposition(bestellung) {
   const z = (bestellung || []).find(x => /Best\.?\s*-?\s*Nr/i.test(x)) || '';
   const m = z.match(/\bPos\.?\s*(\d+(?:\s*[+,]\s*\d+)*)/i);
   return m ? m[1].replace(/\s+/g, '') : '';
+}
+
+/* ══════════════════════════════════════════════════════
+   EIS · DIHAG Gienanth (SAP-Formular mit VDA-Feldnummern)
+   Rechnung, Lastschrift (Überschrift „Rechnung"), Gutschrift, Anzahlung;
+   deutsch oder englisch (Invoice, Credit Memo, Down payment req.).
+   Kopffelder stehen als Beschriftung mit Wert in der nächsten Zeile.
+══════════════════════════════════════════════════════ */
+function _isEisInvoice(text) {
+  return /Ramsener\s+Str/i.test(text) && /(Konto bei Empfänger|account number at recipient)/i.test(text);
+}
+
+const _EIS_DATUM = /(\d{2}\.\d{2}\.\d{4})/;
+const _EIS_FUSS = /^(?:DIHAG Gienanth GmbH\s*·|Handelsregister\s+Amtsgericht|IBAN\s+DE\d{2}\s)/;
+const _EIS_SEITENKOPF = /^(?:Rechnung|Gutschrift|Lastschrift|Invoice|Credit\s+Memo|Credit\s+note|Down\s+payment\s+req\.?)\s+Nr\.?\s*(\d{6,10})\s+(?:vom|from)\s+(\d{2}\.\d{2}\.\d{4})/i;
+const _EIS_TITEL = /^(?:Rechnung|Gutschrift|Lastschrift|Invoice|Credit\s+Memo|Credit\s+note|Down|payment\s+req\.?|Anzahlung\w*|Schlussrechnung)$/i;
+
+function extractEis(fullText) {
+  const z = fullText.split('\n').map(l => l.trim()).filter(Boolean);
+  const r = {};
+  const idx = (re, ab = 0) => { for (let i = ab; i < z.length; i++) if (re.test(z[i])) return i; return -1; };
+
+  // ── Kopf bis zur Kundennummer ────────────────────────────────────────────
+  const iKunde = idx(/^(?:Kundennummer|customer number)\b/i);
+  const kopf = z.slice(0, iKunde > 0 ? iKunde : 20);
+  const kopfText = kopf.join('\n');
+  if (/^(?:Gutschrift|Credit\s+(?:Memo|note))\b/im.test(kopfText)) r.rechnungsart = '381';
+  else if (/^(?:Down$|Anzahlung)/im.test(kopfText)) r.rechnungsart = '386';
+  else r.rechnungsart = '380';
+
+  const seitenkopf = z.map(l => l.match(_EIS_SEITENKOPF)).find(Boolean);
+  const benutzt = new Set();
+  // Belegnummer: Zeile nach „Nummer" bzw. „no." (nicht „delivery note no.")
+  const iNr = kopf.findIndex(l => (/(?:^|\s)Nummer$/.test(l) || /(?:^|\s)no\.$/i.test(l)) && !/delivery note no\./i.test(l));
+  if (iNr >= 0) {
+    for (let k = iNr + 1; k <= iNr + 2 && k < kopf.length; k++) {
+      const m = kopf[k].match(/(?:^|\s)(\d{6,10})$/);
+      // Steht nur die Nummer in der Zeile, ist sie verbraucht; sonst trägt die Zeile auch PLZ und Ort
+      if (m) { r.rechnungsnummer = m[1]; if (kopf[k] === m[1]) benutzt.add(k); break; }
+    }
+  }
+  if (!r.rechnungsnummer && seitenkopf) r.rechnungsnummer = seitenkopf[1];
+  // Belegdatum: Zeile nach „Datum" bzw. „date"
+  const iDat = kopf.findIndex(l => /(?:^|\s)(?:Datum|date)$/.test(l) && !/dispatch date$/i.test(l));
+  for (let k = iDat + 1; iDat >= 0 && k <= iDat + 2; k++) {
+    const m = (z[k] || '').match(_EIS_DATUM);
+    if (m) { r.rechnungsdatum = _deDate(m[1]); if (k < kopf.length) benutzt.add(k); break; }
+  }
+  if (!r.rechnungsdatum && seitenkopf) r.rechnungsdatum = _deDate(seitenkopf[2]);
+  // Versanddatum (4) = Leistungsdatum
+  const iVers = kopf.findIndex(l => /(?:Versanddatum|dispatch date)$/i.test(l));
+  if (iVers >= 0 && /^\d{2}\.\d{2}\.\d{4}$/.test(kopf[iVers + 1] || '')) {
+    r.lieferdatum = _deDate(kopf[iVers + 1]); benutzt.add(iVers + 1);
+  }
+  // Reine Zahlenzeilen im Kopf: Lieferschein (80…) und Konto bei Empfänger
+  kopf.forEach((l, k) => {
+    if (k < 2 || benutzt.has(k) || !/^\d[\d ]*$/.test(l)) return;
+    benutzt.add(k);
+    for (const t of l.split(/\s+/)) {
+      if (/^80\d{6}$/.test(t)) r.lieferscheinnummer = r.lieferscheinnummer || t;
+      else if (!r.lieferantennummer) r.lieferantennummer = t;   // BT-29: unser Konto beim Kunden
+    }
+  });
+
+  // Rechnungsadresse: übrige Kopfzeilen ohne Beschriftungen, Titel und Werte
+  const adresse = [];
+  kopf.forEach((l, k) => {
+    if (k < 2 || benutzt.has(k)) return;
+    if (/Konto bei Empfänger|account number|Rechnungsadresse|invoice address|Versanddatum|dispatch date/i.test(l)) return;
+    if (_EIS_TITEL.test(l) || /^(?:Datum|date|Nummer|no\.)$/i.test(l) || /^\d{2}\.\d{2}\.\d{4}$/.test(l)) return;
+    let rein = l.replace(/\s+(?:Nummer|no\.|Datum|date)$/i, '').trim();
+    if (r.rechnungsnummer && rein.endsWith(' ' + r.rechnungsnummer)) rein = rein.slice(0, -r.rechnungsnummer.length).trim();
+    if (rein) adresse.push(rein);
+  });
+  Object.assign(r, _eisAdresse(adresse));
+
+  // Kundennummer und USt-IdNr. des Kunden
+  if (iKunde >= 0) {
+    const werte = (z[iKunde + 1] || '').split(/\s+/);
+    const nr = werte.find(t => /^\d{5,10}$/.test(t));
+    const vat = werte.find(t => /^[A-Z]{2}[A-Z0-9]{5,14}$/.test(t) && !/^Page/i.test(t));
+    if (nr) r.kundennummer = nr;
+    if (vat) r.kaeufervat = vat;
+  }
+
+  // ── Bestellblock (10) bis (14) ───────────────────────────────────────────
+  const i10 = idx(/^\(10\)\s*(?:Ihr Zeichen|your reference)/i);
+  const i20 = idx(/^(?:frei|free)\s*\(20\)/i);
+  let auftrag = '', bestelldatum = '';
+  if (i10 >= 0 && i20 > i10) {
+    const block = z.slice(i10 + 1, i20).filter(l => !/^Auftragsnummer$/i.test(l));
+    const erste = block[0] || '';
+    const m = erste.match(/^(\S+)\s+(.+?)\s+((?:\(0\)\s*)?\d[\d\/\- ]{4,})$/);
+    if (m) {
+      r.bestellnummer = m[1];
+      r.verkaeufkontakt = m[2];
+      r.verkaeuftel = m[3].trim();
+    } else if (/^\S+$/.test(erste)) r.bestellnummer = erste;
+    block.slice(1).forEach(l => {
+      const d = l.match(/^(\d{2}\.\d{2}\.\d{4})(?:\s+\d+)?$/);
+      if (d && !bestelldatum) bestelldatum = d[1];
+      else if (/^\d{3,10}$/.test(l) && !auftrag) auftrag = l;
+    });
+  }
+
+  // Kontakt des Rechnungsstellers (BT-41 bis BT-43): SAP druckt „Nachname Vorname",
+  // die Mail folgt dem Muster vorname.nachname@dihag-gienanth.com
+  if (r.verkaeufkontakt) r.verkaeuferemail = _eisKontaktMail(r.verkaeufkontakt);
+  if (!r.verkaeuftel) r.verkaeuftel = '+49 6351 408-0';
+
+  // ── Lieferbedingung (15) ─────────────────────────────────────────────────
+  let lieferbedingung = '';
+  if (i20 >= 0) {
+    const l1 = (z[i20 + 1] || '').replace(/\s+(?:gewicht|weight)$/i, '').trim();
+    const l2 = (z[i20 + 2] || '').replace(/^X\s*/, '').replace(/(?:\s+[\d.]+){1,2}$/, '')
+      .replace(/\s+(?:LKW|Bahn|Schiff|See\w*|Luft\w*|Paket\w*|Spedition|Kurier|Abholung)$/i, '').trim();
+    lieferbedingung = [l1, /^[A-Za-zÄÖÜäöüß][\wÄÖÜäöüß .\/-]*$/.test(l2) ? l2 : ''].filter(Boolean).join(' ');
+  }
+
+  // ── Versandanschrift (25) und Zahlungsbedingung ──────────────────────────
+  const i25 = idx(/^\(25\)\s*(?:Versandanschrift|shipping-address)/i);
+  let zahlung = '';
+  if (i25 >= 0) {
+    let l1 = z[i25 + 1] || '';
+    const zb = l1.match(/\s(\d+\s+(?:Tage|days)\b.*|sofort.*|immediately.*)$/i);
+    if (zb) { zahlung = zb[1].trim(); l1 = l1.slice(0, zb.index).trim(); }
+    const strasse = (z[i25 + 2] || '').replace(/\s*(?:Fälligkeitsdatum|Due date)\s*:.*$/i, '').trim();
+    const m = l1.match(/^(\d{6,8})\s+(.+?)\s+(\d{5})\s+(.+)$/);
+    if (m && m[1] !== r.kundennummer) {
+      // SAP kürzt den Namen auf 35 Zeichen: gleicher Anfang wie der Kunde → voller Name
+      const kurz = m[2].replace(/\s+\S{0,3}$/, '');
+      const name = r.kaeufer && kurz.length > 10 && r.kaeufer.startsWith(kurz) ? r.kaeufer : m[2];
+      Object.assign(r, { lieferName: name, lieferStrasse: strasse, lieferPlz: m[3], lieferStadt: m[4], lieferLand: 'DE' });
+    }
+  }
+  const faellig = fullText.match(/(?:Fälligkeitsdatum|Due date)\s*:\s*(\d{2}\.\d{2}\.\d{4})/i);
+  if (faellig) r.faelligkeitsdatum = _deDate(faellig[1]);
+
+  // ── Positionen ───────────────────────────────────────────────────────────
+  const iPos = idx(/^Pos\.\s*\(21\)/i);
+  const iSumme = idx(/^(?:Summe Positionen|Total Amount Before Tax)\b/i, iPos + 1);
+  const bereich = iPos >= 0 ? z.slice(iPos + 1, iSumme > iPos ? iSumme : z.length) : [];
+  const kopfNotiz = [];
+  const items = [];
+  let offen = null, imShipTo = false, shipTo = [];
+  const posRe = /^(\d{3})\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*(?:,\d+)?)\s+(\d)(?:\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2}))?$/;
+  for (const l of bereich) {
+    if (_EIS_FUSS.test(l) || _EIS_SEITENKOPF.test(l) || /^\(2[78]\)|^Pos\.\s*\(21\)/i.test(l)) continue;
+    let m;
+    if ((m = l.match(posRe))) {
+      offen = { posnr: _normPosNr(m[1]), text: m[2], menge: _parseDE(m[3]), preis: m[5] ? _parseDE(m[5]) : null,
+        gesamt: m[6] ? _parseDE(m[6]) : null, einheit: 'Stk', preiseinheit: 1, details: [], notiz: [] };
+      items.push(offen);
+      imShipTo = false;
+      continue;
+    }
+    if (!offen) {
+      // Zeilen vor der ersten Position: Bezug, Grund, abweichende Anschriften
+      if (/^Ship to ad+ress/i.test(l)) { imShipTo = true; continue; }
+      if (/^Bill to/i.test(l)) { imShipTo = false; }
+      if (imShipTo) { shipTo.push(l); continue; }
+      kopfNotiz.push(l);
+      continue;
+    }
+    if (offen.gesamt === null && (m = l.match(/^(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})$/))) {
+      offen.preis = _parseDE(m[1]); offen.gesamt = _parseDE(m[2]);
+      continue;
+    }
+    if ((m = l.match(/^(.*?)\s*\/\s*(\d+)\s+([A-Z]{1,4})$/))) {
+      offen.preiseinheit = parseInt(m[2], 10) || 1;
+      offen.einheit = /^(?:KG)$/i.test(m[3]) ? 'kg' : /^(?:M)$/i.test(m[3]) ? 'm' : 'Stk';
+      if (m[1]) offen.details.push(/^\S+$/.test(m[1]) ? 'Sach-Nr. ' + m[1] : m[1]);
+      continue;
+    }
+    if ((m = l.match(/^Gesamtnettowert\s+[\d.]+,\d{2}\s+(-?[\d.]+,\d{2})$/i))) {
+      offen.gesamt = _parseDE(m[1]);                      // Preis inkl. Zuschlägen
+      continue;
+    }
+    if (/^\+{3,}$/.test(l)) continue;
+    if (/^(?:LS\s+\d|Lieferschein|Auftragsnummer|Bestellnummer|Neuberechnung|#\d)/i.test(l)) { offen.notiz.push(l); continue; }
+    offen.details.push(l);
+  }
+
+  // ── Summen und Hinweise nach den Positionen ──────────────────────────────
+  let netto = null, satz = null;
+  const notiz = [];
+  for (let i = iSumme >= 0 ? iSumme : z.length; i < z.length; i++) {
+    const l = z[i];
+    let m;
+    if ((m = l.match(/^(?:Summe Positionen|Total Amount Before Tax)\s+(-?[\d.]+,\d{2})$/i))) { netto = _parseDE(m[1]); continue; }
+    if ((m = l.match(/^(?:Umsatzsteuer|German VAT)\s+(\d{1,2},\d{2})\s*%?\s+(-?[\d.]+,\d{2})$/i))) {
+      satz = _parseDE(m[1]); r.steuerbetrag = _parseDE(m[2]); continue;
+    }
+    if ((m = l.match(/^(?:Endbetrag|Total Amount)\s+(-?[\d.]+,\d{2})$/i))) { r.gesamtbetrag = _parseDE(m[1]); continue; }
+    if (_EIS_FUSS.test(l) || _EIS_SEITENKOPF.test(l) || /^-{5,}$|^signat/i.test(l)) continue;
+    notiz.push(l);
+  }
+  const mwst = satz !== null ? satz : 19;
+
+  // Bezug auf die ursprüngliche Rechnung (Gutschrift)
+  const bezugText = kopfNotiz.concat(notiz).join(' ');
+  const bezug = bezugText.match(/(?:GS\s+zu\s+RE|Credit note for invoice no\.?)\s*#?\s*(\d{6,10})\s+(?:vom|from)\s+(\d{2})[.\/](\d{2})[.\/](\d{4})/i);
+  if (bezug) { r.vorrechnungsnummer = bezug[1]; r.vorrechnungsdatum = `${bezug[4]}-${bezug[3]}-${bezug[2]}`; }
+
+  // Lieferort aus „Ship to adress" (letzte Zeile = Land), sonst Land des Kunden
+  if (shipTo.length) {
+    const land = _countryCode(shipTo[shipTo.length - 1]);
+    if (/^[A-Z]{2}$/.test(land)) r.lieferLand = land;
+  }
+  if (!r.lieferLand && r.kaeuferland && r.kaeuferland !== 'DE') r.lieferLand = r.kaeuferland;
+
+  // Leistungsdatum bei Sammelrechnung: letztes Lieferscheindatum
+  if (!r.lieferdatum) {
+    const ls = [...fullText.matchAll(/\bLS\s+\d{8}\s+vom\s+(\d{2}\.\d{2}\.\d{4})/g)].map(m => _deDate(m[1])).sort();
+    if (ls.length) r.lieferdatum = ls[ls.length - 1];
+  }
+
+  // Steuerart
+  if (mwst > 0) r.steuerkategorie = 'S';
+  else if (/innergemeinschaftlich|intra[- ]?(?:EU|community)/i.test(fullText)) r.steuerkategorie = 'K';
+  else if (/Tax-Exempt Export|Ausfuhr/i.test(fullText)) r.steuerkategorie = 'G';
+  // Innergemeinschaftlich braucht ein Leistungsdatum (BR-IC-11). Ohne Versand
+  // (Lastschrift, Gutschrift) gilt das Belegdatum.
+  if (r.steuerkategorie === 'K' && !r.lieferdatum) r.lieferdatum = r.rechnungsdatum;
+
+  // Hinweis (BT-22): Bestellung, Lieferbedingung, Zahlungsbedingung, Texte des Belegs
+  const kopfZeilen = [];
+  if (r.bestellnummer) kopfZeilen.push(`Bestellung ${r.bestellnummer}${bestelldatum ? ' vom ' + bestelldatum : ''}${auftrag ? ', unsere Auftragsnummer ' + auftrag : ''}`);
+  if (lieferbedingung) kopfZeilen.push('Lieferbedingung: ' + lieferbedingung);
+  r.notiz = [zahlung ? 'Zahlungsbedingung: ' + zahlung : '', ...kopfZeilen, kopfNotiz.join('\n'), notiz.join('\n')]
+    .filter(Boolean).join('\n');
+
+  const fertig = items.filter(p => p.gesamt !== null).map(p => {
+    const gedruckt = p.preis !== null ? p.preis / p.preiseinheit : 0;
+    return {
+      posnr: p.posnr,
+      beschreibung: p.text,
+      details: p.details.join('\n'),                  // BT-154
+      positionsnotiz: p.notiz.join('\n'),             // BT-127
+      menge: p.menge || 1,
+      einheit: p.einheit,
+      einzelpreis: _preisAusGesamt(p.gesamt, p.menge || 1, gedruckt),
+      mwst,
+    };
+  });
+  r.positionen = _validateAndFallback(fertig, netto, mwst);
+  return r;
+}
+
+/** „Müller Anna" → anna.mueller@dihag-gienanth.com */
+function _eisKontaktMail(name) {
+  const teile = String(name || '').trim().toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .split(/\s+/).map(t => t.replace(/[^a-z-]/g, '')).filter(Boolean);
+  if (teile.length < 2) return '';
+  const nachname = teile[0], vorname = teile.slice(1).join('-');
+  return `${vorname}.${nachname}@dihag-gienanth.com`;
+}
+
+/** Erzeugt das Werk E-Rechnungen nur für Kunden im Inland (Registry _nurInland)? */
+function werkNurInland(werk) {
+  const e = _COMPANY_REGISTRY[String(werk || '').toUpperCase()];
+  return !!(e && e._nurInland);
+}
+
+/**
+ * Anschrift aus den Kopfzeilen: Name (eine oder mehrere Zeilen), Straße,
+ * PLZ und Ort, im Ausland zuletzt das Land in Großbuchstaben.
+ */
+function _eisAdresse(zeilen) {
+  const r = {};
+  const a = zeilen.slice();
+  if (!a.length) return r;
+  const letzte = a[a.length - 1];
+  if (a.length > 2 && /^[A-ZÄÖÜ][A-ZÄÖÜ .]{1,30}$/.test(letzte)) { r.kaeuferland = _countryCode(letzte); a.pop(); }
+  else r.kaeuferland = 'DE';
+  let iOrt = -1;
+  for (let i = a.length - 1; i > 0; i--) {
+    if (/^(?:\d{4,6}|\d{3}\s\d{2})\s+\S/.test(a[i]) || /\d{3}[- ]?\d{2,4}$/.test(a[i])) { iOrt = i; break; }
+  }
+  if (iOrt < 0) iOrt = a.length - 1;
+  const ort = a[iOrt];
+  const m = ort.match(/^((?:\d{4,6}|\d{3}\s\d{2}))\s+(.+)$/) || ort.match(/^(.+?)[,\s]+([A-Z]{0,2}\s?\d{3,6}(?:-\d{3,4})?)$/);
+  if (m && /^\d/.test(m[1])) { r.kaeuferplz = m[1]; r.kaeuferstadt = m[2]; }
+  else if (m) { r.kaeuferstadt = m[1]; r.kaeuferplz = m[2].trim(); }
+  else r.kaeuferstadt = ort;
+  if (iOrt >= 2) { r.kaeuferstrasse = a[iOrt - 1]; r.kaeufer = a.slice(0, iOrt - 1).join(' '); }
+  else { r.kaeufer = a.slice(0, iOrt).join(' '); }
+  // Weitere Zeilen nach dem Ort (z. B. Bezirk in Indien) an die Stadt hängen
+  if (iOrt < a.length - 1) r.kaeuferstadt = [r.kaeuferstadt, ...a.slice(iOrt + 1)].join(' ');
+  return r;
 }
 
 /** Netto-Erwartungswert: erster Betrag der (letzten) ZAI-Summenzeile (= Nettobetrag). */

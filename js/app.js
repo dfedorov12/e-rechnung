@@ -201,6 +201,10 @@ async function autoFillFromPDF() {
     const count = fillFormFromExtracted(data);
     await _kundenMailVorschlagen(data);
     showLoading(false);
+    if (_nurInlandAusland(data.gesellschaft, data.kaeuferland)) {
+      showToast(`Kunde im Ausland (${data.kaeuferland}): Für ${data.gesellschaft} gibt es dafür keine E-Rechnungspflicht. `
+        + 'Die Rechnung geht wie bisher als PDF, ins Drittland unterschrieben.', 'info');
+    }
     if (count > 0) {
       showAutofillBanner(count);
       showToast(
@@ -298,6 +302,11 @@ function fillFormFromExtracted(data) {
   updateTotals();
   lockSellerMaster();   // #1: Verkäufer-Stammdaten gegen versehentliche/böswillige Änderung sperren
   return count;
+}
+
+/** Kunde im Ausland bei einem Werk, das nur Inlandsrechnungen umwandelt? */
+function _nurInlandAusland(werk, land) {
+  return typeof werkNurInland === 'function' && werkNurInland(werk) && !!land && land.toUpperCase() !== 'DE';
 }
 
 /* ── Rechnungsadresse je Kunde (BT-49): vorschlagen und merken, js/kundenmail.js ── */
@@ -771,6 +780,13 @@ async function exportInvoice(format) {
   if (errors.length > 0) {
     showToast('Pflichtfelder fehlen: ' + errors.slice(0, 3).join(', ') + (errors.length > 3 ? ' ...' : ''), 'error');
     highlightErrors(data);
+    return;
+  }
+
+  // Werke wie EIS wandeln nur Rechnungen an Kunden im Inland um (Pflicht nach § 14 UStG)
+  if (_nurInlandAusland(data.gesellschaft, data.kaeuferland)
+    && !window.confirm(`Der Kunde hat eine Anschrift im Ausland (${data.kaeuferland}). Für ${data.gesellschaft} werden nur `
+      + 'Rechnungen an Kunden im Inland als E-Rechnung verschickt, ins Ausland geht wie bisher das PDF. Trotzdem exportieren?')) {
     return;
   }
 
