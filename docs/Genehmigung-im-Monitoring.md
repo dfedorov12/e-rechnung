@@ -208,14 +208,16 @@ Der Knopf **„Spalten“** neben „Zurücksetzen“ ist nur für Admins sichtb
 - **Bearbeiten-Funktion** an oder aus. Aus heißt kein „Bearbeiten“-Knopf, keine Spalten
   Varialnummer, Kontierung, Bearbeitung, Genehmigung und Notiz. Das passt für Werke, die über
   SAP buchen und nie mit der Eingangsrechnungsliste gearbeitet haben, zum Beispiel ZAI.
-- **Welche Spalten** das Werk zeigt, aus: Datum, Werk, Richtung, Rechnungsnr., Steller /
+- **Welche Spalten** das Werk zeigt und **in welcher Reihenfolge** (Ziehen am ☰ oder Pfeile).
+  „Bearbeiten“ mit den Dateien ist immer dabei und steht im Standard vorn. Auswahl aus: Datum, Werk, Richtung, Rechnungsnr., Steller /
   Empfänger, Netto, Brutto, Fällig am, Klassifizierung, Status, Buchung, Lieferant informiert,
   Konform., Fehler, Bestellnummer, Varialnummer, Kontierung, Bearbeitung, Genehmigung, Notiz.
   „Standard“ setzt die Auswahl zurück (Netto statt Brutto, mit Lieferant informiert und den
   Spalten der Bearbeitung).
 
-Ist im Filter ein Werk gewählt, zeigt die Tabelle genau dessen Spalten. Ohne Werkfilter zeigt
-sie die Spalten aller Werke zusammen, Zellen eines Werks ohne die Spalte bleiben leer. Die
+Ist im Filter ein Werk gewählt, zeigt die Tabelle genau dessen Spalten in dessen
+Reihenfolge. Ohne Werkfilter zeigt sie die Spalten aller Werke zusammen, in der Reihenfolge
+des Werks mit den meisten Rechnungen. Zellen eines Werks ohne die Spalte bleiben leer. Die
 Auswahl gilt für alle, die das Monitoring nutzen, und liegt in
 `Monitoring/monitoring-einstellungen.json` auf der Monitoring-Site.
 

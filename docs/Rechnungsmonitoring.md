@@ -40,9 +40,9 @@ kurze Abzeichen in der letzten Spalte: **PDF/XML** (Original), **Lesbar**, **Ber
 
 ## Spalten
 
-Welche Spalten ein Werk zeigt, legt ein Admin über den Knopf **„Spalten“** fest
-(Einzelheiten in [Genehmigung-im-Monitoring.md](Genehmigung-im-Monitoring.md)). Standard:
-Datum, Werk, Richtung, Rechnungsnr., Steller / Empfänger, Netto, Fällig am,
+Welche Spalten ein Werk zeigt und in welcher Reihenfolge, legt ein Admin über den Knopf
+**„Spalten“** fest (Einzelheiten in [Genehmigung-im-Monitoring.md](Genehmigung-im-Monitoring.md)).
+Standard: vorn „Bearbeiten“ mit den Dateien (PDF, XML, Bericht), dann Datum, Werk, Richtung, Rechnungsnr., Steller / Empfänger, Netto, Fällig am,
 Klassifizierung, Status, Buchung, Lieferant informiert, Konform., Fehler und, wo die
 Bearbeitung an ist, Varialnummer, Bearbeitung, Genehmigung. Wählbar sind außerdem Brutto,
 Bestellnummer, Kontierung und Notiz.
@@ -59,12 +59,15 @@ Tooltip nennt den gespeicherten Wert.
 ## Ansicht
 
 - Die Tabelle scrollt in einem eigenen Bereich. **Kopfzeile und erste Spalte bleiben
-  stehen**, die waagerechte Bildlaufleiste ist immer sichtbar.
+  stehen**. Seitlich scrollen geht über die Leiste **oben** über der Tabelle und unten, beide
+  laufen mit.
 - **Zeile anklicken** (oder Enter) klappt alle Angaben zur Rechnung auf: Rechnung,
   Lieferant, Beträge, Prüfung mit vollem Hinweis, 800.000 €, Bearbeitung, Dateien, auch aus
   Spalten, die gerade ausgeblendet sind. **„Alle aufklappen“** gilt für die angezeigten
   Zeilen.
-- **Kompakt / Normal / Groß** ändert die Zeilenhöhe, der Browser merkt sich die Wahl.
+- **Kompakt / Groß**: Kompakt zeigt eine Rechnung möglichst auf einer Zeile (Hinweise
+  einzeilig, Abzeichen nebeneinander), Groß hat viel Luft und größere Schrift. Der Browser
+  merkt sich die Wahl.
 - **Vollbild** legt Filter und Tabelle über den ganzen Bildschirm, Esc beendet es.
 - Beim Scrollen lädt die Tabelle die nächsten 200 Zeilen von selbst nach, der Knopf
   „Weitere anzeigen“ bleibt als Rückfall. Ein Pfeil unten rechts springt zum Anfang.

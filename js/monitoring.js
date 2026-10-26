@@ -29,7 +29,7 @@ let _monLibs = [];                  // geladene Bibliotheken (für die Werk-Ausw
 let _monDateien = [];               // alle geladenen Dateien (neu zusammenfassen nach Einstellungen)
 const _monOffen = new Set();        // aufgeklappte Zeilen (Schlüssel: Werk|Richtung|Datei)
 let _monBeobachter = null;          // lädt beim Scrollen die nächste Seite der Tabelle
-let _monDichte = 'normal';          // kompakt | normal | gross (im Browser gemerkt)
+let _monDichte = 'kompakt';         // kompakt | gross (im Browser gemerkt)
 const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' };
 let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 
@@ -597,28 +597,49 @@ const MON_SPALTEN = [
   { id: 'bstatus',     titel: 'Bearbeitung',          sort: 'bstatus',    breite: 9, bh: true },
   { id: 'genehmigung', titel: 'Genehmigung',          sort: 'genehmigt',  breite: 11, bh: true },
   { id: 'notiz',       titel: 'Notiz',                                    breite: 12, bh: true },
-  { id: 'links',       titel: '',                                         breite: 11, fest: true },
+  { id: 'links',       titel: '',  name: 'Bearbeiten und Dateien (PDF, XML, Bericht)', breite: 15, fest: true },
 ];
-const MON_STANDARD = ['datum', 'werk', 'richtung', 'nummer', 'partner', 'netto', 'faellig', 'klass',
+// Standard-Reihenfolge; „Bearbeiten“ und die Dateien stehen vorn
+const MON_STANDARD = ['links', 'datum', 'werk', 'richtung', 'nummer', 'partner', 'netto', 'faellig', 'klass',
   'status', 'buchung', 'informiert', 'konform', 'fehler', 'varial', 'bstatus', 'genehmigung'];
 
-/** Spalten-IDs, die ein Werk zeigt (immer mit 'links'). */
-function _monWerkSpalten(werk) {
+/** Spalten-IDs eines Werks in seiner Reihenfolge ('links' ist immer dabei, sonst vorn). */
+function _monWerkSpaltenListe(werk) {
   const e = typeof bhWerkEinst === 'function' ? bhWerkEinst(werk) : {};
   const ids = Array.isArray(e.spalten) && e.spalten.length ? e.spalten : MON_STANDARD;
   const bh = typeof bhBearbeitenAn !== 'function' || bhBearbeitenAn(werk);
-  return new Set(ids.filter(id => {
+  const liste = ids.filter((id, i) => {
     const sp = MON_SPALTEN.find(x => x.id === id);
-    return sp && (!sp.bh || bh);
-  }).concat(['links']));
+    return sp && (!sp.bh || bh) && ids.indexOf(id) === i;
+  });
+  return liste.includes('links') ? liste : ['links'].concat(liste);
 }
 
-/** Spalten der Tabelle: das gefilterte Werk, sonst alle Werke zusammen. */
+function _monWerkSpalten(werk) {
+  return new Set(_monWerkSpaltenListe(werk));
+}
+
+/**
+ * Spalten der Tabelle in ihrer Reihenfolge: das gefilterte Werk, sonst alle Werke
+ * zusammen. Maßgeblich ist die Reihenfolge des Werks mit den meisten Rechnungen,
+ * Spalten der anderen Werke kommen hinter ihren Vorgänger.
+ */
 function _monSichtbareSpalten() {
-  const werke = _monFilter.werk ? [_monFilter.werk] : Array.from(new Set(_monRecords.map(r => r.werk)));
-  const ids = new Set();
-  (werke.length ? werke : ['']).forEach(w => _monWerkSpalten(w).forEach(id => ids.add(id)));
-  return MON_SPALTEN.filter(sp => ids.has(sp.id));
+  const anzahl = new Map();
+  _monRecords.forEach(r => anzahl.set(r.werk, (anzahl.get(r.werk) || 0) + 1));
+  const werke = _monFilter.werk ? [_monFilter.werk] : Array.from(anzahl.keys());
+  if (!werke.length) werke.push('');
+  werke.sort((a, b) => (anzahl.get(b) || 0) - (anzahl.get(a) || 0));
+  const ids = [];
+  werke.forEach(w => {
+    const liste = _monWerkSpaltenListe(w);
+    liste.forEach((id, i) => {
+      if (ids.includes(id)) return;
+      const vorher = liste.slice(0, i).reverse().find(x => ids.includes(x));
+      if (vorher) ids.splice(ids.indexOf(vorher) + 1, 0, id); else ids.unshift(id);
+    });
+  });
+  return ids.map(id => MON_SPALTEN.find(sp => sp.id === id)).filter(Boolean);
 }
 
 // Spaltenbreiten in Pixeln (Einheit 12 px). Ist der Bereich breiter, verteilt der Browser
@@ -765,6 +786,7 @@ function _monKey(r) {
 function _monNachTabelle(sicht) {
   const wrap = document.getElementById('mon-wrap');
   if (wrap) wrap.style.setProperty('--mon-wrap-breite', wrap.clientWidth + 'px');
+  _monScrollObenAbgleichen();
   const alle = document.getElementById('mon-alle-auf');
   if (alle) {
     const alleOffen = sicht.length > 0 && sicht.every(r => _monOffen.has(_monKey(r)));
@@ -782,6 +804,19 @@ function _monNachTabelle(sicht) {
     }, { root: wrap, rootMargin: '400px 0px' });
     _monBeobachter.observe(mehr);
   }
+}
+
+// Zweite waagerechte Bildlaufleiste über der Tabelle, läuft mit der unteren mit
+function _monScrollObenAbgleichen() {
+  const wrap = document.getElementById('mon-wrap');
+  const oben = document.getElementById('mon-scroll-oben');
+  if (!wrap || !oben) return;
+  const breiter = wrap.scrollWidth > wrap.clientWidth + 1;
+  oben.hidden = !breiter;
+  if (!breiter) return;
+  oben.style.width = wrap.clientWidth + 'px';
+  oben.firstElementChild.style.width = wrap.scrollWidth + 'px';
+  oben.scrollLeft = wrap.scrollLeft;
 }
 
 function _monDetailZeile(r, idx, spaltenAnzahl) {
@@ -850,7 +885,7 @@ function _monZeileUmschalten(tr) {
 }
 
 function _monDichteSetzen(d) {
-  _monDichte = ['kompakt', 'normal', 'gross'].includes(d) ? d : 'normal';
+  _monDichte = d === 'gross' ? 'gross' : 'kompakt';
   const wrap = document.getElementById('mon-wrap');
   if (wrap) wrap.className = 'mon-table-wrap dichte-' + _monDichte;
   document.querySelectorAll('[data-dichte]').forEach(b =>
@@ -868,11 +903,12 @@ function _monVollbild(an) {
   if (knopf) knopf.textContent = jetzt ? '✕ Vollbild beenden' : '⛶ Vollbild';
   const wrap = document.getElementById('mon-wrap');
   if (wrap) wrap.style.setProperty('--mon-wrap-breite', wrap.clientWidth + 'px');
+  _monScrollObenAbgleichen();
 }
 
 function _monAnsichtEvents() {
   let d = 'normal';
-  try { d = localStorage.getItem('mon-dichte') || 'normal'; } catch (e) { /* ohne Speicher */ }
+  try { d = localStorage.getItem('mon-dichte') || 'kompakt'; } catch (e) { /* ohne Speicher */ }
   _monDichteSetzen(d);
   document.querySelectorAll('[data-dichte]').forEach(b =>
     b.addEventListener('click', () => _monDichteSetzen(b.getAttribute('data-dichte'))));
@@ -901,7 +937,22 @@ function _monAnsichtEvents() {
   }
   window.addEventListener('resize', () => {
     if (wrap) wrap.style.setProperty('--mon-wrap-breite', wrap.clientWidth + 'px');
+    _monScrollObenAbgleichen();
   });
+
+  // obere und untere Bildlaufleiste koppeln
+  const oben = document.getElementById('mon-scroll-oben');
+  if (wrap && oben) {
+    let quelle = null;
+    oben.addEventListener('scroll', () => {
+      if (quelle === wrap) { quelle = null; return; }
+      quelle = oben; wrap.scrollLeft = oben.scrollLeft;
+    }, { passive: true });
+    wrap.addEventListener('scroll', () => {
+      if (quelle === oben) { quelle = null; return; }
+      if (oben.scrollLeft !== wrap.scrollLeft) { quelle = wrap; oben.scrollLeft = wrap.scrollLeft; }
+    }, { passive: true });
+  }
 
   // Zeile per Tastatur auf- und zuklappen
   const tbody = document.getElementById('mon-tbody');
@@ -922,16 +973,27 @@ function _monSpaltenDialog(werk) {
   let w = werk && werke.includes(werk) ? werk : werke[0];
   const zeichnen = () => {
     const e = bhWerkEinst(w);
-    const ids = Array.isArray(e.spalten) && e.spalten.length ? e.spalten : MON_STANDARD;
+    const gewaehlt = Array.isArray(e.spalten) && e.spalten.length ? e.spalten : MON_STANDARD;
+    const ids = gewaehlt.includes('links') ? gewaehlt : ['links'].concat(gewaehlt);
+    // erst die gewählten in ihrer Reihenfolge, dahinter die übrigen
+    const reihe = ids.filter(id => MON_SPALTEN.some(sp => sp.id === id))
+      .concat(MON_SPALTEN.map(sp => sp.id).filter(id => !ids.includes(id)));
     const bh = bhBearbeitenAn(w);
     dlg.innerHTML = `
       <form method="dialog" class="ug-form">
         <div class="ug-kopf"><h3>Spalten je Werk</h3><button type="button" class="ug-x" data-sp-zu aria-label="Schließen">✕</button></div>
         <label class="ug-lbl">Werk<select id="sp-werk">${werke.map(x => `<option${x === w ? ' selected' : ''}>${_esc(x)}</option>`).join('')}</select></label>
         <label class="bh-check"><input type="checkbox" id="sp-bh"${bh ? ' checked' : ''}> Bearbeiten-Funktion (Varialnummer, Kontierung, Genehmigung)</label>
-        <div class="sp-raster">${MON_SPALTEN.filter(sp => !sp.fest).map(sp => `
-          <label class="bh-check${sp.bh ? ' sp-bh' : ''}"><input type="checkbox" data-sp="${sp.id}"${ids.includes(sp.id) ? ' checked' : ''}${sp.bh && !bh ? ' disabled' : ''}> ${_esc(sp.titel)}</label>`).join('')}
-        </div>
+        <p class="ug-hinweis">Haken = Spalte wird angezeigt. Reihenfolge per Ziehen am ☰ oder mit den Pfeilen.</p>
+        <ul class="sp-liste" id="sp-liste">${reihe.map(id => {
+          const sp = MON_SPALTEN.find(x => x.id === id);
+          return `<li class="sp-zeile${sp.bh ? ' sp-bh' : ''}" draggable="true" data-sp-li="${sp.id}">
+            <span class="sp-griff" aria-hidden="true">☰</span>
+            <label class="bh-check"><input type="checkbox" data-sp="${sp.id}"${ids.includes(sp.id) ? ' checked' : ''}${sp.fest ? ' checked disabled' : ''}${sp.bh && !bh ? ' disabled' : ''}> ${_esc(sp.name || sp.titel)}${sp.fest ? ' <small>(immer)</small>' : ''}</label>
+            <button type="button" class="sp-pfeil" data-sp-hoch title="nach oben" aria-label="${_esc(sp.name || sp.titel)} nach oben">▲</button>
+            <button type="button" class="sp-pfeil" data-sp-runter title="nach unten" aria-label="${_esc(sp.name || sp.titel)} nach unten">▼</button>
+          </li>`;
+        }).join('')}</ul>
         <p class="ug-hinweis">Gilt für alle, die das Monitoring nutzen. Ist kein Werk gefiltert, zeigt die Tabelle die Spalten aller Werke, Zellen eines Werks ohne die Spalte bleiben leer.</p>
         <p class="ug-meldung" id="sp-meldung" role="status"></p>
         <div class="ug-aktionen">
@@ -944,12 +1006,37 @@ function _monSpaltenDialog(werk) {
     dlg.querySelector('#sp-bh').addEventListener('change', ev => {
       dlg.querySelectorAll('.sp-bh input').forEach(i => { i.disabled = !ev.target.checked; });
     });
+    // Reihenfolge: Pfeile und Ziehen
+    const liste = dlg.querySelector('#sp-liste');
+    liste.addEventListener('click', ev => {
+      const li = ev.target.closest('li');
+      if (!li) return;
+      if (ev.target.closest('[data-sp-hoch]') && li.previousElementSibling) li.parentNode.insertBefore(li, li.previousElementSibling);
+      if (ev.target.closest('[data-sp-runter]') && li.nextElementSibling) li.parentNode.insertBefore(li.nextElementSibling, li);
+    });
+    let gezogen = null;
+    liste.addEventListener('dragstart', ev => {
+      gezogen = ev.target.closest('li');
+      if (gezogen) { gezogen.classList.add('zieht'); ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', gezogen.dataset.spLi); }
+    });
+    liste.addEventListener('dragend', () => { if (gezogen) gezogen.classList.remove('zieht'); gezogen = null; });
+    liste.addEventListener('dragover', ev => {
+      if (!gezogen) return;
+      ev.preventDefault();
+      const ziel = ev.target.closest('li');
+      if (!ziel || ziel === gezogen) return;
+      const r = ziel.getBoundingClientRect();
+      liste.insertBefore(gezogen, ev.clientY > r.top + r.height / 2 ? ziel.nextElementSibling : ziel);
+    });
     dlg.querySelectorAll('[data-sp-zu]').forEach(x => x.addEventListener('click', () => dlg.close()));
     dlg.querySelector('[data-sp-standard]').addEventListener('click', () => {
-      dlg.querySelectorAll('[data-sp]').forEach(i => { i.checked = MON_STANDARD.includes(i.getAttribute('data-sp')); });
+      const ordnung = MON_STANDARD.concat(MON_SPALTEN.map(sp => sp.id).filter(id => !MON_STANDARD.includes(id)));
+      ordnung.forEach(id => { const li = liste.querySelector(`[data-sp-li="${id}"]`); if (li) liste.appendChild(li); });
+      dlg.querySelectorAll('[data-sp]').forEach(i => { if (!i.disabled || i.getAttribute('data-sp') !== 'links') i.checked = MON_STANDARD.includes(i.getAttribute('data-sp')); });
     });
     dlg.querySelector('[data-sp-speichern]').addEventListener('click', async () => {
-      const spalten = Array.from(dlg.querySelectorAll('[data-sp]')).filter(i => i.checked).map(i => i.getAttribute('data-sp'));
+      const spalten = Array.from(liste.querySelectorAll('[data-sp]'))
+        .filter(i => i.checked || i.getAttribute('data-sp') === 'links').map(i => i.getAttribute('data-sp'));
       const meldung = dlg.querySelector('#sp-meldung');
       dlg.querySelectorAll('.ug-aktionen button').forEach(b => { b.disabled = true; });
       meldung.textContent = 'Wird gespeichert…';

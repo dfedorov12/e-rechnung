@@ -54,6 +54,9 @@
     .mon-chip button:hover { background:rgba(0,0,0,.22); }
 
     .mon-tabelle { position:relative; }
+    .mon-scroll-oben { overflow-x:auto; overflow-y:hidden; height:16px; margin:0 0 3px; flex:none; }
+    .mon-scroll-oben > div { height:1px; }
+    .mon-scroll-oben[hidden] { display:none; }
     .mon-table-wrap { overflow:auto; max-height:calc(100vh - 150px); min-height:240px; background:#fff;
                 border:1px solid var(--gray-200); border-radius:var(--border-radius); box-shadow:var(--shadow-sm);
                 scrollbar-gutter:stable; }
@@ -77,11 +80,19 @@
                 border-color:transparent transparent transparent var(--gray-400); transition:transform .15s; vertical-align:middle; }
     tr.mon-zeile.offen .mon-auf { transform:rotate(90deg); border-left-color:var(--primary); }
     /* Zeilendichte */
-    .dichte-kompakt table.mon-table td { padding:5px 8px; font-size:12px; }
+    /* Kompakt: eine Zeile je Rechnung soweit möglich, Abzeichen nebeneinander, Hinweis einzeilig */
+    .dichte-kompakt table.mon-table td { padding:4px 8px; font-size:12px; line-height:1.35; }
     .dichte-kompakt table.mon-table th { padding:7px 8px; font-size:12px; }
-    .dichte-kompakt .mon-hint { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-    .dichte-gross table.mon-table td { padding:14px 14px; font-size:14px; }
-    .dichte-gross table.mon-table th { padding:13px 14px; font-size:13px; }
+    .dichte-kompakt table.mon-table tr.mon-zeile td > div { display:inline-block; margin:0 4px 0 0; vertical-align:middle; }
+    .dichte-kompakt table.mon-table tr.mon-zeile td > .mon-hint { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; margin-top:1px; }
+    .dichte-kompakt .pill, .dichte-kompakt .bh-pill, .dichte-kompakt .mon-datei, .dichte-kompakt .mon-mail { font-size:10.5px; }
+    .dichte-kompakt .bh-btn { display:inline-block; padding:2px 7px; margin:0 4px 0 0; }
+    .dichte-kompakt .mon-datei { margin-bottom:0; }
+    /* Groß: viel Luft, größere Schrift, gut lesbar am großen Bildschirm */
+    .dichte-gross table.mon-table td { padding:16px 16px; font-size:15px; line-height:1.55; }
+    .dichte-gross table.mon-table th { padding:15px 16px; font-size:14px; }
+    .dichte-gross .pill, .dichte-gross .bh-pill, .dichte-gross .mon-datei, .dichte-gross .mon-mail { font-size:12.5px; padding:3px 9px; }
+    .dichte-gross .bh-btn { display:inline-block; font-size:12.5px; padding:4px 10px; margin:0 6px 6px 0; }
     /* Details einer Zeile */
     table.mon-table tr.mon-detail td { background:#f6f9fd; padding:14px 18px 16px; border-bottom:1px solid var(--gray-200);
                 cursor:default; box-shadow:inset 3px 0 0 var(--primary); }
@@ -221,13 +232,21 @@
               border:1px solid var(--gray-200); border-radius:8px; }
     .bh-stand { margin:0; font-size:13px; color:var(--gray-700); }
     #bh-anf { display:flex; flex-direction:column; gap:10px; }
-    .sp-raster { display:grid; grid-template-columns:repeat(3, 1fr); gap:0 12px; }
-    .sp-raster .bh-check { padding:4px 0; }
-    .sp-raster .bh-check:has(input:disabled) { color:var(--gray-400); cursor:default; }
+    .sp-liste { list-style:none; margin:0; padding:0; max-height:46vh; overflow:auto; border:1px solid var(--gray-200); border-radius:8px; }
+    .sp-zeile { display:flex; align-items:center; gap:8px; padding:2px 8px; border-bottom:1px solid var(--gray-100); background:#fff; }
+    .sp-zeile:last-child { border-bottom:none; }
+    .sp-zeile.zieht { opacity:.4; }
+    .sp-zeile .bh-check { flex:1; padding:6px 0; }
+    .sp-zeile .bh-check:has(input:disabled:not(:checked)) { color:var(--gray-400); cursor:default; }
+    .sp-zeile small { color:var(--gray-500); }
+    .sp-griff { cursor:grab; color:var(--gray-400); padding:0 2px; user-select:none; }
+    .sp-pfeil { border:1px solid var(--gray-200); background:#fff; border-radius:6px; width:26px; height:24px; font-size:10px;
+                color:var(--gray-600); cursor:pointer; }
+    .sp-pfeil:hover { background:var(--gray-100); }
     td.mon-mehrzeilig { white-space:pre-line; font-size:12px; }
     .mon-mail { display:inline-block; max-width:100%; margin-top:3px; font-size:11px; font-weight:600; color:#0a6b2e;
                 background:#e3f5e9; border-radius:3px; padding:1px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:top; }
-    @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas, .sp-raster { grid-template-columns:1fr; } }
+    @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas { grid-template-columns:1fr; } }
   </style>
 </head>
 <body class="auth-guard">
@@ -303,7 +322,6 @@
     <div class="mon-ansicht">
       <div class="mon-seg" role="group" aria-label="Zeilenhöhe">
         <button type="button" data-dichte="kompakt">Kompakt</button>
-        <button type="button" data-dichte="normal">Normal</button>
         <button type="button" data-dichte="gross">Groß</button>
       </div>
       <button type="button" class="mon-reset" id="mon-alle-auf" title="Details aller angezeigten Zeilen auf- oder zuklappen">Alle aufklappen</button>
@@ -311,7 +329,8 @@
       <button type="button" class="mon-reset" id="mon-vollbild" title="Tabelle auf den ganzen Bildschirm, Esc beendet">⛶ Vollbild</button>
     </div>
 
-    <div class="mon-table-wrap dichte-normal" id="mon-wrap">
+    <div class="mon-scroll-oben" id="mon-scroll-oben" hidden><div></div></div>
+    <div class="mon-table-wrap dichte-kompakt" id="mon-wrap">
       <table class="mon-table">
         <colgroup id="mon-cols"></colgroup>
         <thead><tr id="mon-kopf"></tr></thead>
