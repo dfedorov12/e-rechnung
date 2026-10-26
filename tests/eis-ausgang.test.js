@@ -8,7 +8,7 @@ const vm = require('vm');
 const ctx = { console: { log() {}, warn() {}, error() {} }, window: {}, Math, Date, JSON, RegExp, String, Number, Array, Object, Set, Map, parseFloat, parseInt, isNaN };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/parser.js'), 'utf8')
-  + '\nthis.eis = extractEis; this.istEis = _isEisInvoice; this.mail = _eisKontaktMail; this.nurInland = werkNurInland;', ctx);
+  + '\nthis.eis = extractEis; this.istEis = _isEisInvoice; this.mail = _eisKontaktMail; this.nurInland = werkNurInland; this.unterschrift = werkDrittlandUnterschrift;', ctx);
 
 let n = 0;
 const gleich = (ist, soll, m) => { assert.deepStrictEqual(ist, soll, m + ': ' + JSON.stringify(ist)); n++; };
@@ -183,5 +183,7 @@ gleich(ctx.mail('Mustermann Jörg'), 'joerg.mustermann@dihag-gienanth.com', 'ö'
 gleich(ctx.mail('Weiß Hans Peter'), 'hans-peter.weiss@dihag-gienanth.com', 'ß und zwei Vornamen');
 gleich(ctx.mail('Einzelname'), '', 'ohne Vornamen keine Mail');
 gleich([ctx.nurInland('EIS'), ctx.nurInland('eis'), ctx.nurInland('ZAI')], [true, true, false], 'nur Inland bei EIS');
+
+gleich([ctx.unterschrift('EIS'), ctx.unterschrift('EWA'), ctx.unterschrift('ZAI')], [true, false, false], 'unterschriebenes Original nur bei EIS');
 
 console.log(`eis-ausgang: ${n} Prüfungen grün`);

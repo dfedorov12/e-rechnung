@@ -9,8 +9,9 @@ Die Belege des Eisenwerks Arnstadt kommen aus SAP als Adobe-Formular, auf Deutsc
 Wie bei EIS (Gienanth): Pflicht ist die E-Rechnung nur für Kunden mit Sitz im Inland (§ 14 UStG). Maßgeblich ist das Land in der Rechnungsadresse.
 
 - Rechnungsadresse in Deutschland: Der Konverter wandelt ohne Rückfrage um.
-- EU-Ausland: Er weist beim Laden darauf hin und fragt beim Export, ob trotzdem eine E-Rechnung entstehen soll.
-- Drittland (auch Großbritannien): Er erinnert an das unterschriebene Original als Anlage und fragt beim Export nur nach, wenn keine Anlage dabei ist.
+- EU-Ausland und Drittland (auch Großbritannien): Er weist beim Laden darauf hin und fragt beim Export, ob trotzdem eine E-Rechnung entstehen soll.
+
+Anders als bei Gienanth unterschreibt EWA Drittlandrechnungen nicht, es gibt also keine Erinnerung an ein unterschriebenes Original. Eine Anlage lässt sich trotzdem beifügen.
 
 ## Wie der Beleg gelesen wird
 

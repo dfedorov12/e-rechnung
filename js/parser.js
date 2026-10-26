@@ -129,6 +129,7 @@ const _COMPANY_REGISTRY = {
     geschaeftsfuehrung: 'Viktor Babushchak, Dr. Hans-Jürgen Brenninger',
     _detect: /dihag-gienanth\.com|HRB\s*34046/i,
     _nurInland: true,
+    _drittlandUnterschrift: true,   // Drittland nur mit unterschriebenem Original (Präferenzangaben)
     _aktiv: true,
   },
   DSO: _werkGeruest('DSO'),
@@ -1500,6 +1501,12 @@ function _eisKontaktMail(name) {
 function werkNurInland(werk) {
   const e = _COMPANY_REGISTRY[String(werk || '').toUpperCase()];
   return !!(e && e._nurInland);
+}
+
+/** Braucht eine Drittlandrechnung des Werks das unterschriebene Original (Registry _drittlandUnterschrift)? */
+function werkDrittlandUnterschrift(werk) {
+  const e = _COMPANY_REGISTRY[String(werk || '').toUpperCase()];
+  return !!(e && e._drittlandUnterschrift);
 }
 
 /**

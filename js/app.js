@@ -206,10 +206,10 @@ async function autoFillFromPDF() {
     await _kundenMailVorschlagen(data);
     showLoading(false);
     const umfang = _umfang(data.gesellschaft, data.kaeuferland);
-    if (umfang === 'eu') {
-      showToast(`Kunde im EU-Ausland (${data.kaeuferland}): Für ${data.gesellschaft} gibt es dafür keine E-Rechnungspflicht, `
+    if (umfang === 'ausland') {
+      showToast(`Kunde im Ausland (${data.kaeuferland}): Für ${data.gesellschaft} gibt es dafür keine E-Rechnungspflicht, `
         + 'die Rechnung geht wie bisher als PDF.', 'info');
-    } else if (umfang === 'drittland') {
+    } else if (umfang === 'unterschrift') {
       showToast(`Kunde im Drittland (${data.kaeuferland}): Bitte das unterschriebene Original unter „Anlagen“ beifügen, `
         + 'sonst fehlt die Unterschrift zu den Präferenzangaben.', 'info');
     }
@@ -332,14 +332,18 @@ const _EU_LAENDER = new Set(['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI
   'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE']);
 
 /**
- * Bei Werken mit _nurInland (EIS): 'inland', 'eu' oder 'drittland' nach dem Land des
- * Kunden. Für alle anderen Werke immer 'inland' (keine Hinweise, keine Nachfrage).
+ * Bei Werken mit _nurInland (EIS, EWA) nach dem Land des Kunden:
+ *   'inland'        Deutschland, ohne Rückfrage
+ *   'ausland'       EU-Ausland, bei Werken ohne Unterschriftsregel auch Drittland: Hinweis und Nachfrage
+ *   'unterschrift'  Drittland bei Werken mit _drittlandUnterschrift (EIS): unterschriebenes Original als Anlage
+ * Für alle anderen Werke immer 'inland' (keine Hinweise, keine Nachfrage).
  */
 function _umfang(werk, land) {
   if (typeof werkNurInland !== 'function' || !werkNurInland(werk)) return 'inland';
   const l = String(land || 'DE').toUpperCase();
   if (l === 'DE') return 'inland';
-  return _EU_LAENDER.has(l) ? 'eu' : 'drittland';
+  if (_EU_LAENDER.has(l)) return 'ausland';
+  return typeof werkDrittlandUnterschrift === 'function' && werkDrittlandUnterschrift(werk) ? 'unterschrift' : 'ausland';
 }
 
 /**
@@ -373,7 +377,7 @@ function setupAnlagen() {
       if (!mime) { showToast(`${f.name}: nur PDF, PNG oder JPG sind als Anlage erlaubt.`, 'error'); continue; }
       if (f.size > 10 * 1024 * 1024) { showToast(`${f.name} ist größer als 10 MB und zu groß für eine E-Rechnung.`, 'error'); continue; }
       const bytes = new Uint8Array(await f.arrayBuffer());
-      const drittland = _umfang(v('gesellschaft'), v('kaeufer-land')) === 'drittland';
+      const drittland = _umfang(v('gesellschaft'), v('kaeufer-land')) === 'unterschrift';
       _anlagen.push({ name: f.name, mime, bytes, base64: _base64(bytes),
         beschreibung: drittland ? 'Unterschriebene Rechnung (Präferenzangaben)' : 'Anlage zur Rechnung' });
     }
@@ -888,15 +892,15 @@ async function exportInvoice(format) {
     return;
   }
 
-  // Werke wie EIS: Pflicht ist die E-Rechnung nur im Inland (§ 14 UStG). EU-Ausland
-  // bleibt PDF; Drittland geht nur mit dem unterschriebenen Original als Anlage.
+  // Werke wie EIS und EWA: Pflicht ist die E-Rechnung nur im Inland (§ 14 UStG). Ins Ausland
+  // geht wie bisher das PDF; bei EIS geht Drittland nur mit dem unterschriebenen Original.
   const umfang = _umfang(data.gesellschaft, data.kaeuferland);
-  if (umfang === 'eu'
-    && !window.confirm(`Der Kunde hat eine Anschrift im EU-Ausland (${data.kaeuferland}). Für ${data.gesellschaft} geht die Rechnung `
+  if (umfang === 'ausland'
+    && !window.confirm(`Der Kunde hat eine Anschrift im Ausland (${data.kaeuferland}). Für ${data.gesellschaft} geht die Rechnung `
       + 'dorthin wie bisher als PDF. Trotzdem als E-Rechnung exportieren?')) {
     return;
   }
-  if (umfang === 'drittland' && !(data.anlagen || []).length
+  if (umfang === 'unterschrift' && !(data.anlagen || []).length
     && !window.confirm(`Drittlandrechnung ohne Anlage: Das unterschriebene Original mit den Präferenzangaben fehlt. `
       + 'Trotzdem exportieren?')) {
     document.getElementById('anlage-datei').focus();
