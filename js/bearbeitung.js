@@ -304,8 +304,6 @@ function bhDialogOeffnen(r, onGespeichert) {
   const partner = typeof _monPartner === 'function' ? _monPartner(r) : (r.steller || '');
   const stand = bhGenehmigungsStand(b);
   const laeuft = bhInGenehmigung(b);
-  const genehmiger = Array.from(new Set((typeof _monRecords !== 'undefined' ? _monRecords : [])
-    .map(x => x.bh && x.bh.genehmigungAn).filter(Boolean))).sort();
   const abasVorgabe = b.abasInfoAn || bhVorgabeAbas(r.werk);
 
   dlg.innerHTML = `
@@ -333,13 +331,17 @@ function bhDialogOeffnen(r, onGespeichert) {
         ${b.abasGesendet ? `<p class="bh-stand">Info zum Austragen im abas ging an ${_esc(b.abasInfoAn)}.</p>` : ''}
         <label class="bh-check"><input type="checkbox" id="bh-anfordern"> ${laeuft ? 'Genehmigung neu anfordern' : 'Genehmigung anfordern'}</label>
         <div id="bh-anf" style="display:none;">
-          <label class="ug-lbl">Genehmiger (Mailadresse, mehrere mit ;)<input id="bh-genehmiger" type="text" list="bh-genehmiger-liste" value="${_esc(laeuft ? '' : b.genehmigungAn)}" autocomplete="off" placeholder="vorname.nachname@…"></label>
-          <datalist id="bh-genehmiger-liste">${genehmiger.map(g => `<option value="${_esc(g)}">`).join('')}</datalist>
+          <div class="ug-lbl bh-such"><label for="bh-genehmiger">Genehmiger (Name oder Mail eintippen, mehrere mit ;)</label>
+            <input id="bh-genehmiger" type="text" value="${_esc(laeuft ? '' : b.genehmigungAn)}" autocomplete="off" placeholder="Name oder vorname.nachname@…"
+              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bh-genehmiger-vorschlaege">
+            <ul class="bh-vorschlaege" id="bh-genehmiger-vorschlaege" role="listbox" hidden></ul></div>
           <label class="ug-lbl">Kommentar an den Genehmiger<textarea id="bh-anfkommentar" rows="2"></textarea></label>
           <label class="bh-check"><input type="checkbox" id="bh-abas"${abasVorgabe ? ' checked' : ''}> Nach der Genehmigung Info zum Austragen im abas an</label>
           <div class="bh-raster bh-abas">
-            <label class="ug-lbl">Adresse<input id="bh-abasan" value="${_esc(abasVorgabe)}" autocomplete="off"></label>
-            <label class="bh-check"><input type="checkbox" id="bh-vorgabe"> als Vorgabe für ${_esc(r.werk)} merken</label>
+            <div class="ug-lbl bh-such"><label for="bh-abasan">Adresse (Name oder Mail)</label>
+              <input id="bh-abasan" value="${_esc(abasVorgabe)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bh-abasan-vorschlaege">
+              <ul class="bh-vorschlaege" id="bh-abasan-vorschlaege" role="listbox" hidden></ul></div>
+            <label class="bh-check" title="Die Adresse steht dann bei jeder ${_esc(r.werk)}-Rechnung schon im Feld, für alle, die anfordern"><input type="checkbox" id="bh-vorgabe"> künftig bei ${_esc(r.werk)} vorschlagen</label>
           </div>
         </div>
       </div>
@@ -359,8 +361,157 @@ function bhDialogOeffnen(r, onGespeichert) {
   });
   dlg.querySelectorAll('[data-bh-zu]').forEach(x => x.addEventListener('click', () => dlg.close()));
   dlg.querySelector('[data-bh-speichern]').addEventListener('click', _bhSpeichern);
+  _bhPersonenFeld(dlg.querySelector('#bh-genehmiger'), dlg.querySelector('#bh-genehmiger-vorschlaege'));
+  _bhPersonenFeld(dlg.querySelector('#bh-abasan'), dlg.querySelector('#bh-abasan-vorschlaege'));
   if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
   dlg.querySelector('#bh-varial').focus();
+}
+
+/* ── Personen vorschlagen (Genehmiger, abas-Info) ───────────────────────── */
+// Vorschläge kommen aus den zuletzt gewählten Personen (Browser), den Genehmigern, die
+// im Monitoring schon vorkommen, und, wenn die App das Recht User.ReadBasic.All hat,
+// aus dem Firmenverzeichnis (Name, Mail, Anmeldename).
+
+const BH_VERZEICHNIS = 'https://graph.microsoft.com/User.ReadBasic.All';
+const _bhSuche = { erlaubt: null, cache: new Map(), token: null, ablauf: 0 };
+
+function _bhZuletzt() {
+  try { return JSON.parse(localStorage.getItem('bh-personen') || '[]') || []; } catch (e) { return []; }
+}
+
+function _bhZuletztMerken(personen) {
+  const alt = _bhZuletzt();
+  const gleich = (a, b) => a.mail.toLowerCase() === b.mail.toLowerCase();
+  // bekannten Namen behalten, wenn eine Adresse diesmal ohne Namen kommt
+  const frisch = personen.map(p => ({ mail: p.mail, name: p.name || ((alt.find(x => gleich(x, p)) || {}).name || '') }));
+  const neu = frisch.concat(alt.filter(p => !frisch.some(x => gleich(x, p))));
+  try { localStorage.setItem('bh-personen', JSON.stringify(neu.slice(0, 30))); } catch (e) { /* ohne Speicher */ }
+}
+
+/** Bekannte Personen: zuletzt gewählt, dann Genehmiger aus den geladenen Rechnungen. */
+function _bhBekannte() {
+  const liste = _bhZuletzt().slice();
+  const recs = typeof _monRecords !== 'undefined' ? _monRecords : [];
+  recs.forEach(r => String((r.bh && r.bh.genehmigungAn) || '').split(';').map(x => x.trim()).filter(Boolean)
+    .forEach(mail => { if (!liste.some(p => p.mail.toLowerCase() === mail.toLowerCase())) liste.push({ name: '', mail }); }));
+  return liste;
+}
+
+async function _bhVerzeichnisToken(interaktiv) {
+  // Token nach erfolgreicher Freigabe eine Weile merken, sonst fragt jede Suche neu
+  if (_bhSuche.token && Date.now() < _bhSuche.ablauf) return _bhSuche.token;
+  let token = null;
+  if (interaktiv && typeof acquireTokenPopupSafe === 'function') {
+    token = await acquireTokenPopupSafe([BH_VERZEICHNIS]);
+  } else if (typeof _msal !== 'undefined' && _msal && typeof _account !== 'undefined' && _account) {
+    token = (await _msal.acquireTokenSilent({ scopes: [BH_VERZEICHNIS], account: _account })).accessToken;
+  }
+  if (token) { _bhSuche.token = token; _bhSuche.ablauf = Date.now() + 40 * 60 * 1000; }
+  return token;
+}
+
+/** Firmenverzeichnis nach Name, Mail oder Anmeldename durchsuchen (höchstens 8 Treffer). */
+async function bhPersonenSuchen(text, interaktiv) {
+  const q = String(text || '').replace(/["\\]/g, '').trim();
+  if (q.length < 2) return [];
+  if (_bhSuche.cache.has(q)) return _bhSuche.cache.get(q);
+  const token = await _bhVerzeichnisToken(interaktiv);
+  if (!token) throw new Error('kein Token');
+  const suche = encodeURIComponent(`"displayName:${q}" OR "mail:${q}" OR "userPrincipalName:${q}"`);
+  const resp = await fetch(`${SP.graphBase}/users?$search=${suche}&$select=displayName,mail,userPrincipalName&$top=8&$count=true`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'ConsistencyLevel': 'eventual', 'Accept': 'application/json' },
+  });
+  if (!resp.ok) throw new Error(`Verzeichnis (${resp.status})`);
+  const daten = await resp.json();
+  const treffer = (daten.value || [])
+    .map(u => ({ name: u.displayName || '', mail: u.mail || u.userPrincipalName || '' }))
+    .filter(p => /@/.test(p.mail) && !/#EXT#/i.test(p.mail));
+  _bhSuche.cache.set(q, treffer);
+  return treffer;
+}
+
+/** Eingabefeld mit Vorschlagsliste: tippt man Name oder Mail, erscheinen passende Personen. */
+function _bhPersonenFeld(input, liste) {
+  if (!input || !liste) return;
+  let treffer = [];
+  let aktiv = -1;
+  let lauf = 0;
+  let zeitgeber = null;
+
+  const teile = () => input.value.split(';');
+  const suchtext = () => teile().pop().trim();
+  const schliessen = () => { liste.hidden = true; input.setAttribute('aria-expanded', 'false'); aktiv = -1; };
+  const zeigen = (eintraege, fuss, kopf) => {
+    treffer = eintraege;
+    aktiv = -1;
+    liste.innerHTML = (kopf && eintraege.length ? `<li class="bh-vorschlag-info">${kopf}</li>` : '') + eintraege.map((p, i) => `<li role="option" id="${liste.id}-${i}" data-i="${i}">
+        <strong>${_esc(p.name || p.mail)}</strong>${p.name ? `<span>${_esc(p.mail)}</span>` : ''}</li>`).join('')
+      + (fuss || '');
+    liste.hidden = !liste.innerHTML;
+    input.setAttribute('aria-expanded', String(!liste.hidden));
+  };
+  const markieren = i => {
+    const lis = liste.querySelectorAll('li[data-i]');
+    aktiv = Math.max(-1, Math.min(lis.length - 1, i));
+    lis.forEach((li, j) => li.classList.toggle('aktiv', j === aktiv));
+    if (aktiv >= 0) { lis[aktiv].scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', lis[aktiv].id); }
+  };
+  const waehlen = p => {
+    const vorne = teile().slice(0, -1).map(x => x.trim()).filter(Boolean);
+    input.value = vorne.concat([p.mail]).join('; ');
+    if (input.id === 'bh-genehmiger') input.value += '; ';
+    input.dataset.namen = JSON.stringify(Object.assign(JSON.parse(input.dataset.namen || '{}'), { [p.mail.toLowerCase()]: p.name }));
+    _bhZuletztMerken([p]);
+    schliessen();
+    input.focus();
+  };
+
+  const suchen = async interaktiv => {
+    const q = suchtext().toLowerCase();
+    const nr = ++lauf;
+    const bekannt = _bhBekannte().filter(p => !q || p.mail.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)).slice(0, 6);
+    if (q.length < 2) { zeigen(bekannt, '', 'Zuletzt verwendet'); return; }
+    zeigen(bekannt, '<li class="bh-vorschlag-info">Suche im Firmenverzeichnis…</li>');
+    let fuss = '';
+    let gefunden = [];
+    if (_bhSuche.erlaubt !== false || interaktiv) {
+      try {
+        gefunden = await bhPersonenSuchen(q, interaktiv);
+        _bhSuche.erlaubt = true;
+      } catch (e) {
+        _bhSuche.erlaubt = false;
+      }
+    }
+    if (nr !== lauf) return;
+    if (_bhSuche.erlaubt === false) {
+      fuss = '<li class="bh-vorschlag-info"><button type="button" data-verzeichnis>Im Firmenverzeichnis suchen</button>'
+        + ' <small>Braucht einmal die Freigabe „Benutzer lesen“.</small></li>';
+    } else if (!gefunden.length && !bekannt.length) {
+      fuss = '<li class="bh-vorschlag-info">Niemand gefunden. Die Mailadresse geht auch direkt.</li>';
+    }
+    const alle = bekannt.concat(gefunden.filter(p => !bekannt.some(x => x.mail.toLowerCase() === p.mail.toLowerCase()))).slice(0, 8);
+    zeigen(alle, fuss);
+  };
+
+  input.addEventListener('input', () => { clearTimeout(zeitgeber); zeitgeber = setTimeout(() => suchen(false), 250); });
+  input.addEventListener('focus', () => suchen(false));
+  input.addEventListener('blur', () => setTimeout(schliessen, 150));
+  input.addEventListener('keydown', e => {
+    if (liste.hidden) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); markieren(aktiv + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); markieren(aktiv - 1); }
+    else if (e.key === 'Enter' && aktiv >= 0) { e.preventDefault(); waehlen(treffer[aktiv]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); schliessen(); }
+  });
+  // mousedown statt click, damit das Feld den Fokus nicht vorher verliert
+  liste.addEventListener('mousedown', e => {
+    const li = e.target.closest('li[data-i]');
+    if (li) { e.preventDefault(); waehlen(treffer[Number(li.dataset.i)]); return; }
+    if (e.target.closest('[data-verzeichnis]')) {
+      e.preventDefault();
+      suchen(true).catch(() => {});
+    }
+  });
 }
 
 function _bhMeldung(text, art) {
@@ -404,6 +555,14 @@ async function _bhSpeichern() {
   try {
     await bhSchreiben(a.r, felder);
     _bhUebernehmen(a.r, felder);
+    // Genehmiger und abas-Adresse für die nächsten Vorschläge merken (mit Namen, falls gewählt)
+    if (felder.GenehmigungAnfordern) {
+      const namen = Object.assign({}, JSON.parse(dlg.querySelector('#bh-genehmiger').dataset.namen || '{}'),
+        JSON.parse(dlg.querySelector('#bh-abasan').dataset.namen || '{}'));
+      const mails = String(felder.GenehmigungAn || '').split(';').concat([felder.AbasInfoAn || ''])
+        .map(m => m.trim()).filter(Boolean);
+      _bhZuletztMerken(mails.map(m => ({ name: namen[m.toLowerCase()] || '', mail: m })));
+    }
     if (vorgabe) {
       try { await bhVorgabeSpeichern(a.r.werk, vorgabe); }
       catch (e) { console.warn('[Bearbeitung] Vorgabe:', e.message || e); }

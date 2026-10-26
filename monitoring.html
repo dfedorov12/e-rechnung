@@ -238,6 +238,21 @@
               border:1px solid var(--gray-200); border-radius:8px; }
     .bh-stand { margin:0; font-size:13px; color:var(--gray-700); }
     #bh-anf { display:flex; flex-direction:column; gap:10px; }
+    .bh-such { position:relative; }
+    .bh-such > label { font-size:12px; font-weight:600; color:var(--gray-600); }
+    .bh-such > input { font:inherit; font-size:13px; font-weight:400; color:var(--gray-900); padding:8px 10px;
+              border:1px solid var(--gray-300); border-radius:8px; }
+    .bh-such > input:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(23,80,158,.12); }
+    .bh-vorschlaege { position:absolute; left:0; right:0; top:100%; z-index:30; margin:4px 0 0; padding:4px; list-style:none;
+              background:#fff; border:1px solid var(--gray-300); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.15);
+              max-height:260px; overflow:auto; font-weight:400; }
+    .bh-vorschlaege li[data-i] { display:flex; flex-direction:column; padding:6px 9px; border-radius:6px; cursor:pointer; }
+    .bh-vorschlaege li[data-i] strong { font-size:13px; color:var(--gray-900); }
+    .bh-vorschlaege li[data-i] span { font-size:12px; color:var(--gray-500); }
+    .bh-vorschlaege li[data-i]:hover, .bh-vorschlaege li.aktiv { background:var(--primary-light, #e8f0fb); }
+    .bh-vorschlag-info { padding:6px 9px; font-size:12px; color:var(--gray-500); }
+    .bh-vorschlag-info button { border:1px solid var(--primary); background:#fff; color:var(--primary); border-radius:6px;
+              font-size:12px; font-weight:600; padding:3px 8px; cursor:pointer; }
     .sp-liste { list-style:none; margin:0; padding:0; max-height:46vh; overflow:auto; border:1px solid var(--gray-200); border-radius:8px; }
     .sp-zeile { display:flex; align-items:center; gap:8px; padding:2px 8px; border-bottom:1px solid var(--gray-100); background:#fff; }
     .sp-zeile:last-child { border-bottom:none; }

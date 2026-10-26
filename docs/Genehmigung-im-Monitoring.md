@@ -194,12 +194,33 @@ Für ein weiteres Werk den Flow kopieren („Speichern unter“) und im Trigger 
 3. Genehmigung: „Genehmigung anfordern“ anhaken, Genehmiger eintragen (mehrere mit `;`, dann
    gilt die erste Antwort), Kommentar, bei Bedarf die Info zum Austragen im abas, „Speichern
    und Genehmigung anfordern“.
+   - Beim Tippen von Name oder Mail schlägt das Feld Personen vor: zuletzt verwendete,
+     Genehmiger aus dem Monitoring und, mit Freigabe, das Firmenverzeichnis. Pfeiltasten und
+     Enter wählen aus.
+   - **„künftig bei WGC vorschlagen“** speichert die abas-Adresse als Vorgabe für das Werk.
+     Bei jeder weiteren Rechnung dieses Werks steht sie dann schon im Feld, für alle, die eine
+     Genehmigung anfordern. Ohne Haken gilt die Adresse nur für diese Rechnung.
 4. Die Kachel **„In Genehmigung“** zeigt alle offenen Genehmigungen. Die Filter
    „Bearbeitung“ und „Genehmigt“ ersetzen die Ansichten der alten Liste.
 
 Läuft schon eine Genehmigung, fragt der Dialog vor einer neuen nach. Steht an einer Rechnung
 länger als einige Minuten „Angefordert bei …, wartet auf den Flow“, läuft der Flow für dieses
 Werk nicht. Dann die IT informieren.
+
+## Personen aus dem Firmenverzeichnis vorschlagen
+
+Für die Suche nach Name oder Mail braucht die App „DIHAG-E-Rechnung“ das delegierte Recht
+**User.ReadBasic.All** (Name, Mail, Anmeldename, sonst nichts). Bis es freigegeben ist,
+zeigt das Feld nur bekannte und zuletzt verwendete Personen und den Knopf „Im
+Firmenverzeichnis suchen“. Der fragt per Popup nach der Zustimmung, sofern Benutzer im
+Mandanten selbst zustimmen dürfen.
+
+Einmal für alle freigeben (Admin):
+1. Microsoft Entra Admin Center, „App-Registrierungen“, **DIHAG-E-Rechnung**
+   (Anwendungs-ID `50389599-4d5d-4267-8fef-38ff29080669`).
+2. „API-Berechtigungen“, „Berechtigung hinzufügen“, Microsoft Graph, „Delegierte
+   Berechtigungen“, **User.ReadBasic.All**, „Berechtigungen hinzufügen“.
+3. **„Administratorzustimmung für DIHAG erteilen“** und bestätigen.
 
 ## Spalten und Bearbeiten je Werk
 
