@@ -1041,7 +1041,8 @@ function _monVersionenHtml(versionen, titel) {
       <button type="button" class="mon-reset" data-ver-datei="${_esc(v.id)}"${neueste ? ' data-ver-neu' : ''}>Datei dieser Version öffnen</button>
     </details>`;
   });
-  return zeilen.reverse().join('');
+  return `<p class="mon-det-klein">${versionen.length} Version${versionen.length === 1 ? '' : 'en'}, neueste oben</p>`
+    + `<div class="mon-ver-rollen">${zeilen.reverse().join('')}</div>`;
 }
 
 async function _monVersionenZeigen(knopf) {
@@ -1052,9 +1053,19 @@ async function _monVersionenZeigen(knopf) {
   knopf.textContent = 'Wird geladen…';
   try {
     const token = await acquireToken(SP.scopes);
-    const url = `${SP.graphBase}/sites/${_monSiteId}/lists/${r.listId}/items/${r.itemId}/versions`;
-    const [d, titel] = await Promise.all([_monGet(url, token), _monSpaltenTitelLaden(r.listId, token)]);
-    ziel.innerHTML = _monVersionenHtml(d.value || [], titel);
+    // Alle Seiten holen: Graph liefert lange Verläufe in Teilen (@odata.nextLink)
+    const alleVersionen = async () => {
+      const liste = [];
+      let url = `${SP.graphBase}/sites/${_monSiteId}/lists/${r.listId}/items/${r.itemId}/versions`;
+      for (let seite = 0; url && seite < 20; seite++) {
+        const d = await _monGet(url, token);
+        liste.push(...(d.value || []));
+        url = d['@odata.nextLink'] || null;
+      }
+      return liste;
+    };
+    const [versionen, titel] = await Promise.all([alleVersionen(), _monSpaltenTitelLaden(r.listId, token)]);
+    ziel.innerHTML = _monVersionenHtml(versionen, titel);
     knopf.textContent = 'Neu laden';
   } catch (e) {
     ziel.innerHTML = `<p class="mon-det-klein">Versionen nicht lesbar: ${_esc(e.message || String(e))}</p>`;
