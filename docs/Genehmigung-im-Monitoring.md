@@ -120,6 +120,11 @@ https://make.powerautomate.com, „Erstellen“, **„Automatisierter Cloud-Flow
      Betrag: [Bruttobetrag] [Waehrung]
      ```
      (die Werte in Klammern jeweils als dynamischen Inhalt aus dem Trigger einsetzen)
+
+     „Kommentar zur Anforderung“ ist die Spalte `AnforderungKommentar`. Nicht
+     `Genehmigungskommentar` nehmen, das ist die Antwort des Genehmigers und beim Anfordern leer.
+     Bei XML-Rechnungen hängt die Bearbeitung am lesbaren PDF. Nummer (Titel), Rechnungssteller,
+     Beträge und Währung schreibt das Monitoring beim Speichern dorthin, wenn sie fehlen.
    - Link zum Element: **Link zum Element**, Beschreibung: `Rechnung öffnen`
    - Angefordert von (erweiterte Parameter, optional): **Genehmigung angefordert von**
    - Anlagen: Name = **Dateiname mit Erweiterung** (Trigger), Inhalt = **Dateiinhalt** (aus `PDF`)

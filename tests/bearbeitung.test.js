@@ -73,6 +73,13 @@ gleich(B.bhInGenehmigung(s({ Genehmigt: 'Nein' })), false, 'Nein ohne Genehmiger
 gleich(B.bhInGenehmigung(s({ Genehmigt: 'Nein', GenehmigungAn: 'chef@x.de' })), true, 'Nein mit Genehmiger');
 gleich(B.bhInGenehmigung(null), false, 'Ausgang ohne Bearbeitung');
 
+// 7b) Kopfdaten fürs lesbare PDF: nur was dort fehlt
+const zeile = { listId: 'L', itemId: '1', nummer: '123456', steller: 'Test GmbH', netto: 500, brutto: 595, waehrungFeld: 'EUR' };
+gleich(B.bhKopfdaten(zeile, { listId: 'L', itemId: '2', titel: '', steller: '', netto: null, brutto: null, waehrungFeld: '' }),
+  { Title: '123456', Rechnungssteller: 'Test GmbH', Nettobetrag: 500, Bruttobetrag: 595, Waehrung: 'EUR' }, 'alles fehlt');
+gleich(B.bhKopfdaten(zeile, { listId: 'L', itemId: '2', titel: 'X', steller: 'Y', netto: 1, brutto: 2, waehrungFeld: 'GBP' }), {}, 'nichts überschreiben');
+gleich(B.bhKopfdaten(zeile, { listId: 'L', itemId: '1' }), {}, 'Zieldatei ist die Rechnung selbst');
+
 // 8) Werte wie in der alten Liste
 gleich(B.BH_GENEHMIGT.length, 9, 'Genehmigt: 9 alte Werte');
 gleich(B.BH_STATUS.includes('Gebucht (m. Prüfg rechn & Stammd)'), true, 'Status Gebucht wie alt');

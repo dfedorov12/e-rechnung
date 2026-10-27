@@ -118,6 +118,24 @@ function bhAenderungen(alt, neu) {
   return out;
 }
 
+/**
+ * Kopfdaten der Rechnung für die Datei, an der die Bearbeitung hängt. Bei XML-Rechnungen
+ * ist das das lesbare PDF, und dort fehlen Nummer, Lieferant, Beträge und Währung. Der
+ * Genehmigungs-Flow liest sie aber von dieser Datei. Geschrieben wird nur, was dort fehlt.
+ * @param r     Zeile der Rechnung (Werte aus allen Dateien)
+ * @param ziel  Datensatz der Zieldatei (r.bhQuelle)
+ */
+function bhKopfdaten(r, ziel) {
+  if (!r || !ziel || ziel === r || (ziel.listId === r.listId && ziel.itemId === r.itemId)) return {};
+  const f = {};
+  if (r.nummer && !ziel.titel) f.Title = String(r.nummer).slice(0, 255);
+  if (r.steller && !ziel.steller) f.Rechnungssteller = r.steller;
+  if (r.netto != null && ziel.netto == null) f.Nettobetrag = r.netto;
+  if (r.brutto != null && ziel.brutto == null) f.Bruttobetrag = r.brutto;
+  if (r.waehrungFeld && !ziel.waehrungFeld) f.Waehrung = r.waehrungFeld;
+  return f;
+}
+
 /** Felder für „Genehmigung anfordern“. Der Flow reagiert auf GenehmigungAnfordern = Ja. */
 function bhAnforderung(p) {
   const genehmiger = bhMails(p.genehmiger);
@@ -544,6 +562,9 @@ async function _bhSpeichern() {
     return;
   }
   if (!Object.keys(felder).length) { dlg.close(); return; }
+  // Fehlende Kopfdaten an die Zieldatei (lesbares PDF), damit der Flow sie findet
+  const kopf = bhKopfdaten(a.r, a.r.bhQuelle);
+  felder = Object.assign({}, kopf, felder);
 
   const knopf = dlg.querySelectorAll('.ug-aktionen button');
   knopf.forEach(k => { k.disabled = true; });
@@ -551,6 +572,14 @@ async function _bhSpeichern() {
   try {
     await bhSchreiben(a.r, felder);
     _bhUebernehmen(a.r, felder);
+    if (a.r.bhQuelle && Object.keys(kopf).length) {
+      const z = a.r.bhQuelle;
+      if (kopf.Title) z.titel = kopf.Title;
+      if (kopf.Rechnungssteller) z.steller = kopf.Rechnungssteller;
+      if (kopf.Nettobetrag != null) z.netto = kopf.Nettobetrag;
+      if (kopf.Bruttobetrag != null) z.brutto = kopf.Bruttobetrag;
+      if (kopf.Waehrung) z.waehrungFeld = kopf.Waehrung;
+    }
     // Genehmiger und abas-Adresse für die nächsten Vorschläge merken (mit Namen, falls gewählt)
     if (felder.GenehmigungAnfordern) {
       const namen = Object.assign({}, JSON.parse(dlg.querySelector('#bh-genehmiger').dataset.namen || '{}'),
@@ -569,5 +598,5 @@ async function _bhSpeichern() {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { BH_FELDER, BH_STATUS, BH_GENEHMIGT, bhAusFeldern, bhZiel, bhZusammen, bhMails,
-    bhAenderungen, bhAnforderung, bhGenehmigungsStand, bhInGenehmigung };
+    bhAenderungen, bhAnforderung, bhKopfdaten, bhGenehmigungsStand, bhInGenehmigung };
 }

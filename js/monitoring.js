@@ -267,6 +267,8 @@ function _monMap(it, f, lib) {
     netto:    num(f.Nettobetrag),
     bestellnr: (f.Bestellnummer || '').toString(),
     waehrung: (f.Waehrung || 'EUR').toString(),
+    waehrungFeld: (f.Waehrung || '').toString(),   // leer = Spalte nicht gesetzt (Kopfdaten fürs lesbare PDF)
+    titel:    titleClean,
     // SharePoint liefert Datumsspalten als UTC (27.10. 00:00 Uhr = 2026-10-26T23:00:00Z),
     // deshalb auf den Kalendertag in Deutschland umrechnen
     datum:    _monTag(f.Rechnungsdatum || f.Eingangszeitpunkt || it.createdDateTime || ''),
