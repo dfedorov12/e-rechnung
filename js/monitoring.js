@@ -1069,6 +1069,14 @@ function _monSpaltenDialog(werk) {
     const reihe = ids.filter(id => MON_SPALTEN.some(sp => sp.id === id))
       .concat(MON_SPALTEN.map(sp => sp.id).filter(id => !ids.includes(id)));
     const bh = bhBearbeitenAn(w);
+    // Eigene Breiten liegen unter dem Werk, das die Tabelle beim Ziehen zeigte (ohne
+    // Filter das Werk mit den meisten Rechnungen). Hat das gewählte Werk keine, gelten
+    // die der aktuellen Ansicht, sonst die eines anderen Werks.
+    const alleEigenen = _monEigeneBreiten();
+    const breitenQuelle = [w, _monAnsichtWerk].concat(Object.keys(alleEigenen))
+      .find(k => k && Object.keys(alleEigenen[k] || {}).length) || '';
+    const breitenText = !breitenQuelle ? ' <small>(noch keine gezogen)</small>'
+      : breitenQuelle !== w ? ` <small>(gezogen in der Ansicht ${_esc(breitenQuelle)})</small>` : '';
     dlg.innerHTML = `
       <form method="dialog" class="ug-form">
         <div class="ug-kopf"><h3>Spalten je Werk</h3><button type="button" class="ug-x" data-sp-zu aria-label="Schließen">✕</button></div>
@@ -1087,7 +1095,7 @@ function _monSpaltenDialog(werk) {
         <label class="ug-lbl">Speichern für<select id="sp-umfang">
           <option value="werk">nur ${_esc(w)}</option>
           <option value="alle">alle Werke (${_esc(werke.join(', '))})</option></select></label>
-        <label class="bh-check"><input type="checkbox" id="sp-breiten"${Object.keys(_monEigeneBreiten()[w] || {}).length ? '' : ' disabled'}> Meine Spaltenbreiten als Standard für alle übernehmen${Object.keys(_monEigeneBreiten()[w] || {}).length ? '' : ' <small>(noch keine gezogen)</small>'}</label>
+        <label class="bh-check"><input type="checkbox" id="sp-breiten"${breitenQuelle ? '' : ' disabled'}> Meine Spaltenbreiten als Standard für alle übernehmen${breitenText}</label>
         <p class="ug-hinweis">Die Einstellungen gelten für alle, die das Monitoring nutzen. Eigene Breiten, die jemand selbst zieht, gehen vor. Ist kein Werk gefiltert, zeigt die Tabelle die Spalten aller Werke, Zellen eines Werks ohne die Spalte bleiben leer.</p>
         <p class="ug-meldung" id="sp-meldung" role="status"></p>
         <div class="ug-aktionen">
@@ -1138,7 +1146,7 @@ function _monSpaltenDialog(werk) {
         const teil = { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked };
         const breitenWahl = dlg.querySelector('#sp-breiten');
         if (breitenWahl && breitenWahl.checked) {
-          teil.breiten = Object.assign({}, bhWerkEinst(w).breiten, _monEigeneBreiten()[w]);
+          teil.breiten = Object.assign({}, bhWerkEinst(w).breiten, _monEigeneBreiten()[breitenQuelle]);
         }
         await bhEinstSpeichern(dlg.querySelector('#sp-umfang').value === 'alle' ? werke : w, teil);
         dlg.close();
@@ -1424,7 +1432,7 @@ function monInitFilterEvents() {
   const spaltenKnopf = document.getElementById('mon-spalten');
   if (spaltenKnopf) {
     spaltenKnopf.style.display = typeof isCurrentUserAdmin === 'function' && isCurrentUserAdmin() ? '' : 'none';
-    spaltenKnopf.addEventListener('click', () => _monSpaltenDialog(_monFilter.werk));
+    spaltenKnopf.addEventListener('click', () => _monSpaltenDialog(_monFilter.werk || _monAnsichtWerk));
   }
 }
 
