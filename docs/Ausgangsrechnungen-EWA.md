@@ -1,8 +1,8 @@
 # Ausgangsrechnungen EWA (Eisenwerk Arnstadt) im Konverter
 
-Stand: 26.10.2026
+Stand: 27.10.2026
 
-Die Belege des Eisenwerks Arnstadt kommen aus SAP als Adobe-Formular, auf Deutsch, Englisch oder Französisch und in der Währung des Kunden (EUR, GBP, CZK). Der Konverter erkennt sie an der Absenderzeile („Eisenwerk Arnstadt GmbH | Bierweg …") und legt sie unter dem Werk EWA ab. Grundlage waren elf Musterbelege: Rechnungen und Gutschriften, Inland, EU und Großbritannien, mit Skonto, Teuerungszuschlag, 100-%-Abschlag und Verpackungszuschlag.
+Die Belege des Eisenwerks Arnstadt kommen aus SAP als Adobe-Formular, auf Deutsch, Englisch oder Französisch und in der Währung des Kunden (EUR, GBP, CZK). Der Konverter erkennt das Formular an seinem Aufbau (Nummer, Kundenauftrag, Positionen mit „Material") und das Werk am Fuß (ewa-guss.de, HRB 110887). Die Lintorfer Eisengießerei (LEG) nutzt dasselbe Formular, siehe [Ausgangsrechnungen-LEG.md](Ausgangsrechnungen-LEG.md). Grundlage waren elf Musterbelege: Rechnungen und Gutschriften, Inland, EU und Großbritannien, mit Skonto, Teuerungszuschlag, 100-%-Abschlag und Verpackungszuschlag.
 
 ## Welche Belege ohne Rückfrage umgewandelt werden
 
@@ -15,7 +15,7 @@ Anders als bei Gienanth unterschreibt EWA Drittlandrechnungen nicht, es gibt als
 
 ## Wie der Beleg gelesen wird
 
-Im Kopf stehen links die Anschriften und rechts Beschriftung und Wert in zwei Spalten. Weil pdf.js die Zeilen beider Seiten mischt, liest der Konverter den Kopf über die Position der Textstücke. Positionen und Summen liest er über die Zeilen. Zahlen werden im Format der Belegsprache gelesen: englisch 32,400.00, deutsch 32.400,00, französisch 32 400,00.
+Im Kopf stehen links die Anschriften und rechts Beschriftung und Wert in zwei Spalten. Weil pdf.js die Zeilen beider Seiten mischt, liest der Konverter den Kopf über die Position der Textstücke. Positionen und Summen liest er über die Zeilen. Zahlen werden im Format des Belegs gelesen: 32,400.00, 32.400,00 oder 32 400,00. Das Format ergibt sich aus den Beträgen, nicht aus der Sprache, denn es gibt deutsche Belege mit englischen Zahlen.
 
 | Im PDF (de / en / fr) | Feld im Konverter | EN 16931 |
 |---|---|---|

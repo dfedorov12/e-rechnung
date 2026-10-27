@@ -28,6 +28,7 @@ const GESELLSCHAFT_LABELS = {
   zai: 'ZAI',
   eis: 'EIS',
   ewa: 'EWA',
+  leg: 'LEG',
 };
 
 /* Alle Werke der Gruppe, aus denen die Einstellungen die Werke für die Zuweisung wählen */
@@ -35,7 +36,7 @@ const WERKE_ALLE = [
   ['WGC', 'Walzengießerei Coswig GmbH'],
   ['SHB', 'Stahl- und Hartgusswerk Bösdorf GmbH'],
   ['ZAI', 'Dihag Zaigler GmbH'],
-  ['EIS', 'DIHAG Gienanth GmbH'], ['DSO', 'Werk DSO'], ['LEG', 'Werk LEG'], ['EWA', 'Eisenwerk Arnstadt GmbH'],
+  ['EIS', 'DIHAG Gienanth GmbH'], ['DSO', 'Werk DSO'], ['LEG', 'Lintorfer Eisengießerei GmbH'], ['EWA', 'Eisenwerk Arnstadt GmbH'],
   ['HOL', 'Werk HOL'], ['MEG', 'Werk MEG'], ['SCH', 'Werk SCH'],
 ];
 
