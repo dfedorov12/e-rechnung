@@ -306,7 +306,8 @@ async function ugSpeichern(r, name, vermutung, vat, nummer, informiert, mail) {
     }
     if ((resp.status === 412 || resp.status === 409) && versuch === 0) continue;
     if (resp.status === 403 || resp.status === 401) {
-      throw new Error('Keine Schreibrechte auf der Monitoring-Site. Die Vorlage können Sie trotzdem nutzen.');
+      throw new Error('Keine Schreibrechte auf das Register der Einschätzungen (Monitoring-Site, Dokumente/Monitoring/'
+        + 'lieferanten-umsatzgrenze.json). Die IT muss dort „Mitwirken“ vergeben. Die Vorlage können Sie trotzdem nutzen.');
     }
     const t = await resp.text();
     throw new Error(`Speichern fehlgeschlagen (${resp.status}): ${t.slice(0, 200)}`);

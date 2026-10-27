@@ -50,6 +50,28 @@ senden. Deshalb bekommt nur die Buchhaltung Schreibrechte.
 5. „Berechtigungen erteilen“: die Buchhaltung und das Konto, mit dem der neue Flow läuft
    (Schritt 5), bekommen **Mitwirken**. Häkchen „E-Mail-Einladung senden“ entfernen.
 
+### Schritt 2a: Rechte auf das Register der Einschätzungen
+
+Jede Einschätzung („über“ oder „bis 800.000 €“, „Lieferant informiert“, die Adresse unter „An“)
+speichert das Monitoring in der Datei `lieferanten-umsatzgrenze.json` im Ordner `Monitoring` der
+Bibliothek Dokumente auf der Monitoring-Site. Wer dort nur lesen darf, bekommt im Dialog
+„Keine Schreibrechte auf das Register der Einschätzungen“. Gespeichert und gesendet wird dann
+nichts, nur „Text kopieren“ und „In Outlook öffnen“ gehen.
+
+1. https://dihag.sharepoint.com/sites/Rechnungsmonitoring öffnen, links „Websiteinhalte“,
+   dann **Dokumente**, Ordner **Monitoring**.
+2. Bei `lieferanten-umsatzgrenze.json` auf „…“, „Zugriff verwalten“, unten „Erweiterte
+   Einstellungen“.
+3. „Berechtigungsvererbung beenden“, dann „Berechtigungen erteilen“: die Buchhaltung bekommt
+   **Mitwirken**. Häkchen „E-Mail-Einladung senden“ entfernen.
+
+Nur die Datei freigeben, nicht den ganzen Ordner. Im Ordner liegt auch
+`monitoring-einstellungen.json` mit den Spalten je Werk, die nur Admins ändern sollen.
+
+Wer Rechnungen bearbeitet und genehmigen lässt, braucht zusätzlich „Mitwirken“ auf
+`ERAR_<Werk>` (siehe [Genehmigung-im-Monitoring.md](Genehmigung-im-Monitoring.md)), wer
+„Speichern und senden“ nutzt, auf KreditorMails (Schritt 2).
+
 ### Schritt 3: „Senden als“ auf die Werks-Postfächer
 
 Der Flow sendet mit dem Konto, dem die Outlook-Verbindung im Flow gehört. Dieses Konto braucht
