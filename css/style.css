@@ -338,14 +338,20 @@ body {
   overflow: auto;
   max-height: 70vh;
   display: flex;
-  justify-content: center;
+  /* nicht „center“: breiter als der Rahmen ragte die Seite sonst links unerreichbar heraus */
+  justify-content: flex-start;
   align-items: flex-start;
 }
 
 .pdf-canvas-wrapper canvas {
   box-shadow: var(--shadow-md);
   flex-shrink: 0;  /* nie kleiner schrumpfen als gerendert */
+  margin: 0 auto;  /* mittig, solange die Seite schmaler ist als der Rahmen */
 }
+
+.pdf-canvas-wrapper.verschiebbar canvas { cursor: grab; }
+.pdf-canvas-wrapper.zieht canvas { cursor: grabbing; }
+.pdf-canvas-wrapper.zieht { user-select: none; }
 
 .pdf-placeholder {
   text-align: center;

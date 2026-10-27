@@ -81,9 +81,7 @@ function setupBuyerEmailToggle() {
 }
 
 function setupRequiredFieldToggles() {
-  // BR-DE-2: Verkäufer Telefon ↔ E-Mail (mind. eines)
-  _mutualRequiredToggle('verkaeufer-tel', 'verkaeufer-email-seller-label',
-                        'verkaeufer-email', 'verkaeufer-tel-label');
+  // Telefon und E-Mail des Ansprechpartners sind beide Pflicht (BR-DE-6, BR-DE-7), kein Toggle
   // USt-IdNr. ↔ Steuernummer (mind. eines)
   _mutualRequiredToggle('verkaeufer-vat', 'verkaeufer-steuernr-label',
                         'verkaeufer-steuernr', 'verkaeufer-vat-label');
@@ -301,6 +299,22 @@ function fillFormFromExtracted(data) {
     'gezahlt':             data.gezahlt ? String(data.gezahlt) : '',
   };
 
+  // Felder der vorigen Rechnung leeren, die der neue Beleg nicht liefert (Lieferanschrift,
+  // Leitweg-ID, Lieferdatum, Befreiungsgrund, Hinweis …). Auswahlfelder gehen auf ihre
+  // Vorgabe zurück; das Werk bleibt stehen, wenn es nicht erkannt wurde.
+  for (const id of Object.keys(map)) {
+    if (id === 'gesellschaft') continue;
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (el.tagName === 'SELECT') {
+      const vorgabe = [...el.options].find(o => o.defaultSelected) || el.options[0];
+      if (vorgabe) el.value = vorgabe.value;
+    } else {
+      el.value = '';
+    }
+    el.classList.remove('autofilled');
+  }
+
   for (const [id, val] of Object.entries(map)) {
     if (val) {
       const el = document.getElementById(id);
@@ -313,13 +327,15 @@ function fillFormFromExtracted(data) {
     }
   }
 
+  document.getElementById('positions-body').innerHTML = '';
+  rowCounter = 0;
   if (data.positionen && data.positionen.length > 0) {
-    document.getElementById('positions-body').innerHTML = '';
-    rowCounter = 0;
     data.positionen.forEach(p => addPositionRow(p));
     count += data.positionen.length;
-    renumberRows();
+  } else {
+    addPositionRow();
   }
+  renumberRows();
 
   updateTotals();
   lockSellerMaster();   // #1: Verkäufer-Stammdaten gegen versehentliche/böswillige Änderung sperren
@@ -529,6 +545,7 @@ async function renderPDF(pdfBytes) {
     totalPages = pdfDocument.numPages;
     currentPage = 1;
     zoomFactor = 1.0;   // Zoom bei neuer PDF zurücksetzen
+    document.getElementById('pdf-canvas').dataset.seite = '';   // neue Datei: Ansicht oben beginnen
     updatePageNav();
     await renderPage(currentPage);
   } catch (err) {
@@ -536,12 +553,24 @@ async function renderPDF(pdfBytes) {
   }
 }
 
-async function renderPage(pageNum) {
+/**
+ * Seite zeichnen. Mit `anker` (Bildschirmpunkt, beim Zoomen) bleibt die Stelle unter dem
+ * Punkt stehen, sonst die Mitte des sichtbaren Ausschnitts. Neue Seite: Ansicht nach oben.
+ */
+async function renderPage(pageNum, anker) {
   if (!pdfDocument) return;
   const page = await pdfDocument.getPage(pageNum);
   const wrapper = document.getElementById('pdf-canvas-wrapper');
   const canvas = document.getElementById('pdf-canvas');
   const ctx = canvas.getContext('2d');
+
+  const neueSeite = canvas.dataset.seite !== String(pageNum);
+  const vorher = canvas.getBoundingClientRect();
+  const rahmen = wrapper.getBoundingClientRect();
+  const px = anker ? anker.x : rahmen.left + wrapper.clientWidth / 2;
+  const py = anker ? anker.y : rahmen.top + wrapper.clientHeight / 2;
+  const relX = vorher.width ? (px - vorher.left) / vorher.width : 0.5;
+  const relY = vorher.height ? (py - vorher.top) / vorher.height : 0;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const viewportRaw = page.getViewport({ scale: 1 });
@@ -556,7 +585,18 @@ async function renderPage(pageNum) {
   canvas.style.width   = (viewport.width  / dpr) + 'px';
   canvas.style.height  = (viewport.height / dpr) + 'px';
   canvas.style.display = 'block';
+  canvas.dataset.seite = String(pageNum);
   document.getElementById('pdf-placeholder').style.display = 'none';
+
+  if (neueSeite || !vorher.width) {
+    wrapper.scrollTop = 0;
+  } else {
+    const nachher = canvas.getBoundingClientRect();
+    wrapper.scrollLeft += nachher.left + relX * nachher.width - px;
+    wrapper.scrollTop += nachher.top + relY * nachher.height - py;
+  }
+  wrapper.classList.toggle('verschiebbar',
+    wrapper.scrollWidth > wrapper.clientWidth + 1 || wrapper.scrollHeight > wrapper.clientHeight + 1);
 
   await page.render({ canvasContext: ctx, viewport }).promise;
   _updateZoomUI();
@@ -575,16 +615,16 @@ function _updateZoomUI() {
   if (btnFit) btnFit.disabled = !pdfDocument;
 }
 
-function zoomIn() {
+function zoomIn(anker) {
   if (!pdfDocument) return;
   const next = ZOOM_STEPS.find(z => z > zoomFactor + 0.01);
-  if (next) { zoomFactor = next; renderPage(currentPage); }
+  if (next) { zoomFactor = next; renderPage(currentPage, anker); }
 }
 
-function zoomOut() {
+function zoomOut(anker) {
   if (!pdfDocument) return;
   const prev = [...ZOOM_STEPS].reverse().find(z => z < zoomFactor - 0.01);
-  if (prev !== undefined) { zoomFactor = prev; renderPage(currentPage); }
+  if (prev !== undefined) { zoomFactor = prev; renderPage(currentPage, anker); }
 }
 
 function zoomReset() {
@@ -602,16 +642,36 @@ function setupPdfNav() {
   });
 
   // Zoom-Buttons
-  document.getElementById('btn-zoom-in') .addEventListener('click', zoomIn);
-  document.getElementById('btn-zoom-out').addEventListener('click', zoomOut);
+  document.getElementById('btn-zoom-in') .addEventListener('click', () => zoomIn());
+  document.getElementById('btn-zoom-out').addEventListener('click', () => zoomOut());
   document.getElementById('btn-zoom-fit').addEventListener('click', zoomReset);
 
-  // Ctrl+Scroll zum Zoomen im PDF-Panel
-  document.getElementById('pdf-canvas-wrapper').addEventListener('wheel', e => {
+  // Ctrl+Scroll zum Zoomen im PDF-Panel, um die Stelle unter der Maus
+  const rahmen = document.getElementById('pdf-canvas-wrapper');
+  rahmen.addEventListener('wheel', e => {
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
-    e.deltaY < 0 ? zoomIn() : zoomOut();
+    const anker = { x: e.clientX, y: e.clientY };
+    e.deltaY < 0 ? zoomIn(anker) : zoomOut(anker);
   }, { passive: false });
+
+  // Vergrößerte Seite mit gedrückter Maustaste verschieben
+  let zug = null;
+  rahmen.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !rahmen.classList.contains('verschiebbar') || e.target.id !== 'pdf-canvas') return;
+    zug = { x: e.clientX, y: e.clientY, links: rahmen.scrollLeft, oben: rahmen.scrollTop };
+    try { rahmen.setPointerCapture(e.pointerId); } catch (_) { /* ohne Capture weiter */ }
+    rahmen.classList.add('zieht');
+    e.preventDefault();
+  });
+  rahmen.addEventListener('pointermove', e => {
+    if (!zug) return;
+    rahmen.scrollLeft = zug.links - (e.clientX - zug.x);
+    rahmen.scrollTop = zug.oben - (e.clientY - zug.y);
+  });
+  const zugEnde = () => { zug = null; rahmen.classList.remove('zieht'); };
+  rahmen.addEventListener('pointerup', zugEnde);
+  rahmen.addEventListener('pointercancel', zugEnde);
 
   // Tastenkürzel: Strg+Plus / Strg+Minus / Strg+0
   document.addEventListener('keydown', e => {
@@ -853,9 +913,9 @@ function validateForm(data) {
     errors.push('Rechnungssteller: USt-IdNr. oder Steuernummer');
   // BR-DE-5: Ansprechpartner Pflicht
   if (!data.verkaeufkontakt)  errors.push('Rechnungssteller: Ansprechpartner');
-  // BR-DE-2: mind. Telefon oder E-Mail
-  if (!data.verkaeuftel && !data.verkaeuferemail)
-    errors.push('Rechnungssteller: Telefon oder E-Mail (mind. eines)');
+  // BR-DE-6 und BR-DE-7: Telefon UND E-Mail des Ansprechpartners
+  if (!data.verkaeuftel)      errors.push('Rechnungssteller: Telefon');
+  if (!data.verkaeuferemail)  errors.push('Rechnungssteller: E-Mail Kontakt');
 
   // Rechnungsempfänger
   if (!data.kaeufer)          errors.push('Rechnungsempfänger: Name');
@@ -896,19 +956,36 @@ async function exportInvoice(format) {
     return;
   }
 
+  if (!_ausgangRueckfragen(data)) return;
+
+  // (Punkt 7 der UStAE/GoBD-Einordnung: Auslandskreditor ohne Leitweg als XRechnung
+  //  ist zulässig — konkludente Zustimmung, keine Rückfrage nötig. Daher KEIN
+  //  Sonder-Check hier.)
+
+  // #2/#3/#4: Plausibilitäts- und PDF↔XML-Prüfung vor dem Erstellen
+  const totals = calcTotals(data.positionen, data.steuerbetrag);
+  if (!_preflightChecks(data, totals)) return;
+  return _exportErstellen(data, format, totals);
+}
+
+/**
+ * Rückfragen vor Export und Mail: Kunde im Ausland (EIS, EWA, LEG), Drittland ohne
+ * unterschriebenes Original (EIS), Rechnungsadresse der eigenen Firma. false = abbrechen.
+ */
+function _ausgangRueckfragen(data) {
   // Werke wie EIS und EWA: Pflicht ist die E-Rechnung nur im Inland (§ 14 UStG). Ins Ausland
   // geht wie bisher das PDF; bei EIS geht Drittland nur mit dem unterschriebenen Original.
   const umfang = _umfang(data.gesellschaft, data.kaeuferland);
   if (umfang === 'ausland'
     && !window.confirm(`Der Kunde hat eine Anschrift im Ausland (${data.kaeuferland}). Für ${data.gesellschaft} geht die Rechnung `
-      + 'dorthin wie bisher als PDF. Trotzdem als E-Rechnung exportieren?')) {
-    return;
+      + 'dorthin wie bisher als PDF. Trotzdem als E-Rechnung erzeugen?')) {
+    return false;
   }
   if (umfang === 'unterschrift' && !(data.anlagen || []).length
     && !window.confirm(`Drittlandrechnung ohne Anlage: Das unterschriebene Original mit den Präferenzangaben fehlt. `
-      + 'Trotzdem exportieren?')) {
+      + 'Trotzdem fortfahren?')) {
     document.getElementById('anlage-datei').focus();
-    return;
+    return false;
   }
 
   // Rechnungsadresse des Kunden darf nicht die eigene sein (z. B. die Adresse dessen,
@@ -918,24 +995,18 @@ async function exportInvoice(format) {
     && (kundenMailIstEigen(data.kaeufermail, data.verkaeuferemail)
       || (_ich && data.kaeufermail.trim().toLowerCase() === _ich.toLowerCase()))) {
     if (!window.confirm(`Die Rechnungsadresse des Kunden (${data.kaeufermail}) gehört zur eigenen Firma. `
-      + 'Eingetragen werden sollte das Rechnungspostfach des Kunden. Trotzdem exportieren?')) {
+      + 'Eingetragen werden sollte das Rechnungspostfach des Kunden. Trotzdem fortfahren?')) {
       document.getElementById('kaeufer-email').focus();
-      return;
+      return false;
     }
   }
+  return true;
+}
 
-  // (Punkt 7 der UStAE/GoBD-Einordnung: Auslandskreditor ohne Leitweg als XRechnung
-  //  ist zulässig — konkludente Zustimmung, keine Rückfrage nötig. Daher KEIN
-  //  Sonder-Check hier.)
-
-  // #2/#3/#4: Plausibilitäts- und PDF↔XML-Prüfung vor dem Erstellen
-  const totals = calcTotals(data.positionen, data.steuerbetrag);
-  if (!_preflightChecks(data, totals)) return;
-
+async function _exportErstellen(data, format, totals) {
   showLoading(true, format === 'zugferd' ? 'ZUGFeRD PDF wird erstellt...' : 'XRechnung XML wird erstellt...');
 
   try {
-    const { netTotal, vatTotal, grossTotal } = totals;
     const xml = buildXML(data, format);
 
     // USt-IdNr-Bestätigung (falls zur aktuellen Empfänger-USt-IdNr geprüft) an
@@ -968,62 +1039,79 @@ async function exportInvoice(format) {
       downloadText(xml, `${safeNr}_xrechnung.xml`);
     }
 
-    // Für reine XRechnung zusätzlich ein lesbares PDF rendern → wird im Monitoring
-    // als "_lesbar.pdf" mit abgelegt und verlinkt. Bei ZUGFeRD ist das PDF selbst
-    // bereits lesbar (kein zusätzliches nötig).
-    let lesbarPdf = null;
-    if (format !== 'zugferd') {
-      try { lesbarPdf = await _renderReadablePdf(data, totals); }
-      catch (e) { console.warn('Lesbares PDF nicht erzeugt:', e); }
-    }
-
-    // #7: Prüfpfad (Hash, manuelle Änderungen, Prüfer)
-    const audit = await _buildAudit(data);
-
-    // Lokaler Cache (localStorage)
-    saveToHistory({
-      rechnungsnummer: data.rechnungsnummer,
-      rechnungsdatum: data.rechnungsdatum,
-      verkaeufer: data.verkaeufer,
-      kaeufer: data.kaeufer,
-      netTotal, vatTotal, grossTotal,
-      formate: format === 'zugferd' ? ['ZUGFeRD'] : ['XRechnung'],
-      xml,
-      zugferdPdf: pdfBytes ? bytesToBase64(pdfBytes) : null,
-      originalPdfName: uploadedFileName,
-      audit,
-    });
-
-    // Monitoring-Upload (Bibliothek AR_<Werk> auf der Rechnungsmonitoring-Site)
-    showLoading(true, 'Wird ins Monitoring gespeichert...');
-    try {
-      await spSaveToMonitoring({
-        invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit, ustPruefung: ust, lesbarPdfBytes: lesbarPdf },
-        xml,
-        pdfBytes,
-        format,
-      });
-      showLoading(false);
-      _kundenMailMerken(data);
-      showToast(
-        format === 'zugferd'
-          ? `ZUGFeRD PDF exportiert & im Monitoring gespeichert. (${safeNr})`
-          : `XRechnung XML exportiert & im Monitoring gespeichert. (${safeNr})`,
-        'success'
-      );
-    } catch (spErr) {
-      showLoading(false);
-      console.warn('Monitoring save failed:', spErr);
-      showToast(
-        `Exportiert (lokal) · Monitoring-Fehler: ${spErr.message}`,
-        'info'
-      );
-    }
-
+    await _imMonitoringAblegen(data, totals, xml, pdfBytes, format, ust);
   } catch (err) {
     showLoading(false);
     console.error(err);
     showToast('Fehler beim Erstellen: ' + err.message, 'error');
+  }
+}
+
+// Zuletzt abgelegte Rechnung: Mail nach Export legt dieselbe Fassung nicht noch einmal ab
+let _zuletztAbgelegt = '';
+
+/**
+ * Rechnung im Monitoring ablegen (AR_<Werk>), dazu lesbares PDF, Prüfpfad, lokaler
+ * Verlauf und gemerkte Rechnungsadresse. Läuft nach Export und nach „Mail erstellen“.
+ */
+async function _imMonitoringAblegen(data, totals, xml, pdfBytes, format, ust) {
+  const { netTotal, vatTotal, grossTotal } = totals;
+  const safeNr = sanitizeFilename(data.rechnungsnummer);
+  const fassung = format + '|' + xml;
+  if (fassung === _zuletztAbgelegt) return true;
+  // Für reine XRechnung zusätzlich ein lesbares PDF rendern → wird im Monitoring
+  // als "_lesbar.pdf" mit abgelegt und verlinkt. Bei ZUGFeRD ist das PDF selbst
+  // bereits lesbar (kein zusätzliches nötig).
+  let lesbarPdf = null;
+  if (format !== 'zugferd') {
+    try { lesbarPdf = await _renderReadablePdf(data, totals); }
+    catch (e) { console.warn('Lesbares PDF nicht erzeugt:', e); }
+  }
+
+  // #7: Prüfpfad (Hash, manuelle Änderungen, Prüfer)
+  const audit = await _buildAudit(data);
+
+  // Lokaler Cache (localStorage)
+  saveToHistory({
+    rechnungsnummer: data.rechnungsnummer,
+    rechnungsdatum: data.rechnungsdatum,
+    verkaeufer: data.verkaeufer,
+    kaeufer: data.kaeufer,
+    netTotal, vatTotal, grossTotal,
+    formate: format === 'zugferd' ? ['ZUGFeRD'] : ['XRechnung'],
+    xml,
+    zugferdPdf: pdfBytes ? bytesToBase64(pdfBytes) : null,
+    originalPdfName: uploadedFileName,
+    audit,
+  });
+
+  // Monitoring-Upload (Bibliothek AR_<Werk> auf der Rechnungsmonitoring-Site)
+  showLoading(true, 'Wird ins Monitoring gespeichert...');
+  try {
+    await spSaveToMonitoring({
+      invoiceData: { ...data, netTotal, vatTotal, grossTotal, originalPdfName: uploadedFileName, audit, ustPruefung: ust, lesbarPdfBytes: lesbarPdf },
+      xml,
+      pdfBytes,
+      format,
+    });
+    showLoading(false);
+    _kundenMailMerken(data);
+    _zuletztAbgelegt = fassung;
+    showToast(
+      format === 'zugferd'
+        ? `ZUGFeRD PDF erstellt und im Monitoring gespeichert. (${safeNr})`
+        : `XRechnung XML erstellt und im Monitoring gespeichert. (${safeNr})`,
+      'success'
+    );
+    return true;
+  } catch (spErr) {
+    showLoading(false);
+    console.warn('Monitoring save failed:', spErr);
+    showToast(
+      `Erstellt, aber nicht im Monitoring gespeichert: ${spErr.message}`,
+      'info'
+    );
+    return false;
   }
 }
 
@@ -1036,6 +1124,7 @@ async function createInvoiceMail() {
     highlightErrors(data);
     return;
   }
+  if (!_ausgangRueckfragen(data)) return;
 
   // Mail-Token möglichst früh holen (frische Nutzer-Geste fürs Consent-Popup).
   // Schlägt fehl, wenn Mail.ReadWrite nicht freigegeben → später .eml-Fallback.
@@ -1071,12 +1160,18 @@ async function createInvoiceMail() {
     const safeNr = sanitizeFilename(data.rechnungsnummer);
 
     const attachments = [];
+    let pdfBytes = null;
     if (useZugferd) {
-      const pdfBytes = await _buildZugferdPdf(data, totals, xml);   // #6
+      pdfBytes = await _buildZugferdPdf(data, totals, xml);   // #6
       attachments.push({ filename: `${safeNr}_zugferd.pdf`, mime: 'application/pdf', base64: bytesToBase64(pdfBytes) });
     } else {
       attachments.push({ filename: `${safeNr}_xrechnung.xml`, mime: 'application/xml', base64: _utf8ToBase64('﻿' + xml) });
     }
+
+    // Wie beim Export im Monitoring ablegen (GoBD), es sei denn, genau diese Fassung liegt schon dort
+    const ust = (typeof window.matchingVatCheck === 'function') ? window.matchingVatCheck(data.kaeufervat) : null;
+    await _imMonitoringAblegen(data, totals, xml, pdfBytes, useZugferd ? 'zugferd' : 'xrechnung', ust);
+    showLoading(true, 'Mail wird erstellt …');
 
     const { subject, body } = _mailSubjectBody(data, grossTotal, useZugferd);
 

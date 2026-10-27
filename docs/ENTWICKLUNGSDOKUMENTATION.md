@@ -148,7 +148,8 @@ Erstmalige Bereitstellung der Webanwendung mit Grundfunktionen:
 | Regel | Beschreibung | Commit |
 |---|---|---|
 | BR-DE-5 | BT-41 PersonName (Ansprechpartner) fehlte in BG-6 | `a6fdd91` |
-| BR-DE-2 | BG-6 Seller Contact obligatorisch; Telefon oder E-Mail mind. eines | `05d5c29` |
+| BR-DE-2 | BG-6 Seller Contact obligatorisch | `05d5c29` |
+| BR-DE-6, BR-DE-7 | Telefon (BT-42) und E-Mail (BT-43) des Ansprechpartners beide Pflicht; früher reichte im Formular eines | Oktober 2026 |
 | BR-DE-1 | VA + FC Steuerregistrierungen beide ausgeben | `f0e6dc5` |
 | — | Ansprechpartner als UI-Pflichtfeld | `2bf731d` |
 
