@@ -74,8 +74,35 @@ r = lieferantAusText(text([
 gleich(r.vat, '', 'IBAN ist keine USt-IdNr.');
 gleich(r.name, 'Probe Handel AG', 'AG aus Absenderzeile');
 
+// 7) Mailadresse: Rechnungspostfach vor info@, eigene und noreply fallen weg
+r = lieferantAusText(text([
+  'Muster Werkzeuge GmbH - Hauptstr. 5 - 01234 Musterstadt',
+  'Walzengießerei Coswig GmbH', 'Grenzstraße 1', '01640 Coswig',
+  'Ihr Zeichen: einkauf@walze-coswig.de',
+  'Rechnung 771234', 'Datum 21.09.2026', 'Gesamt 1.035,18',
+  'Muster Werkzeuge GmbH · Hauptstr. 5 · Tel. 0123 4567 · E-Mailinfo@muster-werkzeuge.de',
+  'Rechnungsfragen: rechnung (at) muster-werkzeuge.de · noreply@muster-werkzeuge.de',
+  'Datenschutz: datenschutz@muster-werkzeuge.de',
+]));
+gleich(r.mail, 'rechnung@muster-werkzeuge.de', 'Rechnungspostfach des Lieferanten');
+r = lieferantAusText(text([
+  'Probe Handel AG · Ring 1 · 10115 Berlin', 'DIHAG Zaigler GmbH', 'Rechnung Nr. 55501', 'Datum 03.03.2026',
+  'Ansprechpartner: Max Probe, Mail: max.probe@probe-handel.de', 'Zu zahlen 99,00', 'www.probe-handel.de  info@probe-handel.de',
+]));
+gleich(r.mail, 'info@probe-handel.de', 'allgemeines Postfach vor Person');
+r = lieferantAusText(text([
+  'Probe Handel AG · Ring 1 · 10115 Berlin', 'Rechnung Nr. 55501', 'Datum 03.03.2026', 'Zu zahlen 99,00',
+  'Rechnungen bitte an rechnungseingang@dihag.com', 'Bestellt von a.muster@dihag-gienanth.com',
+]));
+gleich(r.mail, '', 'nur eigene Adressen: keine');
+
 gleich(istEigen('DIHAG Holding GmbH'), true, 'DIHAG eigen');
 gleich(istEigen('Meuselwitz Guss GmbH'), true, 'MEG eigen');
 gleich(istEigen('Telekom Deutschland GmbH'), false, 'fremd');
+
+const { istEigeneMail } = require('../js/lieferant.js');
+gleich(istEigeneMail('rechnung@dihag-zaigler.com'), true, 'Zaigler-Mail eigen');
+gleich(istEigeneMail('info@ewa-guss.de'), true, 'EWA-Mail eigen');
+gleich(istEigeneMail('info@muster.de'), false, 'fremde Mail');
 
 console.log(`lieferant: ${n} Pruefungen gruen`);

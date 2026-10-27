@@ -437,11 +437,25 @@ function _ugIso(de) {
   return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : '';
 }
 
+/**
+ * Taugt der Absender der Rechnungsmail als Empfänger? Nicht, wenn die Mail von
+ * innen kam (Scanner, weitergeleitet von Kollegen) oder nicht zustellbar ist.
+ */
+function _ugAbsenderOk(mail) {
+  const m = String(mail || '').trim().toLowerCase();
+  if (!ugMailOk(m) || /^(no-?reply|do-?not-?reply|mailer-daemon|postmaster)/.test(m)) return false;
+  if (typeof istEigeneMail === 'function' && istEigeneMail(m)) return false;
+  const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
+  const eigen = String(user.username || '').toLowerCase().split('@')[1];
+  return !(eigen && m.endsWith('@' + eigen));
+}
+
 function ugDialogOeffnen(r, onGespeichert) {
   const dlg = document.getElementById('ug-dialog');
   if (!dlg) return;
   const e = ugFuer(r);
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
+  const absender = _ugAbsenderOk(r.absenderMail) ? r.absenderMail : '';
   _ugAktuell = {
     r, onGespeichert, bisher: e,
     vermutung: e ? e.vermutung : '',
@@ -451,9 +465,10 @@ function ugDialogOeffnen(r, onGespeichert) {
     vat: r.ustid || (e && e.vat) || '',
     phase: ugPhase(r.datum),
     absender: user.name || '',
-    // Adresse: Mail an diese Rechnung, sonst beim Lieferanten gemerkt, sonst Absender der Rechnungsmail
-    an: ((ugMailsFuer(r)[0] || {}).an) || (e && e.mail) || r.absenderMail || '',
-    anQuelle: (ugMailsFuer(r)[0] || {}).an ? 'mail' : (e && e.mail) ? 'gemerkt' : r.absenderMail ? 'absender' : '',
+    // Adresse: Mail an diese Rechnung, sonst beim Lieferanten gemerkt, sonst Absender der
+    // Rechnungsmail, sonst aus dem PDF-Text (_ugAusRechnungLesen)
+    an: ((ugMailsFuer(r)[0] || {}).an) || (e && e.mail) || absender || '',
+    anQuelle: (ugMailsFuer(r)[0] || {}).an ? 'mail' : (e && e.mail) ? 'gemerkt' : absender ? 'absender' : '',
     informiert: ((_ug.daten.rechnungen[ugRechnungKey(r)] || {}).informiert) || 'Nein',
     kannSenden: ugKannSenden(r),
     bearbeitet: {},          // Felder, die jemand selbst geändert hat, überschreibt das Lesen nicht
@@ -496,9 +511,7 @@ function _ugRender() {
       ${phase === 'pflicht' ? '' : `<label class="ug-lbl ug-inf">Lieferant informiert<select id="ug-informiert">
         ${['Nein', 'Ja'].map(v => `<option${v === a.informiert ? ' selected' : ''}>${v}</option>`).join('')}</select>
         <span class="ug-hinweis">Senden und „In Outlook öffnen“ setzen Ja. „Nur speichern“ nimmt den Wert hier, z. B. Ja nach einem Anruf.</span></label>`}
-      <p class="ug-mailstand">${a.kannSenden
-        ? `Senden geht aus dem Rechnungspostfach des Werks ${_esc(a.r.werk)}.${_ugAnHinweis(a)}`
-        : 'Der Versand aus dem Werks-Postfach ist hier nicht eingerichtet. Die Mail öffnet sich in Outlook.'}</p>
+      <p class="ug-mailstand" id="ug-mailstand">${_esc(_ugMailstand(a))}</p>
       ${ugMailsFuer(a.r).length ? `<ul class="ug-mails">${ugMailsFuer(a.r).slice(0, 3).map(m => `<li class="${m.status === 'Fehler' ? 'nicht' : m.status === 'Gesendet' ? 'ok' : ''}">${_esc(_ugMailStand(m))}</li>`).join('')}</ul>` : ''}
       <p class="ug-gelesen" id="ug-gelesen" role="status"></p>
       ${phase === 'pflicht' ? '' : `
@@ -578,7 +591,7 @@ function _ugRender() {
  */
 async function _ugAusRechnungLesen(r) {
   const a = _ugAktuell;
-  const fehlt = !r.steller || !r.ustid || r.nummer === r.baseKey || !r.datumAusRechnung || r.brutto == null;
+  const fehlt = !r.steller || !r.ustid || r.nummer === r.baseKey || !r.datumAusRechnung || r.brutto == null || !a.an;
   if (!fehlt || r.ext !== 'pdf' || !r.listId || !r.itemId || !_ug.siteId
       || typeof textAusPdf !== 'function' || typeof lieferantAusText !== 'function' || !window.pdfjsLib) return;
   a.lesen = 'laeuft';
@@ -597,13 +610,21 @@ async function _ugAusRechnungLesen(r) {
     const vorher = a.phase;
     if (l.name && !a.bearbeitet.name && !r.steller) a.name = l.name;
     if (l.vat && !a.vat) a.vat = l.vat;
+    if (!a.an && !a.bearbeitet.an) {
+      // gemerkte Adresse des gelesenen Lieferanten vor der Adresse aus dem PDF
+      const gemerkt = (_ug.daten.lieferanten[ugKey(a.name)] || {}).mail;
+      if (gemerkt) { a.an = gemerkt; a.anQuelle = 'gemerkt'; }
+      else if (l.mail) { a.an = l.mail; a.anQuelle = 'pdf'; }
+    }
     if (l.nummer && !a.bearbeitet.nr && r.nummer === r.baseKey) a.nr = l.nummer;
     if (l.datum && !a.bearbeitet.datum && !r.datumAusRechnung) { a.datum = _monDate(l.datum); a.phase = ugPhase(l.datum); }
     if (l.kleinunternehmer && !a.vermutung) a.vermutung = 'bis';
     if (a.phase !== vorher) { _ugRender(); return; }
     const dlg = document.getElementById('ug-dialog');
     const setze = (id, v) => { const el = dlg.querySelector('#' + id); if (el) el.value = v; };
-    setze('ug-name', a.name); setze('ug-nr', a.nr); setze('ug-datum', a.datum);
+    setze('ug-name', a.name); setze('ug-nr', a.nr); setze('ug-datum', a.datum); setze('ug-an', a.an);
+    const stand = dlg.querySelector('#ug-mailstand');
+    if (stand) stand.textContent = _ugMailstand(a);
     _ugGelesenZeigen();
     _ugWahlZeigen();
     _ugVorlageNeu();
@@ -717,7 +738,15 @@ function _ugAnHinweis(a) {
   if (a.bearbeitet.an) return '';
   if (a.anQuelle === 'gemerkt') return ' Die Adresse ist für diesen Lieferanten gemerkt, bitte prüfen.';
   if (a.anQuelle === 'absender') return ' Die Adresse ist der Absender der Rechnungsmail, bitte prüfen.';
+  if (a.anQuelle === 'pdf') return ' Die Adresse steht in der Rechnung, bitte prüfen.';
   return '';
+}
+
+/** Satz unter „An“: über welches Postfach gesendet wird und woher die Adresse stammt. */
+function _ugMailstand(a) {
+  return a.kannSenden
+    ? `Senden geht aus dem Rechnungspostfach des Werks ${a.r.werk}.${_ugAnHinweis(a)}`
+    : 'Der Versand aus dem Werks-Postfach ist hier nicht eingerichtet. Die Mail öffnet sich in Outlook.';
 }
 
 /**
@@ -762,5 +791,5 @@ async function _ugAbschliessen(modus) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { UG, UG_MAIL_ART, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage,
-    ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, _ug };
+    ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, _ugAbsenderOk, _ug };
 }

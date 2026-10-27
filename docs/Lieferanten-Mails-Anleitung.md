@@ -232,7 +232,9 @@ Keine Mail nötig:
    eingeschätzt, steht im Dialog „Bisher: …“ mit Einschätzung, Name und Datum.
 
 4. **An** prüfen. Vorbelegt ist die Adresse, die für diesen Lieferanten schon gemerkt ist,
-   sonst der Absender der Rechnungsmail. Ist das eine noreply-Adresse oder ein Versanddienst,
+   sonst der Absender der Rechnungsmail, sonst eine Adresse aus dem PDF (Rechnungspostfach vor
+   info@ vor Person). Absender aus dem eigenen Haus (Scanner, weitergeleitet von Kollegen) und
+   noreply-Adressen nimmt der Dialog nicht. Ist der Absender ein Versanddienst,
    die Rechnungs- oder Buchhaltungsadresse des Lieferanten eintragen (Briefkopf der Rechnung
    oder Kreditorenstamm). Beim Speichern merkt sich die App die Adresse beim Lieferanten und
    schlägt sie bei seiner nächsten Rechnung vor.
@@ -290,7 +292,8 @@ zurückgeschickt. Dazu das Abzeichen an der neuen Rechnung anklicken und „Spei
 | „Mail fehlgeschlagen“ | Der Flow konnte nicht senden. Den Grund zeigt der Mauszeiger auf dem Abzeichen. | Häufig: Adresse falsch, Werk ohne Postfach im Flow, „Senden als“ fehlt. Adresse korrigieren und erneut „Speichern und senden“, sonst die IT informieren. |
 | „Mail wartet“ länger als 10 Minuten | Der Flow ist nicht gelaufen. | IT informieren (Ausführungsverlauf des Flows „Kreditor-Mail senden“). Bis dahin „In Outlook öffnen“. |
 | „Der Versand aus dem Werks-Postfach ist hier nicht eingerichtet“ | Teil A fehlt, oder die Rechnung ist noch keinem Werk zugeordnet. | Den Knopf „Speichern und Mail öffnen“ nehmen und aus Outlook senden. |
-| Lieferant oder Nummer falsch gelesen | Das PDF ist ungewöhnlich aufgebaut oder ein Scan. | Felder im Dialog überschreiben. |
+| Lieferant oder Nummer falsch gelesen | Das PDF ist ungewöhnlich aufgebaut. | Felder im Dialog überschreiben. |
+| „Die Rechnung ist ein Scan ohne Text“ | Das PDF ist ein Bild (Papierrechnung über den Scanner), es gibt nichts zu lesen. Die Rechnungsnummer zeigt dann den Dateinamen. | Lieferant, Nummer, Datum und Adresse aus dem Bild abtippen. |
 
 Jede Mail ist in der Liste KreditorMails mit Text, Empfänger, Zeitpunkt und Auftraggeber
 festgehalten. Die Liste ist versioniert und dient als Nachweis.

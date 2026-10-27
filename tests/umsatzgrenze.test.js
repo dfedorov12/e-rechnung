@@ -107,5 +107,14 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   e = await ug.ugSpeichern(r, 'Muster Werkzeuge GmbH', 'nein', '', 'RE-12', 'Nein', 'buchhaltung@muster-werkzeuge.de');
   ok(e.mail === 'buchhaltung@muster-werkzeuge.de', 'neue Mail ersetzt die alte');
   ok(e.verlauf.length === 3, 'Verlauf der Einschätzung bleibt');
-  console.log(`umsatzgrenze: ${n} Pruefungen gruen`);
+  // Absender der Rechnungsmail nur, wenn er von außen kommt
+global.istEigeneMail = require('../js/lieferant.js').istEigeneMail;
+ok(ug._ugAbsenderOk('rechnung@lieferant.de'), 'Lieferant als Absender');
+ok(!ug._ugAbsenderOk('scanner@dihag.com'), 'Scanner im Haus nicht');
+ok(!ug._ugAbsenderOk('erika.muster@dihag-zaigler.com'), 'weitergeleitet von Kollegin nicht');
+ok(!ug._ugAbsenderOk('noreply@lieferant.de'), 'noreply nicht');
+ok(!ug._ugAbsenderOk(''), 'leer nicht');
+delete global.istEigeneMail;
+
+console.log(`umsatzgrenze: ${n} Pruefungen gruen`);
 })().catch(err => { console.error(err); process.exit(1); });

@@ -69,6 +69,9 @@ Dann steht die Adresse des Lieferanten bei jeder neuen Rechnung im Monitoring un
 trägt sie unter „An“ vor. Bei älteren Rechnungen gibt man sie im Dialog selbst ein. Die
 Adresse aus „An“ wird beim Speichern beim Lieferanten gemerkt (Feld `mail` in der
 Lieferantendatei) und geht bei seinen weiteren Rechnungen dem Absender der Rechnungsmail vor.
+Kommt die Mail aus dem eigenen Haus (Scanner, Weiterleitung) oder von einer noreply-Adresse,
+übergeht der Dialog den Absender und nimmt die Adresse aus dem PDF-Text, wenn dort eine des
+Lieferanten steht.
 
 ## 4. Neuer Flow „Kreditor-Mail senden“
 

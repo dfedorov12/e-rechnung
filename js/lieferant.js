@@ -4,7 +4,7 @@
  * Bei einer PDF ohne eingebettete E-Rechnung gibt es keine strukturierten
  * Daten. Aus dem Text lassen sich die wichtigsten Angaben trotzdem meist
  * sicher lesen: Lieferant (Absenderzeile über der Anschrift, Fußzeile),
- * USt-IdNr., Rechnungsnummer, Rechnungsdatum und Bruttobetrag. Dazu der
+ * USt-IdNr., Mailadresse, Rechnungsnummer, Rechnungsdatum und Bruttobetrag. Dazu der
  * Hinweis auf § 19 UStG (Kleinunternehmer, keine E-Rechnungspflicht).
  *
  * Läuft im Browser (Monitoring, 800k-Dialog) und im Prüfdienst
@@ -199,18 +199,58 @@
     return treffer;
   }
 
+  /* ── Mailadresse ───────────────────────────────────────────────────── */
+
+  // Domains der eigenen Gesellschaften. Solche Adressen sind nie die des Lieferanten.
+  const EIGENE_DOMAINS = ['dihag', 'walze-coswig', 'shb-guss', 'lintorfereg', 'ewa-guss', 'gienanth', 'zaigler'];
+  const MAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+
+  function istEigeneMail(mail) {
+    const domain = String(mail || '').toLowerCase().split('@')[1] || '';
+    return EIGENE_DOMAINS.some(d => domain.includes(d));
+  }
+
+  // Adresse für Rechnungsfragen: Rechnungspostfach vor allgemeinem Postfach vor Person.
+  // Nicht zustellbare (noreply) und eigene Adressen fallen weg. Die Adressen des
+  // Empfängers sind immer eigene. Passt die Domain zum Namen des Lieferanten, zählt das mit.
+  function mailAusZeilen(zeilen, name) {
+    const nameTeile = KLEIN(name).split(/[^a-z0-9]+/).filter(t => t.length >= 4 && !/^(gmbh|mbh|kg|ag|und|technik|handel|service)$/.test(t));
+    const n = zeilen.length;
+    const kandidaten = new Map();
+    zeilen.forEach((roh, i) => {
+      // „E-Mailinfo@…" (angeklebte Beschriftung), „info (at) firma.de", „info @ firma.de"
+      const z = roh.replace(/\bE-?Mail\s*:?\s*/gi, ' ').replace(/\bMail\s*:\s*/gi, ' ')
+        .replace(/\s*[[(]at[\])]\s*/gi, '@').replace(/\s*@\s*/g, '@');
+      for (const mail of z.match(MAIL) || []) {
+        const lokal = mail.split('@')[0].toLowerCase();
+        if (istEigeneMail(mail) || /^(no-?reply|do-?not-?reply|noreply|mailer-daemon|postmaster)/.test(lokal)) continue;
+        const k = mail.toLowerCase();
+        const e = kandidaten.get(k) || { mail, punkte: 0 };
+        if (/rechnung|invoice|buchhaltung|accounting|fibu|debitor|billing|faktura|abrechnung/.test(lokal)) e.punkte += 4;
+        else if (/^(info|kontakt|contact|office|mail|service|verkauf|vertrieb|sales|zentrale)$/.test(lokal)) e.punkte += 2;
+        else if (/datenschutz|privacy|dsb|jobs|karriere|bewerbung|newsletter|marketing/.test(lokal)) e.punkte -= 3;
+        const domain = k.split('@')[1].replace(/[^a-z0-9]+/g, '');
+        if (nameTeile.some(t => domain.includes(t))) e.punkte += 2;
+        if (i > n - 30) e.punkte += 1;
+        kandidaten.set(k, e);
+      }
+    });
+    const liste = [...kandidaten.values()].filter(e => e.punkte >= 0).sort((a, b) => b.punkte - a.punkte);
+    return liste.length ? liste[0].mail : '';
+  }
+
   /* ── Hauptfunktion ─────────────────────────────────────────────────── */
 
   /**
    * @param {string} text  PDF-Text (Zeilen durch Zeilenumbruch getrennt)
-   * @returns {{name:string, vat:string, nummer:string, datum:string, brutto:(number|null),
+   * @returns {{name:string, vat:string, mail:string, nummer:string, datum:string, brutto:(number|null),
    *            kleinunternehmer:boolean, lesbar:boolean}}
    */
   function lieferantAusText(text) {
     const roh = String(text || '');
     const zeilen = roh.split(/\r?\n/).map(z => z.replace(/\s+$/, '')).filter(z => z.trim());
     const lesbar = (roh.match(/[A-Za-z0-9]/g) || []).length >= 80;
-    const leer = { name: '', vat: '', nummer: '', datum: '', brutto: null, kleinunternehmer: false, lesbar };
+    const leer = { name: '', vat: '', mail: '', nummer: '', datum: '', brutto: null, kleinunternehmer: false, lesbar };
     if (!lesbar) return leer;
 
     const vats = vatKandidaten(zeilen);
@@ -224,6 +264,7 @@
     return {
       name,
       vat: vatWahl,
+      mail: mailAusZeilen(zeilen, name),
       nummer: rechnungsnummer(zeilen),
       datum: rechnungsdatum(zeilen),
       brutto: bruttobetrag(zeilen),
@@ -261,7 +302,7 @@
     return zeilen.join('\n');
   }
 
-  const api = { lieferantAusText, istEigen, EIGENE_VAT, textAusPdf };
+  const api = { lieferantAusText, istEigen, istEigeneMail, EIGENE_VAT, textAusPdf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else Object.assign(global, api);
 })(typeof window !== 'undefined' ? window : globalThis);
