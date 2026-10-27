@@ -211,9 +211,11 @@ Werk bleiben stehen.
 
 ### Versionsverlauf
 
-In den Details jeder Rechnung zeigt „Versionsverlauf anzeigen“ alle Versionen der Datei,
-neueste oben: wann, von wem (bei Flow-Schritten das Konto der Flow-Verbindung) und welche
-Spalten sich geändert haben, etwa „Buchung: Automatik → Unter Vorbehalt“ oder „Datei ersetzt“.
+In den Details jeder Rechnung zeigt „Versionsverlauf anzeigen“ die Versionen aller Dateien der
+Rechnung in einer Liste (Original, lesbares PDF, Prüfbericht), neueste oben. Bei XML-Rechnungen
+speichert die Bearbeitung Varialnummer, Kontierung und Genehmigung am lesbaren PDF, die Liste
+kennzeichnet diese Datei mit „(Bearbeitung)“. Jeder Eintrag nennt Datei, Zeitpunkt, Person (bei
+Flow-Schritten das Konto der Flow-Verbindung) und die Spalten, die sich geändert haben, etwa „Buchung: Automatik → Unter Vorbehalt“ oder „Datei ersetzt“.
 Ein Klick auf eine Version klappt alle Werte dieser Version auf. „Datei dieser Version öffnen“
 zeigt die Datei so, wie sie damals war.
 

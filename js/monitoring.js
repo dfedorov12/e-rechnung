@@ -329,7 +329,7 @@ function _monGroup(recs) {
       const label = r.sidecar === 'kosit' ? 'KoSIT-Bericht'
                   : r.sidecar === 'lesbar' ? 'Lesbares PDF'
                   : (r.ext ? r.ext.toUpperCase() : 'Datei');
-      primary.dateien.push({ label, url: r.url });
+      primary.dateien.push({ label, url: r.url, listId: r.listId, itemId: r.itemId, ext: r.ext });
     }
     // Metadaten aus Geschwisterdateien auffüllen, falls die Primärzeile sie nicht hat.
     for (const key of ['steller', 'empf', 'format', 'status', 'konform', 'fehler', 'meldung', 'faelligkeit']) {
@@ -967,7 +967,7 @@ function _monDetail(r, idx) {
         ['GF gesehen', b.gfGesehen ? 'Ja' : ''], ['Notiz', t(b.notiz)]]) : '')
     + (dateien ? `<section><h4>Dateien</h4><div>${dateien}</div>${r.originalName && r.originalName !== r.file
         ? `<p class="mon-det-klein">Dateiname beim Eingang: ${_esc(r.originalName)}</p>` : ''}</section>` : '')
-    + (r.listId && r.itemId ? `<section class="mon-ver"><h4>Versionsverlauf ${r.ext ? '(' + _esc(r.ext.toUpperCase()) + ')' : ''}</h4>
+    + (r.listId && r.itemId ? `<section class="mon-ver"><h4>Versionsverlauf</h4>
         <button type="button" class="mon-reset" data-versionen="${idx}">Versionsverlauf anzeigen</button>
         <div class="mon-ver-liste"></div></section>` : '')
     + (aktionen ? `<div class="mon-det-aktionen">${aktionen}</div>` : '')
@@ -1004,25 +1004,24 @@ function _monVerWert(v) {
 }
 
 /**
- * Versionen einer Datei als aufklappbare Liste, neueste oben. Jede Zeile nennt Zeit,
- * Person und die geänderten Spalten. Aufgeklappt zeigt sie alle Werte dieser Version
- * und öffnet die Datei, wie sie in dieser Version war.
+ * Versionen einer Datei als Einträge für die gemeinsame Liste. Jeder Eintrag nennt
+ * Datei, Zeit, Person und die geänderten Spalten. Aufgeklappt zeigt er alle Werte
+ * dieser Version und öffnet die Datei, wie sie in dieser Version war.
  */
-function _monVersionenHtml(versionen, titel) {
-  if (!versionen.length) return '<p class="mon-det-klein">Keine Versionen gefunden.</p>';
+function _monVersionenEintraege(versionen, titel, datei) {
   const alt = versionen.slice().sort((a, b) => parseFloat(a.id) - parseFloat(b.id));
   const kurz = s => (s.length > 70 ? s.slice(0, 68) + '…' : s);
   const groesse = f => f.FileSizeDisplay || f.File_x0020_Size || f.SMTotalFileStreamSize || '';
-  const zeilen = alt.map((v, i) => {
+  const sichtbar = k => !MON_VER_OHNE.test(k) && titel.has(k);
+  // leer, fehlend und „Nein“ gelten als gleich (SharePoint lässt leere Felder weg)
+  const norm = x => (x === false || x === '' || x == null ? null : x);
+  return alt.map((v, i) => {
     const f = v.fields || {};
     const vorher = i > 0 ? (alt[i - 1].fields || {}) : null;
-    const sichtbar = k => !MON_VER_OHNE.test(k) && titel.has(k);
     const aend = [];
     if (vorher) {
       if (groesse(f) && groesse(vorher) && String(groesse(f)) !== String(groesse(vorher))) aend.push('Datei ersetzt');
       Array.from(new Set(Object.keys(f).concat(Object.keys(vorher)))).filter(sichtbar).forEach(k => {
-        // leer, fehlend und „Nein“ gelten als gleich (SharePoint lässt leere Felder weg)
-        const norm = x => (x === false || x === '' || x == null ? null : x);
         if (JSON.stringify(norm(f[k])) !== JSON.stringify(norm(vorher[k]))) {
           aend.push(`${titel.get(k)}: ${kurz(_monVerWert(vorher[k]))} → ${kurz(_monVerWert(f[k]))}`);
         }
@@ -1031,18 +1030,35 @@ function _monVersionenHtml(versionen, titel) {
     const wer = v.lastModifiedBy ? ((v.lastModifiedBy.user || v.lastModifiedBy.application || {}).displayName || '') : '';
     const was = !vorher ? 'angelegt' : aend.length ? aend.join('; ') : 'ohne sichtbare Änderung';
     const werte = Object.keys(f).filter(sichtbar).filter(k => f[k] != null && f[k] !== '')
-      .sort((a, b) => titel.get(a).localeCompare(titel.get(b), 'de'))
+      .sort((x, y) => titel.get(x).localeCompare(titel.get(y), 'de'))
       .map(k => `<dt>${_esc(titel.get(k))}</dt><dd>${_esc(_monVerWert(f[k]))}</dd>`).join('');
     const neueste = i === alt.length - 1;
-    return `<details class="mon-ver-v">
-      <summary><b>Version ${_esc(v.id)}</b> · ${_esc(_monVerWert(v.lastModifiedDateTime))}${wer ? ' · ' + _esc(wer) : ''}
+    return {
+      zeit: v.lastModifiedDateTime || '',
+      nr: parseFloat(v.id) || 0,
+      html: `<details class="mon-ver-v">
+      <summary><span class="mon-ver-datei">${_esc(datei.label)}</span> <b>Version ${_esc(v.id)}</b> · ${_esc(_monVerWert(v.lastModifiedDateTime))}${wer ? ' · ' + _esc(wer) : ''}
         <span class="mon-ver-was">${_esc(was)}</span></summary>
       <dl>${werte}</dl>
-      <button type="button" class="mon-reset" data-ver-datei="${_esc(v.id)}"${neueste ? ' data-ver-neu' : ''}>Datei dieser Version öffnen</button>
-    </details>`;
+      <button type="button" class="mon-reset" data-ver-datei="${_esc(v.id)}" data-ver-list="${_esc(datei.listId)}"
+        data-ver-item="${_esc(datei.itemId)}" data-ver-ext="${_esc(datei.ext || '')}"${neueste ? ' data-ver-neu' : ''}>Datei dieser Version öffnen</button>
+    </details>`,
+    };
   });
-  return `<p class="mon-det-klein">${versionen.length} Version${versionen.length === 1 ? '' : 'en'}, neueste oben</p>`
-    + `<div class="mon-ver-rollen">${zeilen.reverse().join('')}</div>`;
+}
+
+/**
+ * Dateien einer Rechnung für den Verlauf: Original, lesbares PDF, Prüfbericht. Die
+ * Bearbeitung (Varialnummer, Kontierung, Genehmigung) liegt bei XML-Rechnungen am
+ * lesbaren PDF, deshalb gehören alle Dateien in einen gemeinsamen Verlauf.
+ */
+function _monVerlaufDateien(r) {
+  const ziel = r.bhQuelle || {};
+  const name = (label, d) => label + (ziel.itemId && d.itemId === ziel.itemId ? ' (Bearbeitung)' : '');
+  const dateien = [{ label: name(r.ext ? r.ext.toUpperCase() : 'Original', r), listId: r.listId, itemId: r.itemId, ext: r.ext }];
+  (r.dateien || []).filter(d => d.listId && d.itemId)
+    .forEach(d => dateien.push({ label: name(d.label, d), listId: d.listId, itemId: d.itemId, ext: d.ext }));
+  return dateien.filter((d, i, a) => a.findIndex(x => x.itemId === d.itemId && x.listId === d.listId) === i);
 }
 
 async function _monVersionenZeigen(knopf) {
@@ -1054,18 +1070,28 @@ async function _monVersionenZeigen(knopf) {
   try {
     const token = await acquireToken(SP.scopes);
     // Alle Seiten holen: Graph liefert lange Verläufe in Teilen (@odata.nextLink)
-    const alleVersionen = async () => {
+    const versionenVon = async d => {
       const liste = [];
-      let url = `${SP.graphBase}/sites/${_monSiteId}/lists/${r.listId}/items/${r.itemId}/versions`;
+      let url = `${SP.graphBase}/sites/${_monSiteId}/lists/${d.listId}/items/${d.itemId}/versions`;
       for (let seite = 0; url && seite < 20; seite++) {
-        const d = await _monGet(url, token);
-        liste.push(...(d.value || []));
-        url = d['@odata.nextLink'] || null;
+        const antwort = await _monGet(url, token);
+        liste.push(...(antwort.value || []));
+        url = antwort['@odata.nextLink'] || null;
       }
       return liste;
     };
-    const [versionen, titel] = await Promise.all([alleVersionen(), _monSpaltenTitelLaden(r.listId, token)]);
-    ziel.innerHTML = _monVersionenHtml(versionen, titel);
+    const dateien = _monVerlaufDateien(r);
+    const eintraege = [];
+    for (const d of dateien) {
+      const [versionen, titel] = await Promise.all([versionenVon(d), _monSpaltenTitelLaden(d.listId, token)]);
+      eintraege.push(..._monVersionenEintraege(versionen, titel, d));
+    }
+    eintraege.sort((a, b) => (a.zeit < b.zeit ? 1 : a.zeit > b.zeit ? -1 : b.nr - a.nr));
+    ziel.innerHTML = eintraege.length
+      ? `<p class="mon-det-klein">${eintraege.length} Version${eintraege.length === 1 ? '' : 'en'} an ${dateien.length} Datei${dateien.length === 1 ? '' : 'en'} `
+        + `(${dateien.map(d => _esc(d.label)).join(', ')}), neueste oben</p>`
+        + `<div class="mon-ver-rollen">${eintraege.map(e => e.html).join('')}</div>`
+      : '<p class="mon-det-klein">Keine Versionen gefunden.</p>';
     knopf.textContent = 'Neu laden';
   } catch (e) {
     ziel.innerHTML = `<p class="mon-det-klein">Versionen nicht lesbar: ${_esc(e.message || String(e))}</p>`;
@@ -1075,15 +1101,15 @@ async function _monVersionenZeigen(knopf) {
 }
 
 /** Datei so öffnen, wie sie in einer Version war (neueste: aktuelle Datei). */
-async function _monVersionDateiOeffnen(r, versionId, neueste) {
+async function _monVersionDateiOeffnen(datei, versionId, neueste) {
   const fenster = window.open('', '_blank');
   try {
     const token = await acquireToken(SP.scopes);
-    const basis = `${SP.graphBase}/sites/${_monSiteId}/lists/${r.listId}/items/${r.itemId}/driveItem`;
+    const basis = `${SP.graphBase}/sites/${_monSiteId}/lists/${datei.listId}/items/${datei.itemId}/driveItem`;
     const resp = await fetch(neueste ? `${basis}/content` : `${basis}/versions/${encodeURIComponent(versionId)}/content`,
       { headers: { 'Authorization': `Bearer ${token}` } });
     if (!resp.ok) throw new Error(`Datei (${resp.status})`);
-    const typ = { xml: 'text/xml', pdf: 'application/pdf' }[r.ext] || '';
+    const typ = { xml: 'text/xml', pdf: 'application/pdf' }[datei.ext] || '';
     const blob = await resp.blob();
     const url = URL.createObjectURL(typ ? new Blob([blob], { type: typ }) : blob);
     if (fenster) fenster.location = url; else window.open(url, '_blank');
@@ -1630,8 +1656,8 @@ function monInitFilterEvents() {
     if (ver) { _monVersionenZeigen(ver); return; }
     const verDatei = e.target.closest('[data-ver-datei]');
     if (verDatei) {
-      const r = _monRows[Number(verDatei.closest('.mon-ver').querySelector('[data-versionen]').getAttribute('data-versionen'))];
-      if (r) _monVersionDateiOeffnen(r, verDatei.getAttribute('data-ver-datei'), verDatei.hasAttribute('data-ver-neu'));
+      _monVersionDateiOeffnen({ listId: verDatei.getAttribute('data-ver-list'), itemId: verDatei.getAttribute('data-ver-item'),
+        ext: verDatei.getAttribute('data-ver-ext') }, verDatei.getAttribute('data-ver-datei'), verDatei.hasAttribute('data-ver-neu'));
       return;
     }
     if (e.target.closest('a, button, input, select, textarea, label, summary')) return;
