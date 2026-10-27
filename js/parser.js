@@ -86,7 +86,7 @@ const _COMPANY_REGISTRY = {
     verkaeufplz:        '95326',
     verkaeufstadt:      'Kulmbach',
     verkaeufland:       'DE',
-    verkaeuftel:        '+49 9221 944-0',
+    verkaeuftel:        '',   // „Telefon:" des Ansprechpartners aus dem PDF, sonst Zentrale (extractMetadataZai)
     verkaeuferemail:    '',   // keine feste Sales-Adresse geliefert → Kontakt-Mail aus PDF-Text
     verkaeufervat:      'DE368990137',
     verkaeufersteuernr: '208/124/40021',
@@ -291,6 +291,13 @@ function extractInvoiceDataFromItems(allItems) {
 
     // Lieferschein-/Versandavis-Nummer (BT-16), falls noch nicht gesetzt
     if (!result.lieferscheinnummer) Object.assign(result, _extractLieferschein(fullText));
+  }
+
+  // Rechnungsmail des Kunden (BT-49), wenn das ERP sie druckt
+  // („Rechnungsempfänger: rechnung@kunde.de", ALF seit Oktober 2026)
+  if (!result.kaeufermail) {
+    const rm = fullText.match(/Rechnungs-?empf(?:ä|ae)nger(?:-?(?:E-?Mail|Mail))?\s*:\s*([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/i);
+    if (rm) result.kaeufermail = rm[1];
   }
 
   // Steuerkategorie für 0%-Positionen erkennen (UNTDID 5305: K/AE/G)
@@ -784,8 +791,16 @@ function extractMetadataZai(fullText) {
       hinweise.push(z);
     }
   }
+  // Steuertexte stehen manchmal erst auf der Folgeseite (z. B. Hinweis auf § 13b)
+  for (const z of zeilen) {
+    if (z && /Steuerschuldnerschaft|§\s*13b|innergemeinschaftlich|Ausfuhrlieferung|steuerfreie/i.test(z) && !hinweise.includes(z)) hinweise.push(z);
+  }
   // Zwei Zeilen des AGB-Hinweises zu einem Satz zusammenfassen
   if (hinweise.length) r.notiz = hinweise.join('\n').replace(/Geschäftsbedingungen\.\nDie AGB/, 'Geschäftsbedingungen. Die AGB');
+
+  // Telefon des Ansprechpartners (BT-42), sonst die Zentrale
+  const tel = fullText.match(/^Telefon\s*:?\s*(\+?\d[\d\s\/()-]{5,})$/im);
+  r.verkaeuftel = tel ? tel[1].trim() : '+49 9221 944-0';
 
   return r;
 }
@@ -2148,8 +2163,18 @@ function _parseBuyerWindow(src) {
     }
     r.kaeuferplz   = plzM[2];
     r.kaeuferstadt = plzM[3].trim();
-    // Straße = Zeile direkt über der PLZ-Zeile (Fensteradresse)
-    if (plzIdx > 0) r.kaeuferstrasse = after[plzIdx - 1];
+    // Straße = Zeile direkt über der PLZ-Zeile (Fensteradresse). Ist das ein Postfach
+    // („CS 10106", „BP 12", „Postfach 1234") und steht eine Straße davor, gilt die
+    // Straße; Postfach und weitere Zeilen dazwischen werden Adresszusatz (BT-163).
+    if (plzIdx > 0) {
+      const POSTFACH = /^(?:CS|BP|TSA|Postfach|PF|P\.?\s?O\.?\s*Box|Case postale|Casella postale|Apartado)\s*\d+/i;
+      const zwischen = after.slice(0, plzIdx).filter(l => !/:\s*\S/.test(l));
+      let iStr = zwischen.length - 1;
+      if (iStr > 0 && POSTFACH.test(zwischen[iStr])) iStr--;
+      r.kaeuferstrasse = zwischen[iStr] || after[plzIdx - 1];
+      const zusatz = zwischen.filter((l, i) => i !== iStr);
+      if (zusatz.length) r.kaeuferzusatz = zusatz.join(', ');
+    }
   } else {
     // UK-Format: alphanumerische PLZ, oft "STADT/COUNTY, DN16 1BP" (keine numerische PLZ)
     const ukIdx = after.findIndex(l => /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/.test(l));

@@ -1,6 +1,6 @@
 # Ausgangsrechnungen ZAI im Konverter
 
-Stand: 26.10.2026
+Stand: 27.10.2026
 
 Die Zaigler-Rechnungen kommen als PDF aus ALF. Der Konverter liest sie aus und erzeugt daraus XRechnung oder ZUGFeRD. Grundlage für die Anpassung waren die Rechnungsmails, die im Oktober 2026 an Kunden gingen, und der handschriftliche Abgleich von Rechnung 2026.001965 mit dem Original.
 
@@ -33,9 +33,9 @@ Auch beim Einzelpreis rechnet ALF mit mehr Stellen, als es druckt. Der Konverter
 
 ## Rechnungsadresse des Kunden
 
-Im ALF-PDF steht keine Rechnungsadresse des Kunden, nur die Mail der Sachbearbeitung im eigenen Haus. Die XRechnung braucht aber eine elektronische Adresse des Empfängers (BT-49), und das muss das Rechnungspostfach des Kunden sein. Die Mail aus dem PDF geht deshalb nur zum Rechnungssteller. Das Empfängerfeld wird beim Laden eines PDFs geleert, damit keine Adresse aus einem früheren Beleg stehen bleibt.
+Die XRechnung braucht eine elektronische Adresse des Empfängers (BT-49), und das muss das Rechnungspostfach des Kunden sein. Seit Ende Oktober 2026 druckt ALF sie auf die letzte Seite („Rechnungsempfänger: coc.invoice@…“). Steht diese Zeile im PDF, übernimmt der Konverter die Adresse (das gilt für alle Werke). Die Mail im Kopf („E-Mail: …“) gehört zum Ansprechpartner und geht nur zum Rechnungssteller, ebenso sein „Telefon:“. Das Empfängerfeld wird beim Laden eines PDFs geleert, damit keine Adresse aus einem früheren Beleg stehen bleibt.
 
-Stattdessen merkt sich die App je Werk und Kunde die Adresse, an die exportiert wurde. Beim nächsten Beleg desselben Kunden schlägt sie die Adresse vor. Wird für einen bekannten Kunden eine andere Adresse eingetragen, ersetzt sie nach dem Export die gemerkte, ohne Nachfrage. Gesucht wird nach Kunden-Nr., dann nach USt-IdNr., dann nach dem Namen. Gespeichert wird in SharePoint (Dokumente/E-Rechnung/kunden-rechnungsmail.json), nicht im Code, weil die Seite öffentlich ist.
+Fehlt die Zeile (ältere Belege), greift die gemerkte Adresse: Die App merkt sich je Werk und Kunde die Adresse, an die exportiert wurde. Beim nächsten Beleg desselben Kunden schlägt sie die Adresse vor. Wird für einen bekannten Kunden eine andere Adresse eingetragen, ersetzt sie nach dem Export die gemerkte, ohne Nachfrage. Gesucht wird nach Kunden-Nr., dann nach USt-IdNr., dann nach dem Namen. Gespeichert wird in SharePoint (Dokumente/E-Rechnung/kunden-rechnungsmail.json), nicht im Code, weil die Seite öffentlich ist.
 
 Trägt jemand eine Adresse der eigenen Firma ein (gleiche Domain wie die Verkäufer-Mail oder die eigene Anmeldung), fragt der Export nach. Solche Adressen merkt sich die App nicht. Kunden mit Leitweg-ID brauchen keine Mail und werden nicht gemerkt.
 
@@ -49,7 +49,8 @@ Admins pflegen die Liste unter Einstellungen, Abschnitt „Rechnungsadressen der
 
 ## Grenzen
 
-- Die Rechnungsadresse muss beim ersten Beleg je Kunde einmal eingetragen werden, entweder im Konverter oder vorab in den Einstellungen.
+- Belege ohne die Zeile „Rechnungsempfänger:“ brauchen beim ersten Mal je Kunde die Adresse von Hand oder aus den Einstellungen.
+- Ein Postfach in der Anschrift („CS 10106“, „BP 12“, „Postfach 1234“) kommt in den Adresszusatz, die Straße davor bleibt Straße.
 - Die Bestellnummer im Kopf (BT-13) ist die erste Best.Nr. im Beleg. Hat eine Rechnung Positionen aus mehreren Bestellungen, stehen die übrigen im Positionshinweis der jeweiligen Position.
 
 Die lesbare PDF-Ansicht von XML-Dateien (/api/convert und Monitoring) zeigt die neuen Felder seit dem Deploy vom 26.10.2026. Die Rechnungsadresse des Kunden steht dort im Block Rechnungsempfänger unter der Anschrift, die Mail aus dem ALF-Kopf beim Rechnungssteller.

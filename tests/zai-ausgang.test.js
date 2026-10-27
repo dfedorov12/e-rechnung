@@ -8,7 +8,7 @@ const vm = require('vm');
 const ctx = { console, window: {}, Math, Date, JSON, RegExp, String, Number, Array, Object, Set, Map, parseFloat, parseInt, isNaN };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/parser.js'), 'utf8')
-  + '\nthis.meta = extractMetadataZai; this.pos = extractLineItemsZai;', ctx);
+  + '\nthis.meta = extractMetadataZai; this.pos = extractLineItemsZai; this.fenster = _parseBuyerWindow;', ctx);
 
 let n = 0;
 const gleich = (ist, soll, m) => { assert.deepStrictEqual(ist, soll, m + ': ' + JSON.stringify(ist)); n++; };
@@ -81,6 +81,22 @@ const storno = [...kopf(1).map(z => z === 'Rechnung' ? 'Storno-Rechnung' : z), '
 const s = ctx.meta(storno);
 gleich(s.rechnungsart, '381', 'Storno als Gutschrift (BT-3 381)');
 gleich(s.vorrechnungsnummer, '2026.008888', 'Bezug auf Rechnung (BT-25)');
+
+// 2b) Steuerhinweis auf der Folgeseite, Telefon des Ansprechpartners, Postfach in der Anschrift
+const folgeseite = [...kopf(1).map(z => /^Telefon/.test(z) ? 'Telefon: +49 9221 944-222' : z),
+  'Pos. Bezeichnung Menge Einheit Einzelpreis EUR Gesamtpreis EUR',
+  '1 Gehäuse GH 100 1 Stück 500,00 500,00', ...fuss,
+  'Seite: 2', ...kopf(2).slice(1),
+  'Auf die Steuerschuldnerschaft des Leistungsempfängers gem. § 13b UStG (Reverse Charge-Verfahren) wird hingewiesen.',
+  'Unsere Bankverbindung lautet:', 'Rechnungsempfänger: rechnung@beispielguss.example'].join(NL);
+const f = ctx.meta(folgeseite);
+gleich(/§ 13b UStG/.test(f.notiz), true, 'Steuerhinweis von Seite 2 im Hinweis');
+gleich(f.verkaeuftel, '+49 9221 944-222', 'Durchwahl des Ansprechpartners');
+gleich(ctx.meta(folgeseite.split(NL).filter(z => !/^Telefon/.test(z)).join(NL)).verkaeuftel, '+49 9221 944-0', 'ohne Telefonzeile die Zentrale');
+const fe = ctx.fenster(['Beispiel Components SAS', '43, rue Exemple', 'CS 10106', '68000 Exempleville Cedex', 'FRANKREICH'].join(NL));
+gleich([fe.kaeuferstrasse, fe.kaeuferzusatz, fe.kaeuferplz, fe.kaeuferland], ['43, rue Exemple', 'CS 10106', '68000', 'FR'], 'Postfach als Adresszusatz');
+const fe2 = ctx.fenster(['Muster GmbH', 'Werkstraße 7', '12345 Musterstadt'].join(NL));
+gleich([fe2.kaeuferstrasse, fe2.kaeuferzusatz], ['Werkstraße 7', undefined], 'normale Anschrift ohne Zusatz');
 
 // 3) MwSt laut Original: das ERP rundet je Position, der Konverter über die Summe
 const x = { console, window: {}, document: undefined, Math, JSON, String, Number, Object, parseFloat, isFinite };
