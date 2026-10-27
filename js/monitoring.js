@@ -148,9 +148,11 @@ async function loadMonitoring(accessList, optionen) {
         `Keine Bibliothek ließ sich lesen (${fehlerLibs.join(', ')}). Details in der Browser-Konsole.`);
     }
     _monUpdate(recs);
+    const einstFehler = typeof _bh !== 'undefined' && _bh.einstFehler;
     if (sub) sub.textContent =
       `${_monRecords.length} Rechnung(en) (${recs.length} Datei(en)) aus ${libs.length - fehlerLibs.length} Bibliothek(en) · Stand ${new Date().toLocaleString('de-DE')}`
-      + (fehlerLibs.length ? ` · nicht geladen: ${fehlerLibs.join(', ')}` : '');
+      + (fehlerLibs.length ? ` · nicht geladen: ${fehlerLibs.join(', ')}` : '')
+      + (einstFehler ? ` · Spalten-Einstellungen nicht lesbar (${einstFehler}), es gelten die Standardspalten` : '');
   } catch (e) {
     _monLaedt = false;
     _monShowSetup('Fehler beim Laden', e.message || String(e));
@@ -618,9 +620,33 @@ const MON_STANDARD = ['links', 'datum', 'werk', 'richtung', 'nummer', 'partner',
   'status', 'buchung', 'informiert', 'konform', 'fehler', 'varial', 'bstatus', 'genehmigung'];
 
 /** Spalten-IDs eines Werks in seiner Reihenfolge ('links' ist immer dabei, sonst vorn). */
-function _monWerkSpaltenListe(werk) {
+/** Hat der Admin für das Werk Spalten festgelegt? */
+function _monSpaltenEingestellt(werk) {
   const e = typeof bhWerkEinst === 'function' ? bhWerkEinst(werk) : {};
-  const ids = Array.isArray(e.spalten) && e.spalten.length ? e.spalten : MON_STANDARD;
+  return Array.isArray(e.spalten) && e.spalten.length > 0;
+}
+
+/**
+ * Werk, dessen Spalten Werke ohne eigene Einstellung übernehmen: das eingestellte Werk mit
+ * den meisten Rechnungen ('' = keins eingestellt, dann gilt der Standard).
+ */
+function _monSpaltenVorlage() {
+  const werke = Object.keys((typeof _bh !== 'undefined' && _bh.einst && _bh.einst.werke) || {}).filter(_monSpaltenEingestellt);
+  if (werke.length < 2) return werke[0] || '';
+  const anzahl = new Map();
+  _monRecords.forEach(r => anzahl.set(r.werk, (anzahl.get(r.werk) || 0) + 1));
+  return werke.sort((a, b) => (anzahl.get(b) || 0) - (anzahl.get(a) || 0) || a.localeCompare(b))[0];
+}
+
+/** Spalten eines Werks: eigene Einstellung, sonst die der Vorlage, sonst Standard. */
+function _monSpaltenIds(werk) {
+  if (_monSpaltenEingestellt(werk)) return bhWerkEinst(werk).spalten;
+  const vorlage = _monSpaltenVorlage();
+  return vorlage ? bhWerkEinst(vorlage).spalten : MON_STANDARD;
+}
+
+function _monWerkSpaltenListe(werk) {
+  const ids = _monSpaltenIds(werk);
   const bh = typeof bhBearbeitenAn !== 'function' || bhBearbeitenAn(werk);
   const liste = ids.filter((id, i) => {
     const sp = MON_SPALTEN.find(x => x.id === id);
@@ -1224,8 +1250,8 @@ function _monSpaltenDialog(werk) {
   const werke = Array.from(new Set(_monLibs.map(l => l.werk).filter(Boolean))).sort();
   let w = werk && werke.includes(werk) ? werk : werke[0];
   const zeichnen = () => {
-    const e = bhWerkEinst(w);
-    const gewaehlt = Array.isArray(e.spalten) && e.spalten.length ? e.spalten : MON_STANDARD;
+    const gewaehlt = _monSpaltenIds(w);
+    const vorlage = !_monSpaltenEingestellt(w) && _monSpaltenVorlage();
     const ids = gewaehlt.includes('links') ? gewaehlt : ['links'].concat(gewaehlt);
     // erst die gewählten in ihrer Reihenfolge, dahinter die übrigen
     const reihe = ids.filter(id => MON_SPALTEN.some(sp => sp.id === id))
@@ -1242,7 +1268,8 @@ function _monSpaltenDialog(werk) {
         <div class="ug-kopf"><h3>Spalten je Werk</h3><button type="button" class="ug-x" data-sp-zu aria-label="Schließen">✕</button></div>
         <label class="ug-lbl">Werk<select id="sp-werk">${werke.map(x => `<option${x === w ? ' selected' : ''}>${_esc(x)}</option>`).join('')}</select></label>
         <label class="bh-check"><input type="checkbox" id="sp-bh"${bh ? ' checked' : ''}> Bearbeiten-Funktion (Varialnummer, Kontierung, Genehmigung)</label>
-        <p class="ug-hinweis">Haken = Spalte wird angezeigt. Reihenfolge per Ziehen am ☰ oder mit den Pfeilen.</p>
+        <p class="ug-hinweis">Haken = Spalte wird angezeigt. Reihenfolge per Ziehen am ☰ oder mit den Pfeilen.${vorlage
+          ? ` ${_esc(w)} hat keine eigene Einstellung und zeigt die Spalten von ${_esc(vorlage)}.` : ''}</p>
         <ul class="sp-liste" id="sp-liste">${reihe.map(id => {
           const sp = MON_SPALTEN.find(x => x.id === id);
           return `<li class="sp-zeile${sp.bh ? ' sp-bh' : ''}" draggable="true" data-sp-li="${sp.id}">

@@ -54,7 +54,7 @@ const BH_GENEHMIGT = ['Ja', 'Nein', 'Abgelehnt', 'In Prüfung', 'Keine Rechnung'
 
 const BH_EINSTELLUNGEN = 'Monitoring/monitoring-einstellungen.json';
 
-const _bh = { siteId: null, einst: { version: 1, werke: {} }, einstItemId: null, einstETag: null };
+const _bh = { siteId: null, einst: { version: 1, werke: {} }, einstItemId: null, einstETag: null, einstFehler: '' };
 let _bhAktuell = null;
 
 function _bhBool(v) {
@@ -166,11 +166,13 @@ function _bhDatum(iso) {
 
 async function bhLaden(siteId, token) {
   _bh.siteId = siteId;
+  _bh.einstFehler = '';
   try {
     const meta = await fetch(`${SP.graphBase}/sites/${siteId}/drive/root:/${BH_EINSTELLUNGEN}?$select=id,eTag`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
     });
-    if (meta.status === 404) return;
+    // 404 heißt: Datei fehlt oder der Benutzer sieht die Bibliothek Dokumente nicht
+    if (meta.status === 404) { _bh.einstFehler = '404'; return; }
     if (!meta.ok) throw new Error(`Einstellungen (${meta.status})`);
     const m = await meta.json();
     const inhalt = await fetch(`${SP.graphBase}/sites/${siteId}/drive/items/${m.id}/content`, {
@@ -182,6 +184,7 @@ async function bhLaden(siteId, token) {
     _bh.einstItemId = m.id;
     _bh.einstETag = m.eTag;
   } catch (e) {
+    _bh.einstFehler = e.message || String(e);
     console.warn('[Bearbeitung] Einstellungen nicht lesbar:', e.message || e);
   }
 }

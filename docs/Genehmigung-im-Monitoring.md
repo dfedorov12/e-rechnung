@@ -260,9 +260,13 @@ der Standard eines anderen Werks.
 
 Ist im Filter ein Werk gewählt, zeigt die Tabelle genau dessen Spalten in dessen
 Reihenfolge. Ohne Werkfilter zeigt sie die Spalten aller Werke zusammen, in der Reihenfolge
-des Werks mit den meisten Rechnungen. Zellen eines Werks ohne die Spalte bleiben leer. Die
-Auswahl gilt für alle, die das Monitoring nutzen, und liegt in
-`Monitoring/monitoring-einstellungen.json` auf der Monitoring-Site.
+des Werks mit den meisten Rechnungen. Zellen eines Werks ohne die Spalte bleiben leer. Ein
+Werk ohne eigene Einstellung zeigt die Spalten des eingestellten Werks (bei mehreren das mit den
+meisten Rechnungen), der Dialog sagt das dazu. Die Auswahl gilt für alle, die das Monitoring
+nutzen, und liegt in `Monitoring/monitoring-einstellungen.json` auf der Monitoring-Site. Wer
+diese Datei nicht lesen darf, sieht die Standardspalten. Das Monitoring meldet das in der
+Zeile unter der Überschrift („Spalten-Einstellungen nicht lesbar“). Lesen auf die Bibliothek
+Dokumente reicht.
 
 Unter „Alle Buchung“ gibt es zusätzlich **„Kleinbetrag (bis 250 € brutto)“**. Der Filter
 findet nur Rechnungen, deren Bruttobetrag bekannt ist, bei PDF-Rechnungen ohne XML fehlt er
