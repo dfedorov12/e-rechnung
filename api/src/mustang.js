@@ -16,10 +16,10 @@ const MUSTANG_URL = process.env.MUSTANG_URL || 'http://localhost:8090/';
 
 // Standardtext fuer die automatische Zurueckweisung von MINIMUM/BASIC-WL (Punkt 3).
 const TEXT_ZURUECKWEISUNG_MINIMAL =
-  'Ihre Rechnung wurde im ZUGFeRD/Factur-X-Profil MINIMUM bzw. BASIC-WL uebermittelt. '
-  + 'Diese Profile gelten nach §14 UStG nicht als elektronische Rechnung (keine vollstaendigen '
-  + 'Positionsdaten). Bitte uebermitteln Sie eine E-Rechnung im Profil EN16931 (COMFORT) oder '
-  + 'hoeher bzw. als XRechnung.';
+  'Ihre Rechnung wurde im ZUGFeRD/Factur-X-Profil MINIMUM bzw. BASIC-WL übermittelt. '
+  + 'Diese Profile gelten nach § 14 UStG nicht als elektronische Rechnung (keine vollständigen '
+  + 'Positionsdaten). Bitte übermitteln Sie eine E-Rechnung im Profil EN16931 (COMFORT) oder '
+  + 'höher bzw. als XRechnung.';
 
 /**
  * @param {Buffer} buf  ZUGFeRD/Factur-X-PDF oder CII-XML (roh).

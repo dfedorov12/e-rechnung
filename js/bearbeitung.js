@@ -158,7 +158,7 @@ function bhInGenehmigung(b) {
 }
 
 function _bhDatum(iso) {
-  const d = String(iso || '').slice(0, 10);
+  const d = (typeof _monTag === 'function' ? _monTag(iso) : String(iso || '')).slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('.') : d;
 }
 

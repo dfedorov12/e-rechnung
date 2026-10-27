@@ -122,6 +122,67 @@ Automatisierter Cloud-Flow, ein Flow für alle Werke.
      coalesce(body('E-Mail_senden')?['error']?['message'], 'Versand fehlgeschlagen')
      ```
 
+## 4a. Zurückweisung automatisch senden (Eingangs-Flows)
+
+Ist eine E-Rechnung rot (Prüfung nach EN 16931 nicht bestanden) oder im Profil MINIMUM bzw.
+BASIC-WL, liefert der Prüfdienst in `zurueckweisung` Grund und Standardtext. Die
+Eingangs-Flows legen dafür bisher keine Mail an, der Absender erfährt nichts. Mit diesem
+Schritt legen sie einen Auftrag in KreditorMails an, und „Kreditor-Mail senden“ verschickt ihn
+aus dem Werks-Postfach. So steht jede Zurückweisung mit Text und Zeitpunkt in KreditorMails
+und im Monitoring unter „Prüfung, Mails“.
+
+In jedem Eingangs-Flow in der Schleife über die Anlagen nach „Dateieigenschaften
+aktualisieren“:
+
+1. „Neuer Schritt“, **Bedingung**. Links als Ausdruck
+   `empty(body('HTTP_1')?['zurueckweisung'])`, Operator „ist gleich“, rechts `false`
+   (als Ausdruck).
+2. Im Ja-Zweig SharePoint **„Element erstellen“**, Website Rechnungsmonitoring, Liste
+   KreditorMails. Die Felder als Ausdruck:
+   - Titel:
+     ```
+     concat('Ihre Rechnung ', coalesce(body('HTTP_1')?['daten']?['nummer'], items('Auf_alle_anwenden_2')?['name']), ' kann nicht verarbeitet werden')
+     ```
+   - An:
+     ```
+     if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])
+     ```
+   - Werk: `WGC` bzw. `ZAI` (fester Text)
+   - Art: `Zurueckweisung` (fester Text)
+   - MailHtml:
+     ```
+     concat('<p>Guten Tag,</p><p>', body('HTTP_1')?['zurueckweisung']?['text'], '</p><p>Prüfergebnis: ', coalesce(body('HTTP_1')?['hinweis'], ''), '</p><p>Datei: ', items('Auf_alle_anwenden_2')?['name'], '</p>')
+     ```
+   - MailText: derselbe Ausdruck ohne die `<p>`-Teile, oder leer lassen
+   - Rechnung:
+     ```
+     coalesce(body('HTTP_1')?['daten']?['nummer'], body('Datei_erstellen_Original')?['Name'])
+     ```
+   - RechnungKey (verbindet den Auftrag mit der Zeile im Monitoring):
+     ```
+     toLower(concat('e|', substring(body('Datei_erstellen_Original')?['Name'], 0, lastIndexOf(body('Datei_erstellen_Original')?['Name'], '.'))))
+     ```
+   - Lieferant: `coalesce(body('HTTP_1')?['daten']?['steller'], '')`
+   - RechnungUrl:
+     ```
+     concat('https://dihag.sharepoint.com/sites/Rechnungsmonitoring', body('Datei_erstellen_Original')?['Path'])
+     ```
+   - Status: `Wartet`
+   - AngefordertVon: `Eingangs-Flow`
+3. Speichern. „Kreditor-Mail senden“ muss eingeschaltet sein, sonst bleibt der Auftrag auf
+   „Wartet“.
+
+Die Mail geht an den Absender der Rechnungsmail. Hat ein Kollege die Rechnung weitergeleitet,
+bekommt er die Zurückweisung und gibt sie an den Lieferanten weiter.
+
+## 4b. Dateiname beim Eingang mitschreiben
+
+Der Flow benennt jede lesbare Rechnung nach `Rechnungsnummer_USt-IdNr.` um. Den Namen des
+Anhangs sieht man danach nicht mehr. In „Dateieigenschaften aktualisieren“ unter „Erweiterte
+Parameter“ das Feld **„Original-PDF-Name“** dazunehmen und als Ausdruck
+`items('Auf_alle_anwenden_2')?['name']` eintragen. Das Monitoring zeigt ihn in den Details unter
+„Dateien“ als „Dateiname beim Eingang“ (gilt auch für XML-Anhänge).
+
 ## 5. Testen
 
 1. Im Monitoring eine sonstige Rechnung öffnen (Button „800k einschätzen“).

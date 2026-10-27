@@ -25,6 +25,9 @@ let _monZeigen = MON.tabelleSeite;  // gezeichnete Zeilen, waechst mit „Weiter
 let _monAnsicht = '';               // Filter + Sortierung beim letzten Zeichnen
 let _monLadeLauf = 0;               // laufender Ladevorgang (ein neuer bricht den alten ab)
 let _monLaedt = false;
+let _monAufruf = null;               // Argumente des letzten loadMonitoring (für „Aktualisieren“)
+let _monSiteId = '';                 // Monitoring-Site (Versionsverlauf)
+const _monSpaltenTitel = new Map();  // Liste -> Promise<Map(interner Name -> Anzeigename)>
 let _monLibs = [];                  // geladene Bibliotheken (für die Werk-Auswahl)
 let _monDateien = [];               // alle geladenen Dateien (neu zusammenfassen nach Einstellungen)
 const _monOffen = new Set();        // aufgeklappte Zeilen (Schlüssel: Werk|Richtung|Datei)
@@ -38,6 +41,7 @@ let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
 /* ── Laden ──────────────────────────────────────────────────────────── */
 
 async function loadMonitoring(accessList, optionen) {
+  _monAufruf = { accessList, optionen };
   const sub = document.getElementById('mon-subtitle');
   if (sub) sub.textContent = 'Rechnungsbibliotheken werden geladen…';
 
@@ -55,6 +59,7 @@ async function loadMonitoring(accessList, optionen) {
         + `scripts/provision-rechnungsmonitoring.ps1 ausführen.`);
     }
     const siteId = site.id;
+    _monSiteId = siteId;
 
     // Bibliotheken der Site ermitteln
     const listsRes = await _get(
@@ -251,6 +256,8 @@ function _monMap(it, f, lib) {
     datumAusRechnung: !!f.Rechnungsdatum,
     // Absender der Rechnungsmail (Eingangs-Flow) = Empfänger einer Kreditor-Mail
     absenderMail: (f.AbsenderMail || '').toString().trim(),
+    // Name des Anhangs, bevor der Flow die Datei nach Rechnungsnummer umbenannt hat
+    originalName: (f.OriginalPdfName || '').toString().trim(),
     art:      (f.Rechnungsart || '').toString(),
     steller:  (f.Rechnungssteller || '').toString(),
     empf:     (f.Rechnungsempfaenger || '').toString(),
@@ -258,8 +265,10 @@ function _monMap(it, f, lib) {
     netto:    num(f.Nettobetrag),
     bestellnr: (f.Bestellnummer || '').toString(),
     waehrung: (f.Waehrung || 'EUR').toString(),
-    datum:    (f.Rechnungsdatum || f.Eingangszeitpunkt || it.createdDateTime || '').toString(),
-    faelligkeit: (f.Faelligkeitsdatum || '').toString(),
+    // SharePoint liefert Datumsspalten als UTC (27.10. 00:00 Uhr = 2026-10-26T23:00:00Z),
+    // deshalb auf den Kalendertag in Deutschland umrechnen
+    datum:    _monTag(f.Rechnungsdatum || f.Eingangszeitpunkt || it.createdDateTime || ''),
+    faelligkeit: _monTag(f.Faelligkeitsdatum || ''),
     format:   (f.Format || '').toString(),
     status:   (f.Verarbeitungsstatus || '').toString(),
     konform:  (f.Konformitaet || '').toString(),
@@ -740,11 +749,9 @@ function _monZelle(id, r, idx) {
     }
     case 'klass':    return `<td>${_esc(_monKlass(r))}</td>`;
     case 'status': {
-      const stat = r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : '';
-      const gobd = r.gobdArchiviert
-        ? `<div title="${_esc(r.complianceTag ? 'Aufbewahrung: ' + r.complianceTag : 'GoBD-Aufbewahrung gesetzt')}" style="display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:#0a6b2e;background:#e3f5e9;border-radius:3px;padding:1px 6px;">🔒 GoBD</div>`
-        : '';
-      return `<td>${stat}${gobd}</td>`;
+      // Kein GoBD-Abzeichen mehr: alles, was gespeichert wird, liegt unter Aufbewahrung.
+      // Der Stand steht in der Detailansicht unter „Aufbewahrung“.
+      return `<td>${r.status ? `<span class="pill pill-status">${_esc(r.status)}</span>` : ''}</td>`;
     }
     case 'buchung': {
       // Buchungssteuerung + Prüfschritt-Flags (UStAE/GoBD) + 800k-Einschätzung
@@ -901,7 +908,8 @@ function _monDetail(r, idx) {
     + block('Beträge', [['Netto', t(_monGeld(r.netto, r))], ['Brutto', t(_monGeld(r.brutto, r))], ['Bestellnummer', t((b && b.bestellnr) || r.bestellnr)]])
     + block('Prüfung', [['Ergebnis', t(r.konform)], ['Hinweis', t(_monHinweis(r))], ['Status', t(r.status)],
         ['Buchung', t(r.buchung) + (r.buchungAlt ? ` (gespeichert: ${t(r.buchungAlt)})` : '')], ['Prüfschritte', t(flags.join('\n'))],
-        ['Fehler', t(r.fehler)], ['Aufbewahrung', r.gobdArchiviert ? t(r.complianceTag || 'GoBD-Aufbewahrung gesetzt') : '']])
+        ['Fehler', t(r.fehler)], ['Aufbewahrung', r.gobdArchiviert ? t(r.complianceTag || 'GoBD-Aufbewahrung gesetzt') : ''],
+        ['Mails', !sonstige && typeof ugMailsFuer === 'function' ? t(ugMailsFuer(r).slice(0, 3).map(m => _ugMailStand(m)).join(String.fromCharCode(10))) : '']])
     + (sonstige ? block('800.000 €', [
         ['Einschätzung', e ? t(`${(typeof _UG_LABEL !== 'undefined' && _UG_LABEL[e.vermutung]) || e.vermutung}, ${e.vonName || e.von || ''} am ${_monDate(e.am)}`) : 'noch offen'],
         ['Lieferant informiert', t(typeof ugInformiert === 'function' ? ugInformiert(r) : '')], ['Mails', t(mails.join('\n'))]]) : '')
@@ -909,9 +917,122 @@ function _monDetail(r, idx) {
         ['Genehmigung', t([typeof bhGenehmigungsStand === 'function' ? bhGenehmigungsStand(b) : '', b.genehmigt && 'Genehmigt: ' + b.genehmigt,
           b.kommentar && 'Kommentar: ' + b.kommentar].filter(Boolean).join('\n'))],
         ['GF gesehen', b.gfGesehen ? 'Ja' : ''], ['Notiz', t(b.notiz)]]) : '')
-    + (dateien ? `<section><h4>Dateien</h4><div>${dateien}</div></section>` : '')
+    + (dateien ? `<section><h4>Dateien</h4><div>${dateien}</div>${r.originalName && r.originalName !== r.file
+        ? `<p class="mon-det-klein">Dateiname beim Eingang: ${_esc(r.originalName)}</p>` : ''}</section>` : '')
+    + (r.listId && r.itemId ? `<section class="mon-ver"><h4>Versionsverlauf ${r.ext ? '(' + _esc(r.ext.toUpperCase()) + ')' : ''}</h4>
+        <button type="button" class="mon-reset" data-versionen="${idx}">Versionsverlauf anzeigen</button>
+        <div class="mon-ver-liste"></div></section>` : '')
     + (aktionen ? `<div class="mon-det-aktionen">${aktionen}</div>` : '')
     + `</div>`;
+}
+
+/* ── Versionsverlauf einer Datei ───────────────────────────────────── */
+
+// Felder, die SharePoint selbst pflegt: nicht als Änderung zeigen
+const MON_VER_OHNE = /^(@|_|id$|Created|Modified|Author|Editor|ContentType|Edit$|LinkTitle|LinkFilename|DocIcon|ItemChildCount|FolderChildCount|AppAuthor|AppEditor|FileSizeDisplay|File_x0020_Size|SMTotal|ParentVersionString|ParentLeafName|ComplianceAssetId|Attachments)/;
+
+function _monSpaltenTitelLaden(listId, token) {
+  if (!_monSpaltenTitel.has(listId)) {
+    _monSpaltenTitel.set(listId,
+      _monGet(`${SP.graphBase}/sites/${_monSiteId}/lists/${listId}/columns?$select=name,displayName,hidden`, token)
+        .then(d => new Map((d.value || []).filter(c => !c.hidden).map(c => [c.name, c.displayName])))
+        .catch(() => new Map()));
+  }
+  return _monSpaltenTitel.get(listId);
+}
+
+/** Feldwert einer Version lesbar machen. */
+function _monVerWert(v) {
+  if (v == null || v === '') return '–';
+  if (typeof v === 'boolean') return v ? 'Ja' : 'Nein';
+  if (Array.isArray(v)) return v.map(_monVerWert).join(', ');
+  if (typeof v === 'object') return String(v.LookupValue || v.displayName || v.Email || JSON.stringify(v));
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}.*Z$/.test(s)) {
+    const zeit = new Date(s).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+    return _monDate(s) + (zeit === '00:00' ? '' : ' ' + zeit);
+  }
+  return s;
+}
+
+/**
+ * Versionen einer Datei als aufklappbare Liste, neueste oben. Jede Zeile nennt Zeit,
+ * Person und die geänderten Spalten. Aufgeklappt zeigt sie alle Werte dieser Version
+ * und öffnet die Datei, wie sie in dieser Version war.
+ */
+function _monVersionenHtml(versionen, titel) {
+  if (!versionen.length) return '<p class="mon-det-klein">Keine Versionen gefunden.</p>';
+  const alt = versionen.slice().sort((a, b) => parseFloat(a.id) - parseFloat(b.id));
+  const kurz = s => (s.length > 70 ? s.slice(0, 68) + '…' : s);
+  const groesse = f => f.FileSizeDisplay || f.File_x0020_Size || f.SMTotalFileStreamSize || '';
+  const zeilen = alt.map((v, i) => {
+    const f = v.fields || {};
+    const vorher = i > 0 ? (alt[i - 1].fields || {}) : null;
+    const sichtbar = k => !MON_VER_OHNE.test(k) && titel.has(k);
+    const aend = [];
+    if (vorher) {
+      if (groesse(f) && groesse(vorher) && String(groesse(f)) !== String(groesse(vorher))) aend.push('Datei ersetzt');
+      Array.from(new Set(Object.keys(f).concat(Object.keys(vorher)))).filter(sichtbar).forEach(k => {
+        // leer, fehlend und „Nein“ gelten als gleich (SharePoint lässt leere Felder weg)
+        const norm = x => (x === false || x === '' || x == null ? null : x);
+        if (JSON.stringify(norm(f[k])) !== JSON.stringify(norm(vorher[k]))) {
+          aend.push(`${titel.get(k)}: ${kurz(_monVerWert(vorher[k]))} → ${kurz(_monVerWert(f[k]))}`);
+        }
+      });
+    }
+    const wer = v.lastModifiedBy ? ((v.lastModifiedBy.user || v.lastModifiedBy.application || {}).displayName || '') : '';
+    const was = !vorher ? 'angelegt' : aend.length ? aend.join('; ') : 'ohne sichtbare Änderung';
+    const werte = Object.keys(f).filter(sichtbar).filter(k => f[k] != null && f[k] !== '')
+      .sort((a, b) => titel.get(a).localeCompare(titel.get(b), 'de'))
+      .map(k => `<dt>${_esc(titel.get(k))}</dt><dd>${_esc(_monVerWert(f[k]))}</dd>`).join('');
+    const neueste = i === alt.length - 1;
+    return `<details class="mon-ver-v">
+      <summary><b>Version ${_esc(v.id)}</b> · ${_esc(_monVerWert(v.lastModifiedDateTime))}${wer ? ' · ' + _esc(wer) : ''}
+        <span class="mon-ver-was">${_esc(was)}</span></summary>
+      <dl>${werte}</dl>
+      <button type="button" class="mon-reset" data-ver-datei="${_esc(v.id)}"${neueste ? ' data-ver-neu' : ''}>Datei dieser Version öffnen</button>
+    </details>`;
+  });
+  return zeilen.reverse().join('');
+}
+
+async function _monVersionenZeigen(knopf) {
+  const r = _monRows[Number(knopf.getAttribute('data-versionen'))];
+  const ziel = knopf.parentElement.querySelector('.mon-ver-liste');
+  if (!r || !ziel) return;
+  knopf.disabled = true;
+  knopf.textContent = 'Wird geladen…';
+  try {
+    const token = await acquireToken(SP.scopes);
+    const url = `${SP.graphBase}/sites/${_monSiteId}/lists/${r.listId}/items/${r.itemId}/versions`;
+    const [d, titel] = await Promise.all([_monGet(url, token), _monSpaltenTitelLaden(r.listId, token)]);
+    ziel.innerHTML = _monVersionenHtml(d.value || [], titel);
+    knopf.textContent = 'Neu laden';
+  } catch (e) {
+    ziel.innerHTML = `<p class="mon-det-klein">Versionen nicht lesbar: ${_esc(e.message || String(e))}</p>`;
+    knopf.textContent = 'Versionsverlauf anzeigen';
+  }
+  knopf.disabled = false;
+}
+
+/** Datei so öffnen, wie sie in einer Version war (neueste: aktuelle Datei). */
+async function _monVersionDateiOeffnen(r, versionId, neueste) {
+  const fenster = window.open('', '_blank');
+  try {
+    const token = await acquireToken(SP.scopes);
+    const basis = `${SP.graphBase}/sites/${_monSiteId}/lists/${r.listId}/items/${r.itemId}/driveItem`;
+    const resp = await fetch(neueste ? `${basis}/content` : `${basis}/versions/${encodeURIComponent(versionId)}/content`,
+      { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!resp.ok) throw new Error(`Datei (${resp.status})`);
+    const typ = { xml: 'text/xml', pdf: 'application/pdf' }[r.ext] || '';
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(typ ? new Blob([blob], { type: typ }) : blob);
+    if (fenster) fenster.location = url; else window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    if (fenster) fenster.close();
+    window.alert(`Version ${versionId} ließ sich nicht öffnen: ${e.message || e}`);
+  }
 }
 
 function _monZeileUmschalten(tr) {
@@ -1206,7 +1327,7 @@ function _monPartnerCell(r) {
   const name = p.quelle === 'einschaetzung'
     ? `<span title="Bei der 800k-Einschätzung bestätigt, nicht aus der Rechnung gelesen" style="font-style:italic;">${_esc(p.name)}</span>`
     : _esc(p.name);
-  // Absender der Rechnungsmail (vom Eingangs-Flow, also sicher), grün wie das GoBD-Abzeichen
+  // Absender der Rechnungsmail (vom Eingangs-Flow, also sicher)
   const mail = r.richtung === 'Eingang' && r.absenderMail
     ? `<div class="mon-mail" title="Absender der Rechnungsmail">✉ ${_esc(r.absenderMail)}</div>` : '';
   return (name + mail) || '<span style="color:#9ca3af;">–</span>';
@@ -1240,8 +1361,20 @@ function _monHinweis(r) {
 }
 
 // Datum kompakt einzeilig: ISO (YYYY-MM-DD…) -> TT.MM.JJJJ, sonst unverändert.
+/**
+ * Kalendertag (JJJJ-MM-TT) in Deutschland. Zeitpunkte mit Uhrzeit und Zeitzone
+ * (SharePoint: UTC) werden umgerechnet, reine Tage bleiben, wie sie sind.
+ */
+function _monTag(s) {
+  const t = String(s || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}.*(Z|[+-]\d{2}:?\d{2})$/.test(t)) return t;
+  const d = new Date(t);
+  if (isNaN(d)) return t;
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
 function _monDate(s) {
-  const d = String(s || '').slice(0, 10);
+  const d = _monTag(s).slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('.') : d;
 }
 
@@ -1375,6 +1508,12 @@ function monInitFilterEvents() {
   if (q) q.addEventListener('input', () => { _monFilter.q = q.value; _monApply(); });
   const reset = document.getElementById('mon-reset');
   if (reset) reset.addEventListener('click', _monResetFilters);
+  // Neu laden ohne Seitenwechsel. Filter, Sortierung und das gewählte Werk bleiben.
+  const neu = document.getElementById('mon-aktualisieren');
+  if (neu) neu.addEventListener('click', () => {
+    if (!_monAufruf) return;
+    loadMonitoring(_monAufruf.accessList, Object.assign({}, _monAufruf.optionen, { standardWerk: '' }));
+  });
 
   // KPI-Kacheln als Schnellfilter (Klick + Tastatur), per Event-Delegation.
   const kpis = document.getElementById('mon-kpis');
@@ -1421,7 +1560,15 @@ function monInitFilterEvents() {
       if (r) ugDialogOeffnen(r, () => _monApply());
       return;
     }
-    if (e.target.closest('a, button, input, select, textarea, label')) return;
+    const ver = e.target.closest('[data-versionen]');
+    if (ver) { _monVersionenZeigen(ver); return; }
+    const verDatei = e.target.closest('[data-ver-datei]');
+    if (verDatei) {
+      const r = _monRows[Number(verDatei.closest('.mon-ver').querySelector('[data-versionen]').getAttribute('data-versionen'))];
+      if (r) _monVersionDateiOeffnen(r, verDatei.getAttribute('data-ver-datei'), verDatei.hasAttribute('data-ver-neu'));
+      return;
+    }
+    if (e.target.closest('a, button, input, select, textarea, label, summary')) return;
     if (String(window.getSelection ? window.getSelection() : '').trim()) return;
     const tr = e.target.closest('tr.mon-zeile');
     if (tr) _monZeileUmschalten(tr);

@@ -61,16 +61,16 @@ const { feldGrenzen } = require('../feldlaenge');
 // fehlendes PDF/A-3 bzw. fehlende eingebettete XML -> "sonstige Rechnung", nicht
 // ablehnen, unter Vorbehalt buchen, Berichtigung anfordern).
 const TEXT_BERICHTIGUNG_FORMAT =
-  'Ihre Rechnung erfuellt nicht das gesetzliche E-Rechnungs-Format (PDF/A-3 fehlerhaft '
+  'Ihre Rechnung erfüllt nicht das gesetzliche E-Rechnungs-Format (PDF/A-3 fehlerhaft '
   + 'bzw. keine eingebettete XML). Wir verarbeiten sie als sonstige Rechnung unter '
-  + 'Vorbehalt; bitte uebermitteln Sie eine korrigierte E-Rechnung (XRechnung oder '
-  + 'ZUGFeRD/Factur-X, Profil EN16931 oder hoeher).';
+  + 'Vorbehalt. Bitte übermitteln Sie eine korrigierte E-Rechnung (XRechnung oder '
+  + 'ZUGFeRD/Factur-X, Profil EN16931 oder höher).';
 
 // Zurueckweisung bei Fehlern in der Pruefung nach EN 16931 (Pruefergebnis rot).
 const TEXT_ZURUECKWEISUNG_FEHLER =
-  'Ihre E-Rechnung hat die Pruefung nach EN 16931 nicht bestanden und ist so keine gueltige '
-  + 'E-Rechnung. Wir koennen sie nicht verarbeiten und bitten Sie um eine korrigierte '
-  + 'E-Rechnung (XRechnung oder ZUGFeRD/Factur-X, Profil EN16931 oder hoeher).';
+  'Ihre E-Rechnung hat die Prüfung nach EN 16931 nicht bestanden und ist so keine gültige '
+  + 'E-Rechnung. Wir können sie nicht verarbeiten und bitten Sie um eine korrigierte '
+  + 'E-Rechnung (XRechnung oder ZUGFeRD/Factur-X, Profil EN16931 oder höher).';
 
 app.http('intake', {
   methods: ['GET', 'POST'],

@@ -206,6 +206,21 @@ Läuft schon eine Genehmigung, fragt der Dialog vor einer neuen nach. Steht an e
 länger als einige Minuten „Angefordert bei …, wartet auf den Flow“, läuft der Flow für dieses
 Werk nicht. Dann die IT informieren.
 
+„↻ Aktualisieren“ oben rechts lädt die Rechnungen neu. Filter, Sortierung und das gewählte
+Werk bleiben stehen.
+
+### Versionsverlauf
+
+In den Details jeder Rechnung zeigt „Versionsverlauf anzeigen“ alle Versionen der Datei,
+neueste oben: wann, von wem (bei Flow-Schritten das Konto der Flow-Verbindung) und welche
+Spalten sich geändert haben, etwa „Buchung: Automatik → Unter Vorbehalt“ oder „Datei ersetzt“.
+Ein Klick auf eine Version klappt alle Werte dieser Version auf. „Datei dieser Version öffnen“
+zeigt die Datei so, wie sie damals war.
+
+Das hilft vor allem, wenn zwei Rechnungen mit derselben Rechnungsnummer und USt-IdNr.
+eingehen. Der Flow benennt beide gleich, die zweite ersetzt die erste als neue Version. Die
+erste bleibt im Versionsverlauf erhalten und lässt sich dort öffnen.
+
 ## Personen aus dem Firmenverzeichnis vorschlagen
 
 Für die Suche nach Name oder Mail braucht die App „DIHAG-E-Rechnung“ das delegierte Recht
