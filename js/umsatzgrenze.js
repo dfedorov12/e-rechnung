@@ -450,12 +450,17 @@ function _ugAbsenderOk(mail) {
   return !(eigen && m.endsWith('@' + eigen));
 }
 
+/** Erste brauchbare Adresse aus der Spalte AbsenderMail (Reply-To kann mehrere enthalten). */
+function _ugAbsenderWahl(feld) {
+  return String(feld || '').split(/[;,\s]+/).find(_ugAbsenderOk) || '';
+}
+
 function ugDialogOeffnen(r, onGespeichert) {
   const dlg = document.getElementById('ug-dialog');
   if (!dlg) return;
   const e = ugFuer(r);
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
-  const absender = _ugAbsenderOk(r.absenderMail) ? r.absenderMail : '';
+  const absender = _ugAbsenderWahl(r.absenderMail);
   _ugAktuell = {
     r, onGespeichert, bisher: e,
     vermutung: e ? e.vermutung : '',
@@ -791,5 +796,5 @@ async function _ugAbschliessen(modus) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { UG, UG_MAIL_ART, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage,
-    ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, _ugAbsenderOk, _ug };
+    ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, _ugAbsenderOk, _ugAbsenderWahl, _ug };
 }

@@ -88,7 +88,7 @@ $Felder = @(
   @{ Name='Rechnungssteller';    Titel='Rechnungssteller';           Typ='Text' }   # js/sharepoint.js
   @{ Name='RechnungsstellerUStID'; Titel='USt-IdNr. Rechnungssteller'; Typ='Text' }
   @{ Name='Rechnungsempfaenger'; Titel='Rechnungsempfaenger';        Typ='Text' }   # js/sharepoint.js
-  @{ Name='AbsenderMail';        Titel='Absender der Rechnungsmail'; Typ='Text' }   # Eingangs-Flow: triggerOutputs()?['body/from'], Empfaenger der Kreditor-Mail
+  @{ Name='AbsenderMail';        Titel='Absender der Rechnungsmail'; Typ='Text' }   # Eingangs-Flow: Reply-To, sonst body/from (Kreditor-Mail-Flow.md), Empfaenger der Kreditor-Mail
   @{ Name='Waehrung';            Titel='Waehrung';                   Typ='Text' }
   @{ Name='Nettobetrag';         Titel='Nettobetrag';                Typ='Currency' } # js/sharepoint.js
   @{ Name='MwStBetrag';          Titel='MwSt-Betrag';                Typ='Currency' } # js/sharepoint.js

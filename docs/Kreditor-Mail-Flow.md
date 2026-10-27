@@ -62,8 +62,11 @@ In jedem Eingangs-Flow (WGC und ZAI) in der Aktion **„Dateieigenschaften aktua
 Feld **„Absender der Rechnungsmail“** setzen:
 
 ```
-triggerOutputs()?['body/from']
+if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])
 ```
+
+Die Antwortadresse (Reply-To) geht vor, weil manche Lieferanten von einer noreply-Adresse senden
+und die Antwortadresse auf ihre Buchhaltung setzen. Ohne Reply-To bleibt es der Absender.
 
 Dann steht die Adresse des Lieferanten bei jeder neuen Rechnung im Monitoring und der Dialog
 trägt sie unter „An“ vor. Bei älteren Rechnungen gibt man sie im Dialog selbst ein. Die

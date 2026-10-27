@@ -114,6 +114,8 @@ ok(!ug._ugAbsenderOk('scanner@dihag.com'), 'Scanner im Haus nicht');
 ok(!ug._ugAbsenderOk('erika.muster@dihag-zaigler.com'), 'weitergeleitet von Kollegin nicht');
 ok(!ug._ugAbsenderOk('noreply@lieferant.de'), 'noreply nicht');
 ok(!ug._ugAbsenderOk(''), 'leer nicht');
+ok(ug._ugAbsenderWahl('noreply@lieferant.de;buchhaltung@lieferant.de') === 'buchhaltung@lieferant.de', 'Reply-To mit mehreren Adressen');
+ok(ug._ugAbsenderWahl('scanner@dihag.com') === '', 'nur interne Adresse: keine');
 delete global.istEigeneMail;
 
 console.log(`umsatzgrenze: ${n} Pruefungen gruen`);

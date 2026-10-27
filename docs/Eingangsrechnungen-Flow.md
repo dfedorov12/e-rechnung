@@ -182,7 +182,7 @@ ausblenden würde. `dateibasis` bleibt leer, der Dateiname kommt weiter aus dem 
 `kleinunternehmer = true`, wenn die Rechnung auf § 19 UStG verweist.
 
 Für Kreditor-Mails aus dem Werks-Postfach schreibt jeder Eingangs-Flow zusätzlich den
-Absender der Rechnungsmail in die Spalte `AbsenderMail` (`triggerOutputs()?['body/from']`),
+Absender der Rechnungsmail in die Spalte `AbsenderMail` (Reply-To, sonst Absender: `if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])`),
 siehe [Kreditor-Mail-Flow.md](Kreditor-Mail-Flow.md).
 
 ## WGC und ZAI: was sich unterscheidet

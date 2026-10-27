@@ -77,8 +77,11 @@ WGC-Flow):
    wird.
 4. In das Feld klicken, „fx“ (Ausdruck) wählen, eintragen und „Hinzufügen“:
    ```
-   triggerOutputs()?['body/from']
+   if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])
    ```
+   Das nimmt die Antwortadresse (Reply-To), wenn der Lieferant eine gesetzt hat, sonst den
+   Absender. Nur `body/replyTo` reicht nicht, die meisten Mails haben keine Antwortadresse und
+   das Feld bliebe leer.
 5. „Speichern“.
 
 Rechnungen, die vorher eingegangen sind, haben keinen Absender. Dort trägt die Buchhaltung die
