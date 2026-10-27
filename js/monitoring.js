@@ -668,14 +668,37 @@ function _monEigeneBreiten() {
 function _monEigeneBreitenSpeichern(alle) {
   try { localStorage.setItem('mon-breiten', JSON.stringify(alle)); } catch (e) { /* ohne Speicher */ }
 }
+// Wann die eigenen Breiten eines Werks zuletzt gezogen wurden: { <Werk>: ISO-Zeit }
+function _monEigeneBreitenAm() {
+  try { return JSON.parse(localStorage.getItem('mon-breiten-am') || '{}') || {}; } catch (e) { return {}; }
+}
 
-/** Breite einer Spalte: eigene, sonst Standard des Werks (vom Admin), sonst Vorgabe. */
+/**
+ * Eigene Breiten, die noch gelten. Speichert ein Admin Standardbreiten, gelten sie für
+ * alle: eigene Breiten von davor fallen weg (auch ältere ohne Zeitstempel). Wer danach
+ * zieht, behält seine Breiten bis zum nächsten Standard.
+ */
+function _monEigeneAktiv(w) {
+  const eigene = _monEigeneBreiten()[w] || {};
+  const std = (typeof bhWerkEinst === 'function' && bhWerkEinst(w)) || {};
+  if (!std.breiten || !Object.keys(std.breiten).length) return eigene;
+  const am = _monEigeneBreitenAm()[w] || '';
+  return am && am > (std.breitenStand || '') ? eigene : {};
+}
+
+/**
+ * Breite einer Spalte: eigene, sonst Standard des Werks (vom Admin), sonst der Standard
+ * eines anderen Werks (ohne Werkfilter zeigt die Tabelle Spalten mehrerer Werke), sonst Vorgabe.
+ */
 function _monBreite(sp) {
   const w = _monAnsichtWerk || '';
-  const eigen = (_monEigeneBreiten()[w] || {})[sp.id];
+  const eigen = _monEigeneAktiv(w)[sp.id];
   if (eigen) return eigen;
   const std = (typeof bhWerkEinst === 'function' && bhWerkEinst(w).breiten) || {};
-  return std[sp.id] || sp.breite * MON_EINHEIT;
+  if (std[sp.id]) return std[sp.id];
+  const werke = (typeof _bh !== 'undefined' && _bh.einst && _bh.einst.werke) || {};
+  const andere = Object.values(werke).find(e => e && e.breiten && e.breiten[sp.id]);
+  return andere ? andere.breiten[sp.id] : sp.breite * MON_EINHEIT;
 }
 
 /**
@@ -710,9 +733,8 @@ function _monRenderKopf(spalten) {
     ? `<th data-sort="${sp.sort}">${_esc(sp.titel)}<span class="sort-ind"></span>${griff(sp)}</th>`
     : `<th>${_esc(sp.titel)}${griff(sp)}</th>`).join('') + '<th class="mon-fueller"></th>';
   _monTabBreiteSetzen();
-  const eigene = _monEigeneBreiten()[_monAnsichtWerk || ''];
   const zurueck = document.getElementById('mon-breiten-zurueck');
-  if (zurueck) zurueck.hidden = !(eigene && Object.keys(eigene).length);
+  if (zurueck) zurueck.hidden = !Object.keys(_monEigeneAktiv(_monAnsichtWerk || '')).length;
 }
 
 function _monGeld(v, r) {
@@ -1149,8 +1171,12 @@ function _monAnsichtEvents() {
       if (zug.neu) {
         const alle = _monEigeneBreiten();
         const w = _monAnsichtWerk || '';
-        alle[w] = Object.assign({}, alle[w], { [zug.id]: zug.neu });
+        // Breiten von vor dem letzten Standard gelten nicht mehr: mit dieser einen neu anfangen
+        alle[w] = Object.assign({}, _monEigeneAktiv(w), { [zug.id]: zug.neu });
         _monEigeneBreitenSpeichern(alle);
+        const am = _monEigeneBreitenAm();
+        am[w] = new Date().toISOString();
+        try { localStorage.setItem('mon-breiten-am', JSON.stringify(am)); } catch (e) { /* ohne Speicher */ }
         _monGriffZeit = Date.now();
         const zurueck = document.getElementById('mon-breiten-zurueck');
         if (zurueck) zurueck.hidden = false;
@@ -1210,7 +1236,7 @@ function _monSpaltenDialog(werk) {
     // Ansicht oder eines anderen Werks (gespeichert wird je Werk der Ansicht beim Ziehen).
     const alleEigenen = _monEigeneBreiten();
     const breitenQuelle = [w, _monAnsichtWerk || ''].concat(Object.keys(alleEigenen))
-      .find(k => Object.keys(alleEigenen[k] || {}).length);
+      .find(k => Object.keys(_monEigeneAktiv(k)).length);
     dlg.innerHTML = `
       <form method="dialog" class="ug-form">
         <div class="ug-kopf"><h3>Spalten je Werk</h3><button type="button" class="ug-x" data-sp-zu aria-label="Schließen">✕</button></div>
@@ -1280,7 +1306,9 @@ function _monSpaltenDialog(werk) {
         const teil = { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked };
         const breitenWahl = dlg.querySelector('#sp-breiten');
         if (breitenWahl && breitenWahl.checked) {
-          teil.breiten = _monBreitenWieAngezeigt(Object.assign({}, bhWerkEinst(w).breiten, _monEigeneBreiten()[breitenQuelle]));
+          teil.breiten = _monBreitenWieAngezeigt(Object.assign({}, bhWerkEinst(w).breiten, _monEigeneAktiv(breitenQuelle)));
+          // ab jetzt gilt der Standard für alle, auch für die, die vorher selbst gezogen haben
+          teil.breitenStand = new Date().toISOString();
         }
         await bhEinstSpeichern(dlg.querySelector('#sp-umfang').value === 'alle' ? werke : w, teil);
         dlg.close();

@@ -253,7 +253,10 @@ Der Knopf **„Spalten“** neben „Zurücksetzen“ ist nur für Admins sichtb
 Unter **„Speichern für“** gilt die Einstellung nur für das gewählte Werk oder für alle Werke
 auf einmal. Mit **„Meine Spaltenbreiten als Standard für alle übernehmen“** werden die
 Breiten, die die Tabelle beim Admin gerade zeigt, zum Standard für alle Benutzer. Spalten in
-Vorgabebreite werden nicht gespeichert. Wer selbst zieht, behält seine eigenen Breiten.
+Vorgabebreite werden nicht gespeichert. Der neue Standard gilt auch bei denen, die vorher
+selbst gezogen haben. Wer danach selbst zieht, behält seine Breiten bis zum nächsten Standard.
+Hat ein Werk keinen eigenen Standard für eine Spalte (etwa in der Ansicht aller Werke), gilt
+der Standard eines anderen Werks.
 
 Ist im Filter ein Werk gewählt, zeigt die Tabelle genau dessen Spalten in dessen
 Reihenfolge. Ohne Werkfilter zeigt sie die Spalten aller Werke zusammen, in der Reihenfolge
