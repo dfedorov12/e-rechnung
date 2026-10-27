@@ -669,6 +669,21 @@ function _monBreite(sp) {
   return std[sp.id] || sp.breite * MON_EINHEIT;
 }
 
+/**
+ * Breiten, wie die Tabelle sie gerade zeigt, über die übergebenen legen. Spalten in
+ * Vorgabebreite fallen heraus, damit eine spätere Änderung der Vorgabe wirkt.
+ */
+function _monBreitenWieAngezeigt(basis) {
+  const breiten = Object.assign({}, basis);
+  document.querySelectorAll('#mon-cols col[data-sp]').forEach(c => {
+    const sp = MON_SPALTEN.find(x => x.id === c.dataset.sp);
+    const px = Math.round(parseFloat(c.style.width) || 0);
+    if (!sp || !px) return;
+    if (px === sp.breite * MON_EINHEIT) delete breiten[sp.id]; else breiten[sp.id] = px;
+  });
+  return breiten;
+}
+
 function _monTabBreiteSetzen() {
   const summe = Array.from(document.querySelectorAll('#mon-cols col[data-sp]'))
     .reduce((a, c) => a + (parseFloat(c.style.width) || 0), 0);
@@ -1069,14 +1084,12 @@ function _monSpaltenDialog(werk) {
     const reihe = ids.filter(id => MON_SPALTEN.some(sp => sp.id === id))
       .concat(MON_SPALTEN.map(sp => sp.id).filter(id => !ids.includes(id)));
     const bh = bhBearbeitenAn(w);
-    // Eigene Breiten liegen unter dem Werk, das die Tabelle beim Ziehen zeigte (ohne
-    // Filter das Werk mit den meisten Rechnungen). Hat das gewählte Werk keine, gelten
-    // die der aktuellen Ansicht, sonst die eines anderen Werks.
+    // Maßgeblich ist, was die Tabelle gerade zeigt (_monBreitenWieAngezeigt). Für Spalten,
+    // die dort nicht zu sehen sind, gelten die eigenen Breiten des Werks, sonst die der
+    // Ansicht oder eines anderen Werks (gespeichert wird je Werk der Ansicht beim Ziehen).
     const alleEigenen = _monEigeneBreiten();
-    const breitenQuelle = [w, _monAnsichtWerk].concat(Object.keys(alleEigenen))
-      .find(k => k && Object.keys(alleEigenen[k] || {}).length) || '';
-    const breitenText = !breitenQuelle ? ' <small>(noch keine gezogen)</small>'
-      : breitenQuelle !== w ? ` <small>(gezogen in der Ansicht ${_esc(breitenQuelle)})</small>` : '';
+    const breitenQuelle = [w, _monAnsichtWerk || ''].concat(Object.keys(alleEigenen))
+      .find(k => Object.keys(alleEigenen[k] || {}).length);
     dlg.innerHTML = `
       <form method="dialog" class="ug-form">
         <div class="ug-kopf"><h3>Spalten je Werk</h3><button type="button" class="ug-x" data-sp-zu aria-label="Schließen">✕</button></div>
@@ -1095,7 +1108,7 @@ function _monSpaltenDialog(werk) {
         <label class="ug-lbl">Speichern für<select id="sp-umfang">
           <option value="werk">nur ${_esc(w)}</option>
           <option value="alle">alle Werke (${_esc(werke.join(', '))})</option></select></label>
-        <label class="bh-check"><input type="checkbox" id="sp-breiten"${breitenQuelle ? '' : ' disabled'}> Meine Spaltenbreiten als Standard für alle übernehmen${breitenText}</label>
+        <label class="bh-check"><input type="checkbox" id="sp-breiten"> Meine Spaltenbreiten als Standard für alle übernehmen <small>(wie die Tabelle sie gerade zeigt)</small></label>
         <p class="ug-hinweis">Die Einstellungen gelten für alle, die das Monitoring nutzen. Eigene Breiten, die jemand selbst zieht, gehen vor. Ist kein Werk gefiltert, zeigt die Tabelle die Spalten aller Werke, Zellen eines Werks ohne die Spalte bleiben leer.</p>
         <p class="ug-meldung" id="sp-meldung" role="status"></p>
         <div class="ug-aktionen">
@@ -1146,7 +1159,7 @@ function _monSpaltenDialog(werk) {
         const teil = { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked };
         const breitenWahl = dlg.querySelector('#sp-breiten');
         if (breitenWahl && breitenWahl.checked) {
-          teil.breiten = Object.assign({}, bhWerkEinst(w).breiten, _monEigeneBreiten()[breitenQuelle]);
+          teil.breiten = _monBreitenWieAngezeigt(Object.assign({}, bhWerkEinst(w).breiten, _monEigeneBreiten()[breitenQuelle]));
         }
         await bhEinstSpeichern(dlg.querySelector('#sp-umfang').value === 'alle' ? werke : w, teil);
         dlg.close();
