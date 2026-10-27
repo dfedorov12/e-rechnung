@@ -205,6 +205,10 @@ async function autoFillFromPDF() {
     const count = fillFormFromExtracted(data);
     await _kundenMailVorschlagen(data);
     showLoading(false);
+    if (data.proforma) {
+      showToast('Proformarechnung: Das ist keine Rechnung im Sinne von § 14 UStG, dafür gibt es keine E-Rechnungspflicht. '
+        + 'Sie geht wie bisher als PDF.', 'info');
+    }
     const umfang = _umfang(data.gesellschaft, data.kaeuferland);
     if (umfang === 'ausland') {
       showToast(`Kunde im Ausland (${data.kaeuferland}): Für ${data.gesellschaft} gibt es dafür keine E-Rechnungspflicht, `
@@ -1114,7 +1118,11 @@ async function createInvoiceMail() {
 
 /** Erstellt einen Outlook-Entwurf mit Anhang direkt im Postfach (Graph). */
 async function _createOutlookDraft(token, data, subject, body, attachments) {
+  // Werke mit eigenem Rechnungspostfach (EWA: invoicing@): Absender ist das Postfach.
+  // Senden klappt nur mit „Senden als" oder „Senden im Auftrag von" auf das Postfach.
+  const postfach = typeof werkVersandPostfach === 'function' ? werkVersandPostfach(data.gesellschaft) : '';
   const message = {
+    ...(postfach ? { from: { emailAddress: { address: postfach } } } : {}),
     subject,
     body: { contentType: 'Text', content: body },
     toRecipients: data.kaeufermail
@@ -1243,6 +1251,11 @@ function _preflightChecks(data, totals) {
   }
   if (hard.length) {
     showToast('Prüfung fehlgeschlagen: ' + hard.join(' · '), 'error');
+    return false;
+  }
+  if (_extractedSnapshot && _extractedSnapshot.proforma
+    && !window.confirm('Der Beleg ist eine Proformarechnung. Sie ist keine Rechnung im Sinne von § 14 UStG und geht '
+      + 'üblicherweise als PDF. Trotzdem als E-Rechnung erzeugen?')) {
     return false;
   }
 

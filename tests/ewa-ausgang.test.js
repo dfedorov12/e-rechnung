@@ -10,7 +10,7 @@ const ctx = { console: { log() {}, warn() {}, error() {} }, window: {}, Math, Da
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/parser.js'), 'utf8')
   + fs.readFileSync(path.join(__dirname, '../js/xrechnung.js'), 'utf8')
-  + '\nthis.parse = extractInvoiceDataFromItems; this.skonto = _skontoZeile; this.buildXML = buildXML; this.nurInland = werkNurInland;', ctx);
+  + '\nthis.parse = extractInvoiceDataFromItems; this.skonto = _skontoZeile; this.buildXML = buildXML; this.nurInland = werkNurInland; this.versand = werkVersandPostfach;', ctx);
 
 let n = 0;
 const gleich = (ist, soll, m) => { assert.deepStrictEqual(ist, soll, m + ': ' + JSON.stringify(ist)); n++; };
@@ -93,6 +93,8 @@ gleich([r.kaeufer, r.kaeuferzusatz, r.kaeuferstrasse, r.kaeuferplz, r.kaeufersta
 gleich([r.lieferName, r.lieferStrasse, r.lieferPlz, r.lieferStadt], ['Muster-Armaturen Werk 2', 'Am Hafen 3', '54321', 'Beispielort'], 'Versandanschrift');
 gleich([r.kundennummer, r.kaeufervat, r.bestellnummer, r.lieferscheinnummer, r.lieferdatum], ['1099999', 'DE999999999', '4500012345', '80099999', '2026-10-20'], 'Kopfwerte rechts');
 gleich(r.verkaeufkontakt, 'Erika Muster', 'Sachbearbeiter in einem Textstück');
+gleich([r.verkaeuferemail, r.verkaeuftel], ['invoicing@ewa-guss.de', '+49 3628 596 101'], 'Rechnungspostfach statt info@, ohne Durchwahl die Zentrale');
+gleich(r.proforma, undefined, 'keine Proformarechnung');
 gleich(r.faelligkeitsdatum, '2026-11-19', 'Fälligkeit = Datum ohne Abzug');
 gleich([r.steuerkategorie, r.steuerbetrag, r.gesamtbetrag], ['S', 4790.93, 30004.24], 'Steuer');
 gleich(r.positionen.length, 3, 'zwei Positionen und Verpackungszuschlag');
@@ -196,5 +198,32 @@ gleich(/marchandises/.test(r.positionen[0].details), false, 'zweite Zeile der Wa
 gleich(r.faelligkeitsdatum, '2026-09-20', 'Fälligkeit französisch');
 
 gleich([ctx.nurInland('EWA'), ctx.nurInland('EIS'), ctx.nurInland('ZAI')], [true, true, false], 'EWA wie EIS nur Inland ohne Rückfrage');
+
+// 5) Durchwahl im Kopf, Proformarechnung ohne Bankverbindung
+r = beleg([
+  [741, [R, 'Proformarechnung']],
+  [725, [R, 'Nummer'], [W, '92099009']],
+  [721, [L, 'Eisenwerk Arnstadt GmbH |'], [0.188, 'Bierweg 4 | 99310 Arnstadt']],
+  [710, [R, 'Datum'], [W, '20.10.2026']],
+  [705, [L, 'Beispiel Muster GmbH']],
+  [695, [R, 'Kundenauftrag'], [W, '5399']],
+  [693, [L, 'Werkstraße 7']],
+  [680, [L, '12345 Musterstadt'], [R, 'Referenznummer'], [W, '4500012399']],
+  [650, [R, 'Kundennummer'], [W, '1099999']],
+  [589, [R, 'Sachbearbeiter'], [W, 'Erika Muster']],
+  [576, [R, 'Telefon'], [W, '+49 3628 596 123']],
+  [560, [0.845, 'Währung'], [0.936, 'EUR']],
+  [524, [L, 'Zahlungsbedingungen'], [0.267, 'Vorkasse']],
+  [440, [POS, '10'], [LB, 'Material'], [VAL, '3009999 Gehäuse DN 50']],
+  [410, [LB, 'Menge'], [VAL, '10 ST']],
+  [395, [LB, 'Konditionen'], [VAL, 'Preis'], [0.601, '10,00 EUR'], [0.712, 'pro'], [0.776, '1 ST'], [0.897, '100,00']],
+  [245, [L, 'Gesamtbetrag ohne Steuer'], [0.897, '100,00']],
+  [215, [L, 'Umsatzsteuer 19,00 %'], [0.897, '19,00']],
+  [200, [L, 'Endbetrag'], [0.897, '119,00']],
+  ...FUSS,
+]);
+gleich([r.verkaeufkontakt, r.verkaeuftel], ['Erika Muster', '+49 3628 596 123'], 'Durchwahl aus dem Kopf');
+gleich(r.proforma, true, 'Proformarechnung erkannt');
+gleich(r.iban, 'DE92820700000126644400', 'ohne Bankverbindung auf dem Beleg das EUR-Konto aus den Stammdaten');
 
 console.log(`ewa-ausgang: ${n} Prüfungen grün`);

@@ -206,7 +206,7 @@ Läuft schon eine Genehmigung, fragt der Dialog vor einer neuen nach. Steht an e
 länger als einige Minuten „Angefordert bei …, wartet auf den Flow“, läuft der Flow für dieses
 Werk nicht. Dann die IT informieren.
 
-„↻ Aktualisieren“ oben rechts lädt die Rechnungen neu. Filter, Sortierung und das gewählte
+„↻ Aktualisieren“ in der Leiste über der Tabelle (neben „Vollbild“) lädt die Rechnungen neu. Filter, Sortierung und das gewählte
 Werk bleiben stehen.
 
 ### Versionsverlauf

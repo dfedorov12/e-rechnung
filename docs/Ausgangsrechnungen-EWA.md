@@ -29,14 +29,46 @@ Im Kopf stehen links die Anschriften und rechts Beschriftung und Wert in zwei Sp
 | Referenznummer / Reference Number / votre no. de commande | Bestellnummer | BT-13 |
 | Lieferungsnummer, Liefer/Leistungsdatum | Lieferschein, Lieferdatum | BT-16, BT-72 |
 | Sachbearbeiter / Clerk | Ansprechpartner | BT-41 |
+| Telefon / Tel. / Phone im Kopf (falls gedruckt) | Telefon des Ansprechpartners | BT-42 |
 | Zahlungsbedingungen, Datum „ohne Abzug" | Zahlungsbedingungen, Fälligkeit | BT-20, BT-9 |
 | Kundenauftrag, Lieferbedingungen, Hinweis | Hinweis zur Rechnung | BT-22 |
-| Kundenmaterial, Werkstoff, Zuschläge, Herkunftsland, Warennummer | Positionsbeschreibung | BT-154 |
+| Kundenmaterial, Werkstoff, Zuschläge, Herkunftsland, Warennummer, Positionstexte aus SAP | Positionsbeschreibung | BT-154 |
 | zu Bestellung, Gutschriftsanforderung, Charge | Positionshinweis | BT-127 |
+
+Von Hand eingegebene Positionstexte (alle Zeilen unter einer Position, die keine Menge, Kondition oder Warennummer sind) landen in der Positionsbeschreibung (BT-154). Sie steht im XML an der Position und im lesbaren PDF unter der Positionszeile. Texte vor der ersten Position gehen in den Hinweis zur Rechnung (BT-22).
 
 Der Positionswert ist die Summe aller Konditionen der Position (Preis, Teuerungszuschlag, Abschlag). Steht eine Zeile „Nettowert" da, gilt sie. Preise je 3 oder je 1.000 rechnet der Konverter auf ein Stück um, so dass der gedruckte Positionswert herauskommt. Ein Zuschlag unter der Zwischensumme (zum Beispiel Verpackungszuschlag) wird eine eigene Position. Die Bankverbindung kommt aus dem Beleg, GBP-Rechnungen nennen ein eigenes Konto.
 
-Die Kontakt-Mail des Rechnungsstellers ist info@ewa-guss.de, sie steht im Fuß jedes Belegs.
+## Kontakt und Versand
+
+Kontakt-Mail des Rechnungsstellers (BT-43) ist **invoicing@ewa-guss.de**, nicht die info@ aus dem Fuß. Auf dieses Postfach hat der ganze Vertrieb Zugriff, und bei den Staatsbahnen ist nur diese Adresse hinterlegt.
+
+„Mail erstellen“ legt den Outlook-Entwurf mit invoicing@ewa-guss.de als Absender an. Senden lässt er sich nur mit dem Recht „Senden als“ oder „Senden im Auftrag von“ auf dieses Postfach (Exchange Admin Center, Postfach, Delegierung). Lesezugriff allein reicht dafür nicht.
+
+Telefon (BT-42): Die Belege drucken beim Sachbearbeiter nur den Namen. Deshalb steht im XML die Zentrale (+49 3628 596 101). Druckt das SAP-Formular unter dem Sachbearbeiter eine Zeile „Telefon +49 3628 596 1xx“, übernimmt der Konverter diese Durchwahl.
+
+Betreff: Der Entwurf heißt „Rechnung <Nummer> – Eisenwerk Arnstadt GmbH“. Vor dem Senden lässt er sich in Outlook ändern. Feste Betreffvorgaben je Kunde gibt es noch nicht.
+
+## Proformarechnungen
+
+Eine Proformarechnung ist keine Rechnung im Sinne von § 14 UStG, für sie gibt es keine E-Rechnungspflicht. XRechnung kennt dafür auch keinen Belegtyp. Erkennt der Konverter in der Titelzeile „Proformarechnung“, „Pro-forma-Rechnung“, „Pro forma invoice“ oder „Facture pro forma“, weist er beim Laden darauf hin und fragt vor Export und Mail nach. Druckt der Beleg keine Bankverbindung, nimmt der Konverter das EUR-Konto aus den Stammdaten.
+
+## Rechnungsadresse des Kunden
+
+Der Konverter übernimmt die Rechnungsmail des Kunden (BT-49) aus dem Beleg, wenn sie im Anschriftfeld steht oder in einer Zeile „Rechnungsempfänger: …“. Fehlt sie dort, greift die Liste „Rechnungsadressen der Kunden“ unter Einstellungen (je Werk und Kunden-Nr., auch als Sammelimport aus Excel). Außerdem merkt sich der Konverter jede Adresse, an die exportiert wurde. Die SAP-Stammdaten müssen dafür nicht geändert werden. Wer die Adresse auf dem Beleg haben will, kann sie trotzdem im Anschriftfeld drucken lassen.
+
+## Steuer, Modellkosten und Weiterberechnungen
+
+Modellkosten, Modellanpassungen und andere Weiterberechnungen kommen als normale Rechnung (380). Jede Position bleibt eine Position, die Einheit „LE“ wird zu Stück. Die Steuer übernimmt der Konverter aus dem Beleg und rechnet sie nicht selbst:
+
+| Auf dem Beleg | Steuerkategorie im XML |
+|---|---|
+| Umsatzsteuer mit Satz (19 %) | S, Normalsatz |
+| 0 % und Hinweis auf § 13b oder Reverse Charge | AE |
+| 0 % und Hinweis auf innergemeinschaftliche Lieferung | K |
+| 0 % und Hinweis auf Ausfuhr | G |
+
+Ob ein Beleg steuerpflichtig ist, entscheidet also der Steuerschlüssel in SAP. Bei Modellkosten für Kunden im EU-Ausland sollte die Buchhaltung prüfen, ob der Steuerschlüssel stimmt. Das gilt besonders, wenn das Modell in Arnstadt bleibt und nicht zum Kunden geht.
 
 ## Währung, Adresszusatz, Skonto
 
@@ -57,3 +89,4 @@ Diese drei Teile gelten für alle Werke:
 
 - Eine Rechnung in Fremdwährung mit deutscher Umsatzsteuer bekommt keine zusätzliche Steuerangabe in Euro (BT-6, BT-111). In den Mustern kam Fremdwährung nur steuerfrei vor.
 - Rechnungsadressen der Kunden lernt der Konverter beim Export (siehe [Ausgangsrechnungen-ZAI.md](Ausgangsrechnungen-ZAI.md)). Eine Liste wie bei Gienanth gab es für EWA nicht.
+- Proformarechnungen waren nicht unter den Musterbelegen. Erkannt werden sie an der Titelzeile, siehe oben.

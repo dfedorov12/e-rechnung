@@ -161,8 +161,8 @@ const _COMPANY_REGISTRY = {
     verkaeufplz:        '99310',
     verkaeufstadt:      'Arnstadt',
     verkaeufland:       'DE',
-    verkaeuftel:        '+49 3628 596 101',
-    verkaeuferemail:    'info@ewa-guss.de',
+    verkaeuftel:        '',   // Durchwahl aus dem Kopf („Telefon"), sonst Zentrale aus dem Fuß
+    verkaeuferemail:    'invoicing@ewa-guss.de',   // Vertrieb, bei Staatsbahnen hinterlegt (nicht info@)
     verkaeufervat:      'DE812737567',
     verkaeufersteuernr: '',
     iban:               'DE92820700000126644400',   // EUR-Konto; GBP-Rechnungen nennen ein eigenes, das aus dem PDF gilt
@@ -172,6 +172,7 @@ const _COMPANY_REGISTRY = {
     geschaeftsfuehrung: 'Viktor Babushchak',
     _detect: /ewa-guss\.de|HRB\s*110887/i,
     _nurInland: true,
+    _versandPostfach: 'invoicing@ewa-guss.de',   // Outlook-Entwurf mit diesem Absender (Vertrieb hat Zugriff)
     _aktiv: true,
   },
   HOL: _werkGeruest('HOL'),
@@ -302,6 +303,9 @@ function extractInvoiceDataFromItems(allItems) {
 
   // Steuerkategorie für 0%-Positionen erkennen (UNTDID 5305: K/AE/G)
   Object.assign(result, _detectTaxCategory(fullText, result));
+
+  // Proformarechnung: keine Rechnung im Sinne von § 14 UStG, die App warnt vor dem Export
+  if (/^\s*(?:Pro-?\s?forma(?:-?\s?(?:Rechnung|Invoice|Faktura))?|Proformarechnung|Facture\s+pro-?\s?forma)\s*$/im.test(fullText)) result.proforma = true;
 
   // Bekannten Rechnungssteller erkennen → kanonische Stammdaten überschreiben.
   // IBAN/BIC sind hiervon AUSGENOMMEN: sie stammen aus dem Rechnungsfuß, weil
@@ -1022,6 +1026,7 @@ const _SAP_LABEL = [
   ['ihreUst', /^(?:Ihre UST-ID|Your tax Number|Votre numéro de TVA)\b\s*(.*)$/i],
   ['unsereUst', /^(?:Unsere UST-ID|Our tax Number|Notre numéro de TVA)\b\s*(.*)$/i],
   ['bearbeiter', /^(?:Sachbearbeiter|Clerk|responsable du dossier)\b\s*(.*)$/i],
+  ['telefon', /^(?:Telefon|Tel\.?|Durchwahl|Phone|Téléphone)\b\.?:?\s*(.*)$/i],
 ];
 const _SAP_VERSAND = /^(?:Versandanschrift|Ship-to address|Adresse d'expédition)$/i;
 
@@ -1088,6 +1093,8 @@ function extractSapFormular(fullText, items) {
   if (kopfWerte.leistung) r.lieferdatum = datum(kopfWerte.leistung);
   if (kopfWerte.ihreUst) r.kaeufervat = kopfWerte.ihreUst.replace(/\s+/g, '');
   if (kopfWerte.bearbeiter) r.verkaeufkontakt = kopfWerte.bearbeiter;
+  // Durchwahl des Sachbearbeiters (BT-42), sonst bleibt die Zentrale aus dem Fuß
+  if (kopfWerte.telefon && /^\+?[\d\s\/()-]{6,}$/.test(kopfWerte.telefon)) r.verkaeuftel = kopfWerte.telefon.trim();
 
   // Anschriften: Rechnungsempfänger, danach ggf. Versandanschrift
   const iVersand = links.findIndex(l => _SAP_VERSAND.test(l));
@@ -1592,6 +1599,12 @@ function _eisKontaktMail(name) {
 function werkNurInland(werk) {
   const e = _COMPANY_REGISTRY[String(werk || '').toUpperCase()];
   return !!(e && e._nurInland);
+}
+
+/** Postfach, aus dem der Outlook-Entwurf des Werks gehen soll (Registry _versandPostfach), sonst ''. */
+function werkVersandPostfach(werk) {
+  const e = _COMPANY_REGISTRY[String(werk || '').toUpperCase()];
+  return (e && e._versandPostfach) || '';
 }
 
 /** Braucht eine Drittlandrechnung des Werks das unterschriebene Original (Registry _drittlandUnterschrift)? */

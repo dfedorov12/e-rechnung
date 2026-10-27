@@ -67,6 +67,7 @@ gleich([r.kaeufer, r.kaeuferland, r.steuerkategorie], ['BEISPIEL STEEL CO. LTD',
 gleich([r.positionen.length, r.positionen[0].menge, r.positionen[0].einzelpreis, r.gesamtbetrag], [1, 4, 5025, 20100], 'Anzahlungsbetrag aus dem Endbetrag, englische Zahlen');
 gleich(/100% Anzahlung bei Auftragserteilung/.test(r.notiz), true, 'Anzahlungshinweis im Hinweis');
 gleich([r.verkaeufer, r.verkaeufervat, r.verkaeuferemail], ['Lintorfer Eisengießerei GmbH', 'DE811154479', 'info@lintorfereg.de'], 'Stammdaten LEG');
+gleich(ctx.versand ? ctx.versand('LEG') : '', '', 'LEG ohne eigenes Versandpostfach');
 
 // 2) Schlussrechnung mit Block der erhaltenen Anzahlungen
 r = beleg([
