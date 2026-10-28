@@ -13,51 +13,64 @@ const enthaelt = (s, teil, m) => { assert.ok(String(s).includes(teil), m + ': ' 
 
 const daten = { nummer: '4711', datum: '2026-10-27', brutto: 1234.5, waehrung: 'EUR', empfaenger: 'Walzengießerei Coswig GmbH' };
 
-// 1) Zurückweisung (rot): Vorlage wörtlich, Rechnung, Fehler als Liste, Gruß mit Empfänger
+const aus64 = a => Buffer.from(a.base64, 'base64').toString('utf8');
+
+// 1) Zurückweisung (rot): Vorlage wörtlich, nur die Rechnung im Text, Befunde im Anhang (eigener Bericht ohne KoSIT-HTML)
 const rot = kreditorMail({
-  richtung: 'Eingang', daten,
+  richtung: 'Eingang', daten, pruefwerkzeug: 'Mustang (ZUGFeRD-Profil)',
   kreditorAktion: { art: 'zurueckweisung', grund: 'pruefung-rot', text: 'x' },
-  meldungen: [{ level: 'error', text: '[BR-CO-15] Summe <falsch> & Co' }, { level: 'warning', text: '[BR-DE-21] egal' }],
+  meldungen: [{ level: 'warning', text: '[BR-DE-21] Kennung' }, { level: 'error', text: '[BR-CO-15] Summe <falsch> & Co' }],
 });
 gleich(rot.art, 'Zurueckweisung', 'Art für KreditorMails');
 gleich(rot.betreff, 'Zurückweisung Ihrer E-Rechnung 4711', 'Betreff');
-for (const a of VORLAGEN.zurueckweisung.absaetze) enthaelt(rot.text, a, 'Absatz wörtlich');
+for (const a of VORLAGEN.zurueckweisung.absaetze) { enthaelt(rot.text, a, 'Absatz wörtlich im Text'); enthaelt(rot.html, a, 'Absatz wörtlich im HTML'); }
 enthaelt(rot.text, 'Sehr geehrte Damen und Herren,\n\nvielen Dank', 'Anrede');
-enthaelt(rot.text, 'Rechnung 4711 vom 27.10.2026 über 1.234,50 EUR\nFestgestellte Mängel:\n- [BR-CO-15] Summe <falsch> & Co', 'Befunde im Text');
-gleich(rot.text.includes('BR-DE-21'), false, 'Warnungen gehören nicht in die Zurückweisung');
+enthaelt(rot.text, 'E-Rechnung zurückgewiesen\nRechnungsnummer: 4711\nRechnungsdatum: 27.10.2026\nBetrag: 1.234,50 EUR\nPrüfbericht: im Anhang (Pruefbericht_4711.html)', 'Angaben im Text');
+gleich(/BR-CO-15|BR-DE-21/.test(rot.text + rot.html), false, 'keine Befunde in der Mail');
 enthaelt(rot.text, 'Für Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nVielen Dank für Ihre Unterstützung.\n\nMit freundlichen Grüßen\nWalzengießerei Coswig GmbH', 'Schluss');
-enthaelt(rot.html, '<li>[BR-CO-15] Summe &lt;falsch&gt; &amp; Co</li>', 'HTML maskiert');
-enthaelt(rot.html, '<p>Mit freundlichen Grüßen<br>Walzengießerei Coswig GmbH</p>', 'HTML Gruß');
+enthaelt(rot.html, 'Walzengießerei Coswig GmbH</div>', 'Firma im Kopf');
+enthaelt(rot.html, '#B42318', 'rote Akzentfarbe');
+gleich([rot.anhang.name, rot.anhang.contentType], ['Pruefbericht_4711.html', 'text/html'], 'Anhang');
+const bericht = aus64(rot.anhang);
+enthaelt(bericht, '[BR-CO-15] Summe &lt;falsch&gt; &amp; Co', 'Befund maskiert im Bericht');
+gleich(bericht.indexOf('BR-CO-15') < bericht.indexOf('BR-DE-21'), true, 'Fehler vor Warnungen');
+enthaelt(bericht, 'Mustang (ZUGFeRD-Profil)', 'Prüfwerkzeug im Bericht');
 
-// 2) MINIMUM/BASIC-WL: Befund ist der Text zur Profil-Zurückweisung
+// 2) KoSIT-Bericht vorhanden: Anhang ist der KoSIT-Bericht selbst
+const kosit = kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' },
+  berichtHtml: '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Prüfbericht</title></head><body>KoSIT</body></html>' });
+gleich(aus64(kosit.anhang), '<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Prüfbericht</title></head><body>KoSIT</body></html>', 'KoSIT-HTML unverändert');
+
+// 3) MINIMUM/BASIC-WL: Profiltext als erster Befund im Bericht, Dateiname aus der Nummer
 const minimal = kreditorMail({
-  richtung: 'Eingang', daten: { nummer: 'A-1' },
+  richtung: 'Eingang', daten: { nummer: 'A/1 2' },
   kreditorAktion: { art: 'zurueckweisung', grund: 'MINIMUM/BASIC-WL', text: 'Profil' },
   zurueckweisung: { grund: 'MINIMUM/BASIC-WL', text: 'Profil MINIMUM ist keine E-Rechnung.' },
   meldungen: [{ level: 'error', text: '[X] egal' }],
 });
-enthaelt(minimal.text, 'Rechnung A-1\nFestgestellte Mängel:\n- Profil MINIMUM ist keine E-Rechnung.', 'Profil als Befund');
+gleich(minimal.anhang.name, 'Pruefbericht_A-1-2.html', 'Dateiname ohne Sonderzeichen');
+const mb = aus64(minimal.anhang);
+gleich(mb.indexOf('Profil MINIMUM') > 0 && mb.indexOf('Profil MINIMUM') < mb.indexOf('[X] egal'), true, 'Profiltext zuerst');
 
-// 3) Rot ohne einzelne Fehler: Klartext-Hinweis ohne interne Zusätze
+// 4) Ohne Daten und Befunde: Hinweis ohne interne Zusätze, Betreff und Gruß ohne Lücken
 const ohne = kreditorMail({
   richtung: '', daten: null, kreditorAktion: { art: 'zurueckweisung' }, meldungen: [],
-  hinweis: 'Rechnerische Summen stimmen nicht. | Reverse-Charge (§13b UStG) — manuelle Pruefung',
+  hinweis: 'Rechnerische Summen stimmen nicht. | Reverse-Charge (§13b UStG) manuelle Pruefung',
 });
-enthaelt(ohne.text, 'Festgestellte Mängel:\n- Rechnerische Summen stimmen nicht.\n\nFür Rückfragen', 'Hinweis ohne Zusatz');
 gleich(ohne.betreff, 'Zurückweisung Ihrer E-Rechnung', 'Betreff ohne Nummer');
-enthaelt(ohne.text, '\n\nMit freundlichen Grüßen', 'Gruß ohne Empfänger');
+gleich(ohne.anhang.name, 'Pruefbericht_E-Rechnung.html', 'Dateiname ohne Nummer');
+enthaelt(aus64(ohne.anhang), 'Rechnerische Summen stimmen nicht.</td>', 'Hinweis als Befund');
+gleich(aus64(ohne.anhang).includes('Reverse-Charge'), false, 'ohne internen Zusatz');
 gleich(/Mit freundlichen Grüßen\n/.test(ohne.text), false, 'kein leerer Name nach dem Gruß');
+gleich(ohne.html.includes('<strong'), false, 'HTML-Gruß ohne Firma');
 
-// 4) Abweichung (gelb): Warnungen, höchstens 10
-const warnungen = Array.from({ length: 12 }, (_, i) => ({ level: 'warning', text: `[BR-DE-${i + 1}] Warnung ${i + 1}` }));
-const gelb = kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' }, meldungen: warnungen });
-gleich(gelb.art, 'Abweichung', 'Art Abweichung');
-gleich(gelb.betreff, 'Hinweis zu Ihrer E-Rechnung 4711', 'Betreff Abweichung');
+// 5a) Abweichung (gelb): eigene Vorlage, orange
+const gelb = kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' }, meldungen: [{ level: 'warning', text: '[BR-DE-1] W' }] });
+gleich([gelb.art, gelb.betreff], ['Abweichung', 'Hinweis zu Ihrer E-Rechnung 4711'], 'Art und Betreff Abweichung');
 for (const a of VORLAGEN.abweichung.absaetze) enthaelt(gelb.text, a, 'Absatz wörtlich');
-enthaelt(gelb.text, 'Festgestellte Abweichungen:\n- [BR-DE-1] Warnung 1', 'erste Warnung');
-enthaelt(gelb.text, '- [BR-DE-10] Warnung 10\n- (und 2 weitere, siehe Prüfbericht)', 'gekürzt');
 gleich(gelb.text.includes('Für Rückfragen'), false, 'Abweichung ohne Rückfragen-Satz');
-enthaelt(gelb.text, 'möglichst zu vermeiden.\n\nRechnung 4711', 'Befunde nach der Vorlage');
+enthaelt(gelb.text, 'möglichst zu vermeiden.\n\nGeringfügige Abweichungen, die Rechnung wird verarbeitet\nRechnungsnummer: 4711', 'Angaben nach der Vorlage');
+enthaelt(gelb.html, '#F08300', 'orange Akzentfarbe');
 
 // 5) Keine Mail: Ausgang, sonstige Rechnung (Berichtigung), ohne Aktion
 gleich(kreditorMail({ richtung: 'Ausgang', daten, kreditorAktion: { art: 'zurueckweisung' } }), null, 'Ausgang');
@@ -95,7 +108,7 @@ const aufruf = async xml => (await handler.intake({
   let r = await aufruf(eingang);
   gleich([r.richtung, r.buchung, r.kreditorAktion && r.kreditorAktion.art], ['Eingang', 'unter_vorbehalt', 'abweichung'], 'gelb: Eingang, Vorbehalt, Abweichung');
   gleich(r.kreditorAktion.mail.betreff, 'Hinweis zu Ihrer E-Rechnung 4260999', 'gelb: Betreff mit Nummer');
-  enthaelt(r.kreditorAktion.mail.text, '- [BR-DE-21] Kennung der Spezifikation', 'gelb: Warnung in der Mail');
+  enthaelt(Buffer.from(r.kreditorAktion.mail.anhang.base64, 'base64').toString('utf8'), '[BR-DE-21] Kennung der Spezifikation', 'gelb: Warnung im Prüfbericht');
   enthaelt(r.kreditorAktion.mail.text, 'Mit freundlichen Grüßen\nWalzengiesserei Coswig GmbH', 'gelb: Gruß mit Werk');
 
   r = await aufruf(ausgang);

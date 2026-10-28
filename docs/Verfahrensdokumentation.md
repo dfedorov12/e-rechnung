@@ -160,9 +160,10 @@ gebucht. Der Prüfschritt setzt die WP/StB‑Einordnung wie folgt um (Intake‑A
 **Mitteilung an den Lieferanten:** Bei Zurückweisung (Prüfergebnis rot, Fall 3) und bei
 Warnungen (Prüfergebnis gelb, gebucht unter Vorbehalt) liefert die Intake‑API eine fertige
 Mail nach den Vorlagen der Buchhaltung in `kreditorAktion.mail`, mit Rechnungsnummer und
-den Befunden der Prüfung (`api/src/kreditormail.js`). Der Eingangs‑Flow legt sie in der Liste
-KreditorMails ab, der Flow „Kreditor‑Mail senden“ verschickt sie aus dem Werks‑Postfach.
-Text, Empfänger und Versandzeit bleiben in KreditorMails nachvollziehbar
+dem Prüfbericht als Anhang (KoSIT, bei ZUGFeRD ein Bericht aus den Mustang‑Meldungen;
+`api/src/kreditormail.js`). Der Eingangs‑Flow sendet sie aus dem Werks‑Postfach und trägt sie
+mit Status „Gesendet“ bzw. „Fehler“ in die Liste KreditorMails ein. Text, Empfänger und
+Versandzeit bleiben dort nachvollziehbar, der Prüfbericht liegt neben der Rechnung im Archiv
 (`docs/Kreditor-Mail-Flow.md`, 4a). Bei sonstigen Rechnungen (Fälle 1 und 2) richtet sich die
 Mail nach der 800k‑Einschätzung im Monitoring.
 

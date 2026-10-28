@@ -36,7 +36,7 @@
  *     rueckfrageLieferant: true bei materieller PDF↔XML-Abweichung (P4),
  *     zurueckweisung:  { grund, text } | null (harter Stopp MINIMUM/BASIC-WL, P3),
  *     kreditorAktion:  { art:'berichtigung'|'zurueckweisung'|'abweichung', grund, text, mail? } | null,
- *                      mail = { art, betreff, html, text }: fertige Mail an den Lieferanten bei
+ *                      mail = { art, betreff, html, text, anhang:{name,base64} }: Mail an den Lieferanten bei
  *                      Zurückweisung und bei Abweichungen (gelb), siehe ../kreditormail.js,
  *     konvertiertesPdf:true, wenn ein technisch konvertiertes Ersatz-PDF erzeugt wurde (P8),
  *     formaleHinweise: [ … ] (Leitweg/elektr. Adresse — kein USt-Pruefgrund, P5),

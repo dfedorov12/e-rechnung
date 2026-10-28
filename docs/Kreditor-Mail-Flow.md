@@ -125,20 +125,27 @@ Automatisierter Cloud-Flow, ein Flow für alle Werke.
 ## 4a. Zurückweisung und Hinweis auf Abweichungen automatisch senden (Eingangs-Flows)
 
 Der Prüfdienst liefert für zwei Fälle eine fertige Mail an den Lieferanten in
-`kreditorAktion.mail` (Betreff, HTML, Text und der Wert für die Spalte Art):
+`kreditorAktion.mail` (Betreff, HTML, Text, Anhang und der Wert für die Spalte Art):
 
 | Prüfergebnis | Buchung | Mail | Art |
 |---|---|---|---|
 | rot (EN 16931 nicht bestanden) oder Profil MINIMUM bzw. BASIC-WL | zurückgewiesen | Zurückweisung, korrigierte E-Rechnung anfordern | `Zurueckweisung` |
 | gelb (nur Warnungen) | unter Vorbehalt | Hinweis auf geringfügige Abweichungen, Rechnung wird verarbeitet | `Abweichung` |
 
-Die Absätze sind die Vorlagen der Buchhaltung, wörtlich. Dazu setzt der Prüfdienst die
-Rechnung (Nummer, Datum, Betrag), die Befunde aus der Prüfung (bei rot die Fehler, bei gelb
-die Warnungen, höchstens zehn) und im Gruß den Namen der eigenen Gesellschaft, wie er auf der
-Rechnung steht. Die Texte stehen in `api/src/kreditormail.js`.
+Die Absätze sind die Vorlagen der Buchhaltung, wörtlich. Die Mail ist im Layout der DIHAG
+gesetzt (Kopf mit Gesellschaft, Kasten mit Rechnungsnummer, Datum und Betrag, roter bzw.
+oranger Streifen) und nennt den Prüfbericht im Anhang. Die Befunde stehen nur im Anhang:
+bei XRechnung der Prüfbericht von KoSIT, bei ZUGFeRD (Prüfung mit Mustang) ein Bericht mit
+Rechnungsdaten, Ergebnis und allen Meldungen. Texte und Layout stehen in
+`api/src/kreditormail.js`.
 
 Keine Mail kommt bei sonstigen Rechnungen (PDF ohne XML, PDF/A-3 fehlt, dafür die
 800k-Einschätzung im Monitoring), bei grün und bei Ausgangsrechnungen, die im Postfach landen.
+
+Der Eingangs-Flow sendet diese Mail selbst und trägt sie danach in KreditorMails ein. Über
+einen Eintrag mit Status „Wartet“ ginge der Anhang nicht mit, weil „Element erstellen“ keine
+Anlagen kennt. Der Eintrag bekommt deshalb gleich „Gesendet“ oder „Fehler“, und „Kreditor-Mail
+senden“ fasst ihn nicht an.
 
 In jedem Eingangs-Flow in der Schleife über die Anlagen nach „Dateieigenschaften
 aktualisieren“:
@@ -146,13 +153,23 @@ aktualisieren“:
 1. „Neuer Schritt“, **Bedingung**. Links als Ausdruck
    `empty(body('HTTP_1')?['kreditorAktion']?['mail'])`, Operator „ist gleich“, rechts `false`
    (als Ausdruck).
-2. Im Ja-Zweig SharePoint **„Element erstellen“**, Website Rechnungsmonitoring, Liste
-   KreditorMails. Die Felder als Ausdruck:
-   - Titel: `body('HTTP_1')?['kreditorAktion']?['mail']?['betreff']`
+2. Im Ja-Zweig Office 365 Outlook **„E-Mail aus einem freigegebenen Postfach senden (V2)“**,
+   umbenennen in `E-Mail_an_Lieferant`:
+   - Ursprüngliche Postfachadresse: das Rechnungspostfach des Werks (dasselbe wie im Trigger)
    - An:
      ```
      if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])
      ```
+   - Betreff: `body('HTTP_1')?['kreditorAktion']?['mail']?['betreff']`
+   - Text: `body('HTTP_1')?['kreditorAktion']?['mail']?['html']`
+   - Erweiterte Parameter → Anlagen, eine Anlage:
+     - Name: `body('HTTP_1')?['kreditorAktion']?['mail']?['anhang']?['name']`
+     - Inhalt: `base64ToBinary(body('HTTP_1')?['kreditorAktion']?['mail']?['anhang']?['base64'])`
+3. Darunter SharePoint **„Element erstellen“**, umbenennen in `Mail_festhalten`. Menü „…“ →
+   **Ausführen nach**: `E-Mail_an_Lieferant` *ist erfolgreich* und *ist fehlgeschlagen*.
+   Website Rechnungsmonitoring, Liste KreditorMails, die Felder als Ausdruck:
+   - Titel: `body('HTTP_1')?['kreditorAktion']?['mail']?['betreff']`
+   - An: derselbe Ausdruck wie in Schritt 2
    - Werk: `WGC` bzw. `ZAI` (fester Text)
    - Art: `body('HTTP_1')?['kreditorAktion']?['mail']?['art']` (Spalte Art → „Benutzerdefinierten
      Wert eingeben“)
@@ -162,7 +179,7 @@ aktualisieren“:
      ```
      coalesce(body('HTTP_1')?['daten']?['nummer'], body('Datei_erstellen_Original')?['Name'])
      ```
-   - RechnungKey (verbindet den Auftrag mit der Zeile im Monitoring):
+   - RechnungKey (verbindet den Eintrag mit der Zeile im Monitoring):
      ```
      toLower(concat('e|', substring(body('Datei_erstellen_Original')?['Name'], 0, lastIndexOf(body('Datei_erstellen_Original')?['Name'], '.'))))
      ```
@@ -171,19 +188,31 @@ aktualisieren“:
      ```
      concat('https://dihag.sharepoint.com/sites/Rechnungsmonitoring', body('Datei_erstellen_Original')?['Path'])
      ```
-   - Status: `Wartet`
+   - Status (nie „Wartet“, sonst sendet „Kreditor-Mail senden“ ein zweites Mal):
+     ```
+     if(equals(actions('E-Mail_an_Lieferant')?['status'], 'Succeeded'), 'Gesendet', 'Fehler')
+     ```
+   - Gesendet am: `if(equals(actions('E-Mail_an_Lieferant')?['status'], 'Succeeded'), utcNow(), null)`
+   - Fehlermeldung:
+     ```
+     if(equals(actions('E-Mail_an_Lieferant')?['status'], 'Succeeded'), '', coalesce(body('E-Mail_an_Lieferant')?['error']?['message'], 'Versand fehlgeschlagen'))
+     ```
    - AngefordertVon: `Eingangs-Flow`
-3. Speichern. „Kreditor-Mail senden“ muss eingeschaltet sein, sonst bleibt der Auftrag auf
-   „Wartet“.
+4. Speichern.
+
+Das Konto der Outlook-Verbindung braucht „Senden als“ auf das Werks-Postfach (siehe 2.).
+Schlägt der Versand fehl, läuft der Flow weiter, die Rechnung ist abgelegt, und KreditorMails
+zeigt den Fehler.
 
 Die Mail geht an den Absender der Rechnungsmail. Hat ein Kollege die Rechnung weitergeleitet,
 bekommt er die Mail und gibt sie an den Lieferanten weiter. Im Monitoring steht danach in der
 Spalte „Lieferant informiert“ „Ja“, die aufgeklappte Zeile zeigt unter „Mails“ Art, Empfänger
 und Versandzeit.
 
-Wer den ersten Entwurf dieses Schritts schon gebaut hat (Bedingung auf `zurueckweisung`,
-MailHtml mit `concat('<p>Guten Tag,</p>…')`): Bedingung, Titel, Art, MailHtml und MailText wie
-oben ersetzen. Sonst kommen Abweichungen nicht an und die Zurückweisung hat den alten Text.
+Wer den ersten Entwurf dieses Schritts schon gebaut hat („Element erstellen“ mit Status
+„Wartet“, MailHtml mit `concat('<p>Guten Tag,</p>…')`): Bedingung wie oben ändern, die
+Senden-Aktion davor einfügen und im Element Titel, Art, MailHtml, MailText, Status, Gesendet am
+und Fehlermeldung wie oben setzen.
 
 ## 4b. Dateiname beim Eingang mitschreiben
 
