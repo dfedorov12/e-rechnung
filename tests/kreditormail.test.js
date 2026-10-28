@@ -36,6 +36,15 @@ enthaelt(bericht, '[BR-CO-15] Summe &lt;falsch&gt; &amp; Co', 'Befund maskiert i
 gleich(bericht.indexOf('BR-CO-15') < bericht.indexOf('BR-DE-21'), true, 'Fehler vor Warnungen');
 enthaelt(bericht, 'Mustang (ZUGFeRD-Profil)', 'Prüfwerkzeug im Bericht');
 
+// 1a) Rechnungsinhalt im eigenen Bericht: Elemente mit Position, Wert, Attributen, ohne Namensräume
+const mitXml = aus64(kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' },
+  xml: '<rsm:CrossIndustryInvoice xmlns:rsm="urn:r" xmlns:ram="urn:a"><ram:ID>4711</ram:ID><ram:Total currencyID="EUR">5 &lt; 6</ram:Total></rsm:CrossIndustryInvoice>' }).anhang);
+enthaelt(mitXml, 'Inhalt der Rechnung', 'Abschnitt Inhalt');
+enthaelt(mitXml, '>0003</td>', 'Positionen gezählt');
+enthaelt(mitXml, 'Total</span> <strong style="color:#1A2644;">5 &lt; 6</strong> <span style="font-size:12px;color:#6B7280;">currencyID: EUR</span>', 'Wert maskiert, Attribut');
+gleich(/xmlns|urn:r/.test(mitXml), false, 'keine Namensräume');
+gleich(aus64(kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' }, xml: 'kein XML' }).anhang).includes('Inhalt der Rechnung'), false, 'ohne Element kein Abschnitt');
+
 // 2) KoSIT-Bericht vorhanden: Anhang ist der KoSIT-Bericht selbst
 const kosit = kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' },
   berichtHtml: '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Prüfbericht</title></head><body>KoSIT</body></html>' });

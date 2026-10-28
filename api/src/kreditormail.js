@@ -14,8 +14,10 @@
  *
  * Die Absätze sind die Vorlagen der Buchhaltung (Oktober 2026), wörtlich. Die Mail
  * nennt dazu nur die Rechnung. Die Befunde stehen im Anhang: der Prüfbericht von
- * KoSIT, bei ZUGFeRD (Mustang) ein Bericht mit denselben Angaben.
+ * KoSIT, bei ZUGFeRD (Mustang) ein Bericht mit Befunden und Rechnungsinhalt.
  */
+
+const { DOMParser } = require('@xmldom/xmldom');
 
 const ANREDE = 'Sehr geehrte Damen und Herren,';
 const GRUSS = 'Mit freundlichen Grüßen';
@@ -56,6 +58,7 @@ const VORLAGEN = {
 };
 
 const MAX_BEFUNDE = 50;
+const MAX_INHALT = 3000;     // Elemente im Rechnungsinhalt, darüber wird gekürzt
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -101,6 +104,45 @@ function _jetzt() {
   return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
 }
 
+/**
+ * Rechnungsinhalt wie im KoSIT-Bericht: jedes Element mit Tiefe, Name, Wert und
+ * Attributen (ohne Namensräume). Leer, wenn die XML fehlt oder nicht lesbar ist.
+ */
+function _inhalt(xml) {
+  if (!xml) return [];
+  let wurzel = null;
+  try {
+    const leise = { warning() {}, error() {}, fatalError() {} };
+    wurzel = new DOMParser({ errorHandler: leise }).parseFromString(String(xml), 'text/xml').documentElement;
+  } catch (e) { return []; }
+  const zeilen = [];
+  const lauf = (el, tiefe) => {
+    if (zeilen.length >= MAX_INHALT) return;
+    const kinder = Array.from(el.childNodes || []).filter(k => k.nodeType === 1);
+    const attr = Array.from(el.attributes || []).filter(a => !/^xmlns(:|$)/.test(a.name)).map(a => [a.localName || a.name, a.value]);
+    zeilen.push({ tiefe, name: el.localName || el.nodeName, wert: kinder.length ? '' : String(el.textContent || '').trim(), attr });
+    for (const k of kinder) lauf(k, tiefe + 1);
+  };
+  if (wurzel) lauf(wurzel, 0);
+  return zeilen;
+}
+
+function _inhaltHtml(xml) {
+  const zeilen = _inhalt(xml);
+  if (!zeilen.length) return '';
+  const td = 'padding:2px 8px;border-bottom:1px solid ' + F.rand + ';vertical-align:top;';
+  return `<h2 style="font-size:16px;color:${F.navy};margin:26px 0 8px;">Inhalt der Rechnung</h2>`
+    + `<table style="border-collapse:collapse;width:100%;font-size:13px;">`
+    + zeilen.map((z, i) => `<tr><td style="${td}width:44px;color:${F.grau};">${String(i + 1).padStart(4, '0')}</td>`
+      + `<td style="${td}padding-left:${8 + z.tiefe * 16}px;">`
+      + `<span style="color:${F.grau};">${_esc(z.name)}</span>`
+      + (z.wert ? ` <strong style="color:${F.navy};">${_esc(z.wert)}</strong>` : '')
+      + z.attr.map(([k, w]) => ` <span style="font-size:12px;color:${F.grau};">${_esc(k)}: ${_esc(w)}</span>`).join('')
+      + '</td></tr>').join('')
+    + (zeilen.length >= MAX_INHALT ? `<tr><td></td><td style="${td}color:${F.grau};">(gekürzt nach ${MAX_INHALT} Elementen)</td></tr>` : '')
+    + '</table>';
+}
+
 /** Prüfbericht, wenn kein KoSIT-HTML da ist (ZUGFeRD über Mustang). */
 function _eigenerBericht(res, v, d) {
   const zeilen = [
@@ -123,7 +165,7 @@ function _eigenerBericht(res, v, d) {
     + `<table style="border-collapse:collapse;width:100%;">`
     + `<tr><th style="${td}text-align:left;width:90px;background:${F.box};">Art</th><th style="${td}text-align:left;background:${F.box};">Meldung</th></tr>`
     + befunde.map(b => `<tr><td style="${td}font-weight:600;color:${b.level === 'error' ? '#B42318' : '#B45309'};">${b.level === 'error' ? 'Fehler' : 'Warnung'}</td><td style="${td}">${_esc(b.text)}</td></tr>`).join('')
-    + '</table></div></body></html>';
+    + '</table>' + _inhaltHtml(res.xml) + '</div></body></html>';
 }
 
 function _anhang(res, v, d) {
