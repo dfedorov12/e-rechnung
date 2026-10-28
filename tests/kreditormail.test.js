@@ -11,13 +11,14 @@ let n = 0;
 const gleich = (ist, soll, m) => { assert.deepStrictEqual(ist, soll, m + ': ' + JSON.stringify(ist)); n++; };
 const enthaelt = (s, teil, m) => { assert.ok(String(s).includes(teil), m + ': ' + teil + ' fehlt in ' + JSON.stringify(s)); n++; };
 
-const daten = { nummer: '4711', datum: '2026-10-27', brutto: 1234.5, waehrung: 'EUR', empfaenger: 'Walzengießerei Coswig GmbH' };
+// Empfänger in der Rechnung absichtlich falsch: Kopf und Gruß kommen vom Werk des Postfachs
+const daten = { nummer: '4711', datum: '2026-10-27', brutto: 1234.5, waehrung: 'EUR', empfaenger: 'INFIELD SAFETY GMBH * Nordstr. 10a' };
 
 const aus64 = a => Buffer.from(a.base64, 'base64').toString('utf8');
 
 // 1) Zurückweisung (rot): Vorlage wörtlich, nur die Rechnung im Text, Befunde im Anhang (eigener Bericht ohne KoSIT-HTML)
 const rot = kreditorMail({
-  richtung: 'Eingang', daten, pruefwerkzeug: 'Mustang (ZUGFeRD-Profil)',
+  richtung: 'Eingang', werk: 'WGC', daten, pruefwerkzeug: 'Mustang (ZUGFeRD-Profil)',
   kreditorAktion: { art: 'zurueckweisung', grund: 'pruefung-rot', text: 'x' },
   meldungen: [{ level: 'warning', text: '[BR-DE-21] Kennung' }, { level: 'error', text: '[BR-CO-15] Summe <falsch> & Co' }],
 });
@@ -29,6 +30,8 @@ enthaelt(rot.text, 'E-Rechnung zurückgewiesen\nRechnungsnummer: 4711\nRechnungs
 gleich(/BR-CO-15|BR-DE-21/.test(rot.text + rot.html), false, 'keine Befunde in der Mail');
 enthaelt(rot.text, 'Für Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\nVielen Dank für Ihre Unterstützung.\n\nMit freundlichen Grüßen\nWalzengießerei Coswig GmbH', 'Schluss');
 enthaelt(rot.html, 'Walzengießerei Coswig GmbH</div>', 'Firma im Kopf');
+gleich(/INFIELD/.test(rot.text + rot.html), false, 'Empfänger aus der Rechnung nicht im Gruß');
+gleich(/Mit freundlichen Grüßen\n/.test(kreditorMail({ richtung: 'Eingang', werk: 'XYZ', daten, kreditorAktion: { art: 'abweichung' } }).text), false, 'unbekanntes Werk ohne Namen');
 enthaelt(rot.html, '#B42318', 'rote Akzentfarbe');
 gleich([rot.anhang.name, rot.anhang.contentType], ['Pruefbericht_4711.html', 'text/html'], 'Anhang');
 const bericht = aus64(rot.anhang);
@@ -45,10 +48,13 @@ enthaelt(mitXml, 'Total</span> <strong style="color:#1A2644;">5 &lt; 6</strong> 
 gleich(/xmlns|urn:r/.test(mitXml), false, 'keine Namensräume');
 gleich(aus64(kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' }, xml: 'kein XML' }).anhang).includes('Inhalt der Rechnung'), false, 'ohne Element kein Abschnitt');
 
-// 2) KoSIT-Bericht vorhanden: Anhang ist der KoSIT-Bericht selbst
-const kosit = kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' },
-  berichtHtml: '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Prüfbericht</title></head><body>KoSIT</body></html>' });
-gleich(aus64(kosit.anhang), '<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Prüfbericht</title></head><body>KoSIT</body></html>', 'KoSIT-HTML unverändert');
+// 2) Auch bei KoSIT der eigene Bericht (gleiches Layout wie bei Mustang), KoSIT-HTML bleibt draußen
+const kosit = aus64(kreditorMail({ richtung: 'Eingang', daten, kreditorAktion: { art: 'abweichung' }, pruefwerkzeug: 'KoSIT (XRechnung/EN16931)',
+  meldungen: [{ level: 'warning', text: '[BR-DE-21] K' }],
+  berichtHtml: '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Prüfbericht</title></head><body>KOSIT-ORIGINAL</body></html>' }).anhang);
+gleich(kosit.includes('KOSIT-ORIGINAL'), false, 'nicht der KoSIT-Bericht');
+enthaelt(kosit, 'KoSIT (XRechnung/EN16931)', 'Prüfwerkzeug KoSIT im eigenen Bericht');
+enthaelt(kosit, '[BR-DE-21] K', 'KoSIT-Befund im eigenen Bericht');
 
 // 3) MINIMUM/BASIC-WL: Profiltext als erster Befund im Bericht, Dateiname aus der Nummer
 const minimal = kreditorMail({
@@ -118,7 +124,7 @@ const aufruf = async xml => (await handler.intake({
   gleich([r.richtung, r.buchung, r.kreditorAktion && r.kreditorAktion.art], ['Eingang', 'unter_vorbehalt', 'abweichung'], 'gelb: Eingang, Vorbehalt, Abweichung');
   gleich(r.kreditorAktion.mail.betreff, 'Hinweis zu Ihrer E-Rechnung 4260999', 'gelb: Betreff mit Nummer');
   enthaelt(Buffer.from(r.kreditorAktion.mail.anhang.base64, 'base64').toString('utf8'), '[BR-DE-21] Kennung der Spezifikation', 'gelb: Warnung im Prüfbericht');
-  enthaelt(r.kreditorAktion.mail.text, 'Mit freundlichen Grüßen\nWalzengiesserei Coswig GmbH', 'gelb: Gruß mit Werk');
+  enthaelt(r.kreditorAktion.mail.text, 'Mit freundlichen Grüßen\nWalzengießerei Coswig GmbH', 'gelb: Gruß mit Werk aus ?werk=');
 
   r = await aufruf(ausgang);
   gleich([r.richtung, r.kreditorAktion && r.kreditorAktion.art, !!(r.kreditorAktion && r.kreditorAktion.mail)], ['Ausgang', 'abweichung', false], 'Ausgang: keine Mail');

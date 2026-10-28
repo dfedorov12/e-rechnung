@@ -134,10 +134,12 @@ Der Prüfdienst liefert für zwei Fälle eine fertige Mail an den Lieferanten in
 
 Die Absätze sind die Vorlagen der Buchhaltung, wörtlich. Die Mail ist im Layout der DIHAG
 gesetzt (Kopf mit Gesellschaft, Kasten mit Rechnungsnummer, Datum und Betrag, roter bzw.
-oranger Streifen) und nennt den Prüfbericht im Anhang. Die Befunde stehen nur im Anhang:
-bei XRechnung der Prüfbericht von KoSIT, bei ZUGFeRD (Prüfung mit Mustang) ein Bericht mit
-Rechnungsdaten, Ergebnis und allen Meldungen. Texte und Layout stehen in
-`api/src/kreditormail.js`.
+oranger Streifen) und nennt den Prüfbericht im Anhang. Kopf und Gruß tragen den Namen der
+Gesellschaft des Postfachs (aus `?werk=`), nicht den Empfänger aus der Rechnung, der bei
+fehlerhaften Rechnungen oft falsch drinsteht. Die Befunde stehen nur im Anhang, einem
+Prüfbericht im selben Layout für XRechnung (KoSIT) und ZUGFeRD (Mustang): Rechnungsdaten,
+Prüfwerkzeug, Ergebnis, alle Meldungen und der Rechnungsinhalt. Der Original-Bericht von KoSIT
+liegt weiter neben der Rechnung im Archiv. Texte und Layout stehen in `api/src/kreditormail.js`.
 
 Keine Mail kommt bei sonstigen Rechnungen (PDF ohne XML, PDF/A-3 fehlt, dafür die
 800k-Einschätzung im Monitoring), bei grün und bei Ausgangsrechnungen, die im Postfach landen.

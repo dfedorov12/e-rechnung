@@ -13,8 +13,10 @@
  * sie entscheidet die 800k-Einschätzung im Monitoring über den Text.
  *
  * Die Absätze sind die Vorlagen der Buchhaltung (Oktober 2026), wörtlich. Die Mail
- * nennt dazu nur die Rechnung. Die Befunde stehen im Anhang: der Prüfbericht von
- * KoSIT, bei ZUGFeRD (Mustang) ein Bericht mit Befunden und Rechnungsinhalt.
+ * nennt dazu nur die Rechnung. Die Befunde stehen im Anhang, einem Prüfbericht im
+ * selben Layout für XRechnung (KoSIT) und ZUGFeRD (Mustang), mit Rechnungsinhalt.
+ * Absender im Gruß ist die Gesellschaft des Postfachs (Werk), nicht der Empfänger
+ * aus der Rechnung: Der steht bei fehlerhaften Rechnungen oft falsch oder gar nicht drin.
  */
 
 const { DOMParser } = require('@xmldom/xmldom');
@@ -59,6 +61,16 @@ const VORLAGEN = {
 
 const MAX_BEFUNDE = 50;
 const MAX_INHALT = 3000;     // Elemente im Rechnungsinhalt, darüber wird gekürzt
+
+// Gesellschaft je Werk für Kopf und Gruß (wie WERKE_ALLE in js/access.js)
+const GESELLSCHAFT = {
+  WGC: 'Walzengießerei Coswig GmbH',
+  SHB: 'Stahl- und Hartgusswerk Bösdorf GmbH',
+  ZAI: 'Dihag Zaigler GmbH',
+  EIS: 'DIHAG Gienanth GmbH',
+  LEG: 'Lintorfer Eisengießerei GmbH',
+  EWA: 'Eisenwerk Arnstadt GmbH',
+};
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -170,9 +182,8 @@ function _eigenerBericht(res, v, d) {
 
 function _anhang(res, v, d) {
   const name = 'Pruefbericht_' + (String(d.nummer || 'E-Rechnung').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60) || 'E-Rechnung') + '.html';
-  const html = res.berichtHtml
-    ? (/^\s*<!DOCTYPE/i.test(res.berichtHtml) ? '' : '<!DOCTYPE html>\n') + res.berichtHtml
-    : _eigenerBericht(res, v, d);
+  // Immer der eigene Bericht, gleiches Layout für KoSIT und Mustang (der KoSIT-Bericht bleibt im Archiv)
+  const html = _eigenerBericht(res, v, d);
   return { name, contentType: 'text/html', base64: Buffer.from(html, 'utf8').toString('base64') };
 }
 
@@ -213,7 +224,7 @@ function kreditorMail(res) {
   if (!v || res.richtung === 'Ausgang') return null;
 
   const d = res.daten || {};
-  const firma = res.richtung === 'Eingang' && d.empfaenger ? d.empfaenger : '';
+  const firma = GESELLSCHAFT[String(res.werk || '').toUpperCase()] || '';
   const anhang = _anhang(res, v, d);
   const angaben = [..._angaben(d), ['Prüfbericht', 'im Anhang (' + anhang.name + ')']];
 
