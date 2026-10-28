@@ -100,7 +100,11 @@ gleich(istEigen('DIHAG Holding GmbH'), true, 'DIHAG eigen');
 gleich(istEigen('Meuselwitz Guss GmbH'), true, 'MEG eigen');
 gleich(istEigen('Telekom Deutschland GmbH'), false, 'fremd');
 
-const { istEigeneMail } = require('../js/lieferant.js');
+const { istEigeneMail, textAusItems } = require('../js/lieferant.js');
+// Zeilen aus OCR-Stücken: gleiche Seite und fast gleiche Höhe = eine Zeile, links nach rechts
+gleich(textAusItems([{ text: 'GmbH', x: 60, y: 701, page: 1 }, { text: 'Muster', x: 10, y: 700, page: 1 },
+  { text: 'Rechnung', x: 10, y: 650, page: 1 }, { text: 'Fuß', x: 10, y: 800, page: 2 }]).split(NL),
+  ['Muster GmbH', 'Rechnung', 'Fuß'], 'Zeilen aus OCR-Stücken');
 gleich(istEigeneMail('rechnung@dihag-zaigler.com'), true, 'Zaigler-Mail eigen');
 gleich(istEigeneMail('info@ewa-guss.de'), true, 'EWA-Mail eigen');
 gleich(istEigeneMail('info@muster.de'), false, 'fremde Mail');

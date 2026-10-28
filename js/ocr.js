@@ -18,17 +18,18 @@ const OCR = {
 };
 
 /**
- * Rendert alle Seiten, erkennt Text und liefert positionierte Items.
+ * Rendert die Seiten, erkennt Text und liefert positionierte Items.
  * @param {PDFDocumentProxy} pdfDoc
  * @param {(p:{page:number,total:number,status:string,progress:number})=>void} onProgress
+ * @param {{maxSeiten?:number}} [optionen]  maxSeiten: nur die ersten Seiten (800k-Dialog)
  * @returns {Promise<Array<{text,x,y,pw,ph,w,page}>>}
  */
-async function ocrCollectItems(pdfDoc, onProgress) {
+async function ocrCollectItems(pdfDoc, onProgress, optionen) {
   if (typeof Tesseract === 'undefined') {
     throw new Error('Tesseract.js nicht geladen');
   }
 
-  const total = pdfDoc.numPages;
+  const total = Math.min(pdfDoc.numPages, (optionen && optionen.maxSeiten) || pdfDoc.numPages);
   let curPage = 1;
 
   const worker = await Tesseract.createWorker(OCR.lang, 1, {

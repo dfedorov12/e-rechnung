@@ -608,8 +608,24 @@ async function _ugAusRechnungLesen(r) {
     const resp = await fetch(`${SP.graphBase}/sites/${_ug.siteId}/lists/${r.listId}/items/${r.itemId}/driveItem/content`,
       { headers: { 'Authorization': `Bearer ${token}` } });
     if (!resp.ok) throw new Error(`Datei (${resp.status})`);
-    const l = lieferantAusText(await textAusPdf(await resp.arrayBuffer()));
+    const puffer = await resp.arrayBuffer();
+    // Kopie übergeben: pdf.js gibt den Puffer an seinen Worker ab, die Texterkennung braucht ihn noch
+    let l = lieferantAusText(await textAusPdf(puffer.slice(0)));
     if (_ugAktuell !== a) return;                      // Dialog inzwischen zu oder andere Rechnung
+    // Scan ohne Text: Texterkennung (Tesseract wie im Konverter) über die ersten zwei Seiten
+    if (!l.lesbar && typeof ocrCollectItems === 'function' && typeof Tesseract !== 'undefined' && typeof textAusItems === 'function') {
+      a.lesen = 'ocr';
+      a.ocrStand = '';
+      _ugGelesenZeigen();
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(puffer) }).promise;
+      const items = await ocrCollectItems(doc, p => {
+        if (_ugAktuell !== a) return;
+        a.ocrStand = `Seite ${p.page} von ${p.total}${p.status === 'recognizing text' ? ', ' + Math.round(p.progress * 100) + ' %' : ''}`;
+        _ugGelesenZeigen();
+      }, { maxSeiten: 2 });
+      if (_ugAktuell !== a) return;
+      l = Object.assign(lieferantAusText(textAusItems(items)), { ocr: true });
+    }
     a.gelesen = l;
     a.lesen = l.lesbar ? 'fertig' : 'scan';
     if (!l.lesbar) { _ugGelesenZeigen(); return; }
@@ -648,6 +664,10 @@ function _ugGelesenZeigen() {
   if (!el) return;
   el.className = 'ug-gelesen';
   if (a.lesen === 'laeuft') { el.textContent = 'Rechnung wird gelesen…'; return; }
+  if (a.lesen === 'ocr') {
+    el.textContent = `Die Rechnung ist ein Scan. Texterkennung läuft${a.ocrStand ? ' (' + a.ocrStand + ')' : ''}, das dauert einige Sekunden…`;
+    return;
+  }
   if (a.lesen === 'scan') { el.textContent = 'Die Rechnung ist ein Scan ohne Text. Bitte den Lieferanten selbst eintragen.'; return; }
   if (a.lesen === 'fehler') { el.textContent = `Rechnung konnte nicht gelesen werden (${a.lesenFehler}). Bitte den Lieferanten selbst eintragen.`; return; }
   const l = a.gelesen;
@@ -658,7 +678,9 @@ function _ugGelesenZeigen() {
   if (l.nummer) teile.push('Nr. ' + l.nummer);
   if (l.datum) teile.push('vom ' + _monDate(l.datum));
   if (l.brutto != null) teile.push('Betrag ' + l.brutto.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }));
-  let text = teile.length ? 'Aus der Rechnung gelesen: ' + teile.join(', ') + '.' : 'In der Rechnung war kein Lieferant zu finden. Bitte selbst eintragen.';
+  let text = teile.length
+    ? (l.ocr ? 'Per Texterkennung aus dem Scan gelesen, bitte genau prüfen: ' : 'Aus der Rechnung gelesen: ') + teile.join(', ') + '.'
+    : 'In der Rechnung war kein Lieferant zu finden. Bitte selbst eintragen.';
   if (l.kleinunternehmer) {
     text += ' Die Rechnung verweist auf § 19 UStG (Kleinunternehmer): keine E-Rechnungspflicht, keine Mail nötig.';
     el.className = 'ug-gelesen ok';
@@ -744,7 +766,8 @@ function _ugAnHinweis(a) {
   if (a.bearbeitet.an) return '';
   if (a.anQuelle === 'gemerkt') return ' Die Adresse ist für diesen Lieferanten gemerkt, bitte prüfen.';
   if (a.anQuelle === 'absender') return ' Die Adresse ist der Absender der Rechnungsmail, bitte prüfen.';
-  if (a.anQuelle === 'pdf') return ' Die Adresse steht in der Rechnung, bitte prüfen.';
+  if (a.anQuelle === 'pdf') return a.gelesen && a.gelesen.ocr
+    ? ' Die Adresse stammt aus der Texterkennung, bitte genau prüfen.' : ' Die Adresse steht in der Rechnung, bitte prüfen.';
   return '';
 }
 

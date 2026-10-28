@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Monitoring | E-Rechnung Konverter | DIHAG</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=cfe01454ab">
   <style>
     .mon-header { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px; margin-bottom:18px; }
     .mon-header h2 { margin:0; }
@@ -384,16 +384,18 @@
 <dialog id="bh-dialog" aria-label="Rechnung bearbeiten"></dialog>
 <dialog id="sp-dialog" aria-label="Spalten je Werk"></dialog>
 
-<script src="js/vendor/msal-browser.min.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/access.js"></script>
-<script src="js/sharepoint.js"></script>
-<script src="js/vendor/pdf.min.js"></script>
+<script src="js/vendor/msal-browser.min.js?v=c933092555"></script>
+<script src="js/auth.js?v=175c69f129"></script>
+<script src="js/access.js?v=9a6d1c214d"></script>
+<script src="js/sharepoint.js?v=71a456f9a8"></script>
+<script src="js/vendor/pdf.min.js?v=5b5799e6f8"></script>
 <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';</script>
-<script src="js/lieferant.js"></script>
-<script src="js/umsatzgrenze.js"></script>
-<script src="js/bearbeitung.js"></script>
-<script src="js/monitoring.js"></script>
+<script src="js/vendor/tesseract/tesseract.min.js?v=000c27d9cd"></script>
+<script src="js/ocr.js?v=ca1f1ec809"></script>
+<script src="js/lieferant.js?v=b859c73959"></script>
+<script src="js/umsatzgrenze.js?v=10e6b0106f"></script>
+<script src="js/bearbeitung.js?v=f6e06b72d4"></script>
+<script src="js/monitoring.js?v=ccacfde866"></script>
 
 <script>
 onAuthReady(async () => {

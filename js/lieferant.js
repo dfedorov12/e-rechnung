@@ -302,7 +302,27 @@
     return zeilen.join('\n');
   }
 
-  const api = { lieferantAusText, istEigen, istEigeneMail, EIGENE_VAT, textAusPdf };
+  /**
+   * Zeilen aus positionierten Textstücken ({ text, x, y, page }), etwa aus der
+   * Texterkennung (js/ocr.js). Gleiche Seite und Grundlinie ergeben eine Zeile.
+   * @returns {string}
+   */
+  function textAusItems(items) {
+    const stuecke = (items || []).filter(it => it && it.text && String(it.text).trim())
+      .map(it => ({ page: it.page || 1, x: it.x, y: it.y, s: String(it.text) }))
+      .sort((a, b) => a.page - b.page || b.y - a.y);
+    const reihen = [];
+    for (const st of stuecke) {
+      const r = reihen[reihen.length - 1];
+      // bis 3 Punkte Höhenunterschied gelten als dieselbe Zeile
+      if (r && r.page === st.page && Math.abs(r.y - st.y) <= 3) r.teile.push(st);
+      else reihen.push({ page: st.page, y: st.y, teile: [st] });
+    }
+    return reihen.map(r => r.teile.sort((a, b) => a.x - b.x).map(t => t.s).join(' ').replace(/\s+/g, ' ').trim())
+      .join(String.fromCharCode(10));
+  }
+
+  const api = { lieferantAusText, istEigen, istEigeneMail, EIGENE_VAT, textAusPdf, textAusItems };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else Object.assign(global, api);
 })(typeof window !== 'undefined' ? window : globalThis);

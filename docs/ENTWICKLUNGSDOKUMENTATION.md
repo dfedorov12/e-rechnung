@@ -436,6 +436,11 @@ Entwicklung (lokal)
 
 Es sind keine Datenbankmigrationen, Rollouts oder Serverneustarts erforderlich. Deployments sind jederzeit möglich.
 
+Vor jedem Commit mit Änderungen an `js/` oder `css/`: `node scripts/cache-version.js`. Das Skript hängt an jede
+Einbindung in den HTML-Seiten die Prüfsumme der Datei an (`js/app.js?v=…`). GitHub Pages lässt Dateien bis zu
+10 Minuten im Browser-Cache, mit neuer Adresse holt der Browser eine geänderte Datei sofort. Vergessen fällt auf:
+`node tests/cache-version.test.js` schlägt dann fehl.
+
 ### 8.2 Rollback-Verfahren
 
 ```bash
