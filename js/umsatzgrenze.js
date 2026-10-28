@@ -238,11 +238,14 @@ function ugFuer(r) {
  * Lieferant informiert? Ja oder Nein hält die Buchhaltung bei der Einschätzung an dieser
  * Rechnung fest (Mail gesendet oder nicht). Automatik: Der Lieferant war schon
  * eingeschätzt, an dieser Rechnung war keine Einschätzung nötig. Eine Mail über den
- * Flow zählt immer als Ja. Leer: noch offen, Kleinbetrag oder keine sonstige Rechnung.
+ * Flow zählt immer als Ja, auch bei E-Rechnungen (Zurückweisung, Hinweis auf
+ * Abweichungen aus dem Eingangs-Flow). Leer: noch offen, Kleinbetrag oder E-Rechnung ohne Mail.
  */
 function ugInformiert(r) {
-  if (!ugSonstige(r) || ugKleinbetrag(r)) return '';
-  if (ugMailsFuer(r).some(m => m.status !== 'Fehler')) return 'Ja';
+  const perMail = ugMailsFuer(r).some(m => m.status !== 'Fehler');
+  if (!ugSonstige(r)) return perMail ? 'Ja' : '';
+  if (ugKleinbetrag(r)) return '';
+  if (perMail) return 'Ja';
   const zu = _ug.daten.rechnungen[ugRechnungKey(r)];
   if (zu) return zu.informiert || '';
   return ugFuer(r) ? 'Automatik' : '';

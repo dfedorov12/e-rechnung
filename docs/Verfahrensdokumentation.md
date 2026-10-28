@@ -157,6 +157,15 @@ gebucht. Der Prüfschritt setzt die WP/StB‑Einordnung wie folgt um (Intake‑A
 | 7 | **Auslandskreditor ohne Leitweg als XRechnung** | **Annehmen**, keine Rückfrage (14.1 Abs. 6 Satz 3; konkludente Zustimmung Abs. 7). | Kein Sonderprozess (früherer Check entfernt). |
 | 8 | **PDF‑Neugenerierung bei PDF/A‑3‑Fehler** | Original (auch defekt) **immer zusätzlich** archivieren, **nie ersetzen**; Ersatz‑PDF unter gleichem Index als *technisch konvertiert* (GoBD Rz. 131/135); kein Löschen vor Ablauf der Aufbewahrungsfrist. | `konvertiertesPdf=true`; Ersatz‑PDF aus XML (`convertXmlToPdf`); Original bleibt im Flow erhalten. |
 
+**Mitteilung an den Lieferanten:** Bei Zurückweisung (Prüfergebnis rot, Fall 3) und bei
+Warnungen (Prüfergebnis gelb, gebucht unter Vorbehalt) liefert die Intake‑API eine fertige
+Mail nach den Vorlagen der Buchhaltung in `kreditorAktion.mail`, mit Rechnungsnummer und
+den Befunden der Prüfung (`api/src/kreditormail.js`). Der Eingangs‑Flow legt sie in der Liste
+KreditorMails ab, der Flow „Kreditor‑Mail senden“ verschickt sie aus dem Werks‑Postfach.
+Text, Empfänger und Versandzeit bleiben in KreditorMails nachvollziehbar
+(`docs/Kreditor-Mail-Flow.md`, 4a). Bei sonstigen Rechnungen (Fälle 1 und 2) richtet sich die
+Mail nach der 800k‑Einschätzung im Monitoring.
+
 **Zu 8 (Konvertierung — Protokollpflicht):** Beim technisch konvertierten Ersatz‑PDF
 werden dokumentiert: übernommene XML‑Felder (vollständiger CII/UBL‑Datensatz), der
 **Zeitstempel** des Konvertierungsvorgangs sowie **eingesetzte Software/Version**

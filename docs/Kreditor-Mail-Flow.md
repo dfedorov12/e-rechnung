@@ -122,38 +122,42 @@ Automatisierter Cloud-Flow, ein Flow für alle Werke.
      coalesce(body('E-Mail_senden')?['error']?['message'], 'Versand fehlgeschlagen')
      ```
 
-## 4a. Zurückweisung automatisch senden (Eingangs-Flows)
+## 4a. Zurückweisung und Hinweis auf Abweichungen automatisch senden (Eingangs-Flows)
 
-Ist eine E-Rechnung rot (Prüfung nach EN 16931 nicht bestanden) oder im Profil MINIMUM bzw.
-BASIC-WL, liefert der Prüfdienst in `zurueckweisung` Grund und Standardtext. Die
-Eingangs-Flows legen dafür bisher keine Mail an, der Absender erfährt nichts. Mit diesem
-Schritt legen sie einen Auftrag in KreditorMails an, und „Kreditor-Mail senden“ verschickt ihn
-aus dem Werks-Postfach. So steht jede Zurückweisung mit Text und Zeitpunkt in KreditorMails
-und im Monitoring unter „Prüfung, Mails“.
+Der Prüfdienst liefert für zwei Fälle eine fertige Mail an den Lieferanten in
+`kreditorAktion.mail` (Betreff, HTML, Text und der Wert für die Spalte Art):
+
+| Prüfergebnis | Buchung | Mail | Art |
+|---|---|---|---|
+| rot (EN 16931 nicht bestanden) oder Profil MINIMUM bzw. BASIC-WL | zurückgewiesen | Zurückweisung, korrigierte E-Rechnung anfordern | `Zurueckweisung` |
+| gelb (nur Warnungen) | unter Vorbehalt | Hinweis auf geringfügige Abweichungen, Rechnung wird verarbeitet | `Abweichung` |
+
+Die Absätze sind die Vorlagen der Buchhaltung, wörtlich. Dazu setzt der Prüfdienst die
+Rechnung (Nummer, Datum, Betrag), die Befunde aus der Prüfung (bei rot die Fehler, bei gelb
+die Warnungen, höchstens zehn) und im Gruß den Namen der eigenen Gesellschaft, wie er auf der
+Rechnung steht. Die Texte stehen in `api/src/kreditormail.js`.
+
+Keine Mail kommt bei sonstigen Rechnungen (PDF ohne XML, PDF/A-3 fehlt, dafür die
+800k-Einschätzung im Monitoring), bei grün und bei Ausgangsrechnungen, die im Postfach landen.
 
 In jedem Eingangs-Flow in der Schleife über die Anlagen nach „Dateieigenschaften
 aktualisieren“:
 
 1. „Neuer Schritt“, **Bedingung**. Links als Ausdruck
-   `empty(body('HTTP_1')?['zurueckweisung'])`, Operator „ist gleich“, rechts `false`
+   `empty(body('HTTP_1')?['kreditorAktion']?['mail'])`, Operator „ist gleich“, rechts `false`
    (als Ausdruck).
 2. Im Ja-Zweig SharePoint **„Element erstellen“**, Website Rechnungsmonitoring, Liste
    KreditorMails. Die Felder als Ausdruck:
-   - Titel:
-     ```
-     concat('Ihre Rechnung ', coalesce(body('HTTP_1')?['daten']?['nummer'], items('Auf_alle_anwenden_2')?['name']), ' kann nicht verarbeitet werden')
-     ```
+   - Titel: `body('HTTP_1')?['kreditorAktion']?['mail']?['betreff']`
    - An:
      ```
      if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])
      ```
    - Werk: `WGC` bzw. `ZAI` (fester Text)
-   - Art: `Zurueckweisung` (fester Text)
-   - MailHtml:
-     ```
-     concat('<p>Guten Tag,</p><p>', body('HTTP_1')?['zurueckweisung']?['text'], '</p><p>Prüfergebnis: ', coalesce(body('HTTP_1')?['hinweis'], ''), '</p><p>Datei: ', items('Auf_alle_anwenden_2')?['name'], '</p>')
-     ```
-   - MailText: derselbe Ausdruck ohne die `<p>`-Teile, oder leer lassen
+   - Art: `body('HTTP_1')?['kreditorAktion']?['mail']?['art']` (Spalte Art → „Benutzerdefinierten
+     Wert eingeben“)
+   - MailHtml: `body('HTTP_1')?['kreditorAktion']?['mail']?['html']`
+   - MailText: `body('HTTP_1')?['kreditorAktion']?['mail']?['text']`
    - Rechnung:
      ```
      coalesce(body('HTTP_1')?['daten']?['nummer'], body('Datei_erstellen_Original')?['Name'])
@@ -173,7 +177,13 @@ aktualisieren“:
    „Wartet“.
 
 Die Mail geht an den Absender der Rechnungsmail. Hat ein Kollege die Rechnung weitergeleitet,
-bekommt er die Zurückweisung und gibt sie an den Lieferanten weiter.
+bekommt er die Mail und gibt sie an den Lieferanten weiter. Im Monitoring steht danach in der
+Spalte „Lieferant informiert“ „Ja“, die aufgeklappte Zeile zeigt unter „Mails“ Art, Empfänger
+und Versandzeit.
+
+Wer den ersten Entwurf dieses Schritts schon gebaut hat (Bedingung auf `zurueckweisung`,
+MailHtml mit `concat('<p>Guten Tag,</p>…')`): Bedingung, Titel, Art, MailHtml und MailText wie
+oben ersetzen. Sonst kommen Abweichungen nicht an und die Zurückweisung hat den alten Text.
 
 ## 4b. Dateiname beim Eingang mitschreiben
 

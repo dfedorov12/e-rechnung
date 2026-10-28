@@ -335,7 +335,7 @@ if (-not $OhneMailListe) {
   $MailFelder = @(
     @{ Name='An';             Titel='An (Lieferant)';                 Typ='Text' }
     @{ Name='Werk';           Titel='Werk';                           Typ='Text' }
-    @{ Name='Art';            Titel='Art';                            Typ='Choice'; FillIn=$true; Choices=@('800k Variante 1 Ruecksendung','800k Variante 2 Akzeptanz','800k Ankuendigung 2027','800k Hinweis 2028','E-Rechnungspflicht 2028','Berichtigung','Zurueckweisung','Rueckfrage') }
+    @{ Name='Art';            Titel='Art';                            Typ='Choice'; FillIn=$true; Choices=@('800k Variante 1 Ruecksendung','800k Variante 2 Akzeptanz','800k Ankuendigung 2027','800k Hinweis 2028','E-Rechnungspflicht 2028','Berichtigung','Zurueckweisung','Abweichung','Rueckfrage') }
     @{ Name='Status';         Titel='Status';                         Typ='Choice'; Choices=@('Wartet','Gesendet','Fehler') }
     @{ Name='MailText';       Titel='Mailtext';                       Typ='Note' }
     @{ Name='MailHtml';       Titel='Mailtext (HTML fuer den Flow)';  Typ='Note' }

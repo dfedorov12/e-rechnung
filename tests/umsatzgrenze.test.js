@@ -84,6 +84,11 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   ok(ug.ugInformiert(c) === '', 'fehlgeschlagene Mail zaehlt nicht');
   ok(ug.ugInformiert(klein) === '', 'Kleinbetrag braucht keine Info');
   ok(ug.ugInformiert(pdf('RE-5', { formatmangel: false })) === '', 'E-Rechnung braucht keine Info');
+  const xml = pdf('RE-6', { formatmangel: false });
+  ug._ug.mails[ug.ugRechnungKey(xml)] = [{ status: 'Gesendet', art: 'Abweichung' }];
+  ok(ug.ugInformiert(xml) === 'Ja', 'E-Rechnung mit Hinweis-Mail aus dem Eingangs-Flow = Ja');
+  ug._ug.mails[ug.ugRechnungKey(xml)] = [{ status: 'Fehler', art: 'Zurueckweisung' }];
+  ok(ug.ugInformiert(xml) === '', 'E-Rechnung, Mail fehlgeschlagen');
 }
 
 // Mailadresse des Lieferanten wird beim Speichern gemerkt

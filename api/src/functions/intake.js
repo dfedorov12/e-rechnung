@@ -35,7 +35,9 @@
  *     manuellePruefung:true + manuellePruefungGrund bei Reverse-Charge/innergem./steuerfrei (P6),
  *     rueckfrageLieferant: true bei materieller PDF↔XML-Abweichung (P4),
  *     zurueckweisung:  { grund, text } | null (harter Stopp MINIMUM/BASIC-WL, P3),
- *     kreditorAktion:  { art:'berichtigung'|'zurueckweisung', grund, text } | null,
+ *     kreditorAktion:  { art:'berichtigung'|'zurueckweisung'|'abweichung', grund, text, mail? } | null,
+ *                      mail = { art, betreff, html, text }: fertige Mail an den Lieferanten bei
+ *                      Zurückweisung und bei Abweichungen (gelb), siehe ../kreditormail.js,
  *     konvertiertesPdf:true, wenn ein technisch konvertiertes Ersatz-PDF erzeugt wurde (P8),
  *     formaleHinweise: [ … ] (Leitweg/elektr. Adresse — kein USt-Pruefgrund, P5),
  *     daten:           { nummer, datum, steller, empfaenger, netto, steuerkategorie, ... } | null,
@@ -56,6 +58,7 @@ const { normalizeBody } = require('../httpbody');
 const { pdfXmlAbgleich } = require('../pdfabgleich');
 const { kopfdatenAusPdf } = require('../kopfdaten');
 const { feldGrenzen } = require('../feldlaenge');
+const { kreditorMail } = require('../kreditormail');
 
 // Standardtext fuer die Berichtigungs-Aufforderung an den Kreditor (Punkte 1/2:
 // fehlendes PDF/A-3 bzw. fehlende eingebettete XML -> "sonstige Rechnung", nicht
@@ -71,6 +74,11 @@ const TEXT_ZURUECKWEISUNG_FEHLER =
   'Ihre E-Rechnung hat die Prüfung nach EN 16931 nicht bestanden und ist so keine gültige '
   + 'E-Rechnung. Wir können sie nicht verarbeiten und bitten Sie um eine korrigierte '
   + 'E-Rechnung (XRechnung oder ZUGFeRD/Factur-X, Profil EN16931 oder höher).';
+
+// Hinweis bei Warnungen (Prüfergebnis gelb): Rechnung wird gebucht, Lieferant soll es künftig vermeiden.
+const TEXT_HINWEIS_ABWEICHUNG =
+  'Ihre E-Rechnung weist geringfügige Abweichungen auf. Wir verarbeiten sie trotzdem und bitten Sie, '
+  + 'die Anforderungen an E-Rechnungen künftig einzuhalten.';
 
 app.http('intake', {
   methods: ['GET', 'POST'],
@@ -137,7 +145,7 @@ app.http('intake', {
       manuellePruefung: false,     // Reverse-Charge/innergem./steuerfrei -> Vier-Augen (P6)
       manuellePruefungGrund: '',
       rueckfrageLieferant: false,  // materielle PDF↔XML-Abweichung (P4)
-      kreditorAktion: null,        // { art:'berichtigung'|'zurueckweisung', grund, text }
+      kreditorAktion: null,        // { art:'berichtigung'|'zurueckweisung'|'abweichung', grund, text, mail? }
       zurueckweisung: null,        // harter Stopp MINIMUM/BASIC-WL (P3)
       konvertiertesPdf: false,     // technisch konvertiertes Ersatz-PDF erzeugt (P8)
       pdfXmlAbgleich: null,
@@ -258,6 +266,10 @@ app.http('intake', {
           'PDF/A-3 fehlt — als sonstige Rechnung unter Vorbehalt gebucht, Berichtigung angefordert.']
           .filter(Boolean).join(' | ');
       }
+      // Gelb ohne Formatmangel: gültig und gebucht, der Lieferant bekommt einen Hinweis auf die Abweichungen.
+      if (res.konform === 'gelb' && !res.kreditorAktion) {
+        res.kreditorAktion = { art: 'abweichung', grund: 'pruefung-gelb', text: TEXT_HINWEIS_ABWEICHUNG };
+      }
     } catch (e) {
       context.error('Validierung fehlgeschlagen:', e);
       res.konform = 'ungeprueft';
@@ -349,6 +361,12 @@ app.http('intake', {
       } catch (e) {
         res.renderFehler = msg(e);
       }
+    }
+
+    // Fertige Mail an den Lieferanten (Zurückweisung, Abweichungen), erst hier: Richtung und Daten stehen fest
+    if (res.kreditorAktion) {
+      const mail = kreditorMail(res);
+      if (mail) res.kreditorAktion.mail = mail;
     }
 
     return { status: 200, jsonBody: feldGrenzen(res) };

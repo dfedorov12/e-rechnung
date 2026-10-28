@@ -820,7 +820,7 @@ function _monZelle(id, r, idx) {
     case 'informiert': {
       const v = typeof ugInformiert === 'function' ? ugInformiert(r) : '';
       const cls = { Ja: 'bh-ja', Nein: 'bh-wartet', Automatik: 'bh-neutral' }[v] || '';
-      const tip = { Ja: 'Lieferant per Mail informiert', Nein: 'Eingeschätzt, Lieferant nicht informiert',
+      const tip = { Ja: 'Lieferant per Mail informiert (Details in der aufgeklappten Zeile)', Nein: 'Eingeschätzt, Lieferant nicht informiert',
         Automatik: 'Lieferant war schon eingeschätzt, keine Einschätzung an dieser Rechnung nötig' }[v] || '';
       return `<td>${v ? `<span class="bh-pill ${cls}" title="${_esc(tip)}">${_esc(v)}</span>` : ''}</td>`;
     }
@@ -959,7 +959,9 @@ function _monDetail(r, idx) {
     + block('Prüfung', [['Ergebnis', t(r.konform)], ['Hinweis', t(_monHinweis(r))], ['Status', t(r.status)],
         ['Buchung', t(r.buchung) + (r.buchungAlt ? ` (gespeichert: ${t(r.buchungAlt)})` : '')], ['Prüfschritte', t(flags.join('\n'))],
         ['Fehler', t(r.fehler)], ['Aufbewahrung', r.gobdArchiviert ? t(r.complianceTag || 'GoBD-Aufbewahrung gesetzt') : ''],
-        ['Mails', !sonstige && typeof ugMailsFuer === 'function' ? t(ugMailsFuer(r).slice(0, 3).map(m => _ugMailStand(m)).join(String.fromCharCode(10))) : '']])
+        ['Mails', !sonstige && typeof ugMailsFuer === 'function' ? t(ugMailsFuer(r).slice(0, 3)
+          .map(m => ({ Zurueckweisung: 'Zurückweisung: ', Abweichung: 'Hinweis auf Abweichungen: ' }[m.art] || '') + _ugMailStand(m))
+          .join(String.fromCharCode(10))) : '']])
     + (sonstige ? block('800.000 €', [
         ['Einschätzung', e ? t(`${(typeof _UG_LABEL !== 'undefined' && _UG_LABEL[e.vermutung]) || e.vermutung}, ${e.vonName || e.von || ''} am ${_monDate(e.am)}`) : 'noch offen'],
         ['Lieferant informiert', t(typeof ugInformiert === 'function' ? ugInformiert(r) : '')], ['Mails', t(mails.join('\n'))]]) : '')
