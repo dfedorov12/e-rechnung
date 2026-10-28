@@ -146,13 +146,24 @@ function parseReport(reportXml, httpRejected) {
     }
   }
 
-  // Fallback: HTML-Fehlertabelle, falls keine SVRL-Befunde eingebettet sind.
+  // Fallback: HTML-Fehlertabelle, falls keine SVRL-Befunde eingebettet sind. Nur die
+  // Fehlertabelle (tbl-errors) lesen: Der Bericht zeigt auch den Inhalt der Rechnung
+  // (table.document), dort sah eine Position wie „Walze GGG-70“ nach einem Regelcode aus.
   if (!meldungen.length && rejected) {
-    const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
-    while ((m = rowRe.exec(s))) {
-      const text = strip(m[1]);
-      if (text && /[A-Z]{2,}-[A-Z0-9-]*\d/.test(text)) meldungen.push({ level: 'error', text: text.slice(0, 300) });
+    const tabRe = /<table\b[^>]*class="[^"]*\btbl-errors\b[^"]*"[^>]*>([\s\S]*?)<\/table>/gi;
+    let tab;
+    while ((tab = tabRe.exec(s))) {
+      const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+      while ((m = rowRe.exec(tab[1]))) {
+        const text = strip(m[1]);
+        if (text && /[A-Z]{2,}-[A-Z0-9-]*\d/.test(text)) meldungen.push({ level: 'error', text: text.slice(0, 300) });
+      }
     }
+  }
+  // Kein Prüfszenario gegriffen (Dokumenttyp unbekannt): als Befund benennen.
+  if (!meldungen.length && rejected && /<rep:noScenarioMatched\b/i.test(s)) {
+    meldungen.push({ level: 'error', text: 'Das Dokument entspricht keinem zulässigen E-Rechnungs-Dokumenttyp '
+      + '(kein Prüfszenario erkannt). Bitte die Kennung der Spezifikation (BT-24) und die Syntax prüfen.' });
   }
 
   // Punkt 5: BT-10/Leitweg (BR-DE-15) + elektronische Adresse (R010/R020) +

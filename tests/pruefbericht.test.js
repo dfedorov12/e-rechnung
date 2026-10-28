@@ -41,6 +41,16 @@ wahr(/formale XRechnung-Regeln/.test(r.hinweis), 'Hinweis formal');
 r = parseReport('<svrl:failed-assert flag="warning"><svrl:text>[BR-DE-21] SVRL-Warnung</svrl:text></svrl:failed-assert>');
 gleich(r.konform, 'gelb', 'SVRL-Warnung');
 
+// 5a) KoSIT: kein Prüfszenario. Der Bericht zeigt den Rechnungsinhalt, eine Position wie
+//     „Walze GGG-70“ ist kein Befund. Fehler stehen nur in der Tabelle tbl-errors.
+const inhalt = '<table class="document"><tr class="row"><td class="pos">0014</td><td><div class="val">Walze GGG-70, bearbeitet</div></td></tr></table>';
+r = parseReport('<rep:report><rep:noScenarioMatched/><rep:assessment><rep:reject><rep:explanation>' + inhalt
+  + '</rep:explanation></rep:reject></rep:assessment></rep:report>');
+gleich(r.meldungen.length, 1, 'nur der Szenario-Befund');
+wahr(/keinem zulässigen E-Rechnungs-Dokumenttyp/.test(r.meldungen[0].text) && !/GGG/.test(r.hinweis), 'kein Rechnungsinhalt als Fehler: ' + r.hinweis);
+r = parseReport('<rep:report><rep:reject/>' + inhalt + '<table class="tbl-errors"><tr><td>BR-CO-15</td><td>Summe falsch</td></tr></table></rep:report>');
+gleich(r.meldungen.map(x => x.text), ['BR-CO-15 Summe falsch'], 'Fehlertabelle ja, Inhaltstabelle nein');
+
 // 6) Mustang: nur Warnungen -> gelb mit Hinweis
 const must = w => `<validation><xml><summary status="valid"/><messages>${w}</messages></xml></validation>`;
 r = parseMustangReport(must('<notice type="1">[BR-DE-21] Kennung</notice><notice>[BR-DE-21] Kennung</notice><warning>Zweite</warning>'), {});
