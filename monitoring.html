@@ -155,6 +155,9 @@
     .mon-mehr span { margin-left:10px; font-size:12px; color:var(--gray-500); }
 
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
+    /* Abzeichen bleiben in ihrer Spalte, zu lange werden mit … gekürzt (voller Text im Tooltip) */
+    table.mon-table td .pill { max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
+    .mon-hint { font-size:11px; color:var(--gray-600,#6b7280); margin-top:3px; max-width:100%; line-height:1.3; }
     .pill-werk   { background:var(--primary-light); color:var(--primary-dark); }
     .pill-in     { background:#dbeafe; color:#1e40af; }
     .pill-out    { background:#d1fae5; color:#065f46; }
@@ -339,6 +342,7 @@
           <option value="gr">🟢 grün</option>
           <option value="gel">🟡 gelb</option>
           <option value="rot">🔴 rot</option>
+          <option value="sonst">keine E-Rechnung</option>
         </select>
         <select id="mon-f-buchung" aria-label="Buchung"><option value="">Alle Buchung</option></select>
         <select id="mon-f-status" aria-label="Status"><option value="">Alle Status</option></select>
@@ -395,7 +399,7 @@
 <script src="js/lieferant.js?v=b859c73959"></script>
 <script src="js/umsatzgrenze.js?v=10e6b0106f"></script>
 <script src="js/bearbeitung.js?v=f6e06b72d4"></script>
-<script src="js/monitoring.js?v=ccacfde866"></script>
+<script src="js/monitoring.js?v=63bad36e77"></script>
 
 <script>
 onAuthReady(async () => {

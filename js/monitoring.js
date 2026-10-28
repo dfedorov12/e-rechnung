@@ -825,9 +825,9 @@ function _monZelle(id, r, idx) {
       return `<td>${v ? `<span class="bh-pill ${cls}" title="${_esc(tip)}">${_esc(v)}</span>` : ''}</td>`;
     }
     case 'konform': {
-      const hinweis = _monHinweis(r);
+      const hinweis = _monHinweisZelle(r);
       return `<td>${_monKonPill(r)}${hinweis
-        ? `<div class="mon-hint" title="${_esc(hinweis)}" style="font-size:11px;color:var(--gray-600,#6b7280);margin-top:3px;max-width:100%;line-height:1.3;">${_esc(hinweis)}</div>`
+        ? `<div class="mon-hint" title="${_esc(_monHinweis(r))}">${_esc(hinweis)}</div>`
         : ''}</td>`;
     }
     case 'fehler':   return `<td class="mon-err" title="${_esc(r.fehler)}">${_esc(r.fehler.slice(0, 60))}</td>`;
@@ -1494,7 +1494,27 @@ function _monKonPill(r) {
   if (v.startsWith('gr')) return `<span class="pill pill-ok">grün</span>`;
   if (v.startsWith('gel')) return `<span class="pill pill-warn">gelb</span>`;
   if (v.startsWith('rot')) return `<span class="pill pill-bad">rot</span>`;
-  return r.konform ? `<span class="pill">${_esc(r.konform)}</span>` : '';
+  // Langes Prüfergebnis „Sonstige Rechnung (keine E-Rechnung)“ kurz, der volle Hinweis steht im Tooltip
+  if (v.startsWith('sonst')) {
+    const tip = _monHinweis(r) || 'Sonstige Rechnung: PDF ohne E-Rechnungsdaten, unter Vorbehalt gebucht.';
+    return `<span class="pill pill-status" title="${_esc(tip)}">keine E-Rechnung</span>`;
+  }
+  if (v.startsWith('ungepr')) return `<span class="pill pill-status" title="Die Prüfung ist nicht gelaufen">ungeprüft</span>`;
+  return r.konform ? `<span class="pill" title="${_esc(r.konform)}">${_esc(r.konform)}</span>` : '';
+}
+
+/**
+ * Hinweis für die Tabellenzelle. Bei sonstigen Rechnungen sagt das Abzeichen schon
+ * „keine E-Rechnung“ und die Buchung „Unter Vorbehalt“. In der Zelle bleiben nur
+ * Besonderheiten, der ganze Text steht im Tooltip und in der Detailzeile.
+ */
+function _monHinweisZelle(r) {
+  const hinweis = _monHinweis(r);
+  if (!/^sonst/i.test(r.konform || '')) return hinweis;
+  const teile = [];
+  if (/openTRANS|BMEcat|keine E-Rechnung nach EN/i.test(hinweis)) teile.push('XML im Fremdformat (openTRANS/BMEcat)');
+  if (/§\s*19 UStG|Kleinunternehmer/i.test(hinweis)) teile.push('Kleinunternehmer (§ 19 UStG)');
+  return teile.join(', ');
 }
 
 function _monShowSetup(title, msg) {
@@ -1530,7 +1550,7 @@ function monShowAccessDenied() {
 
 function _monRenderChips() {
   const f = _monFilter;
-  const KONF = { gr: 'grün', gel: 'gelb', rot: 'rot' };
+  const KONF = { gr: 'grün', gel: 'gelb', rot: 'rot', sonst: 'keine E-Rechnung' };
   const FLAG = { offen: 'Offen', fehler: 'Fehler / rot', dublette: 'Dubletten',
                  manuell: 'Manuelle Prüfung', rueckfrage: 'Zur Rückfrage', zurueck: 'Zurückgewiesen',
                  umsatz: '800k-Einschätzung offen', genehmigung: 'In Genehmigung' };
