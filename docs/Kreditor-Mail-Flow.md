@@ -202,6 +202,13 @@ aktualisieren“:
    - AngefordertVon: `Eingangs-Flow`
 4. Speichern.
 
+**Schalter zum Pausieren:** Direkt unter dem Trigger, vor der Schleife, eine Aktion
+„Verfassen“ mit dem Namen `Lieferantenmails` und der Eingabe `an`. In der Bedingung aus
+Schritt 1 eine zweite Zeile (Und): links als Ausdruck `outputs('Lieferantenmails')`,
+„ist gleich“, rechts `an`. Zum Pausieren `aus` eintragen und speichern. Die Rechnungen werden
+weiter geprüft und abgelegt, es geht nur keine Mail raus und es entsteht kein Eintrag in
+KreditorMails. Den ganzen Flow auszuschalten hält dagegen auch den Rechnungseingang an.
+
 Das Konto der Outlook-Verbindung braucht „Senden als“ auf das Werks-Postfach (siehe 2.).
 Schlägt der Versand fehl, läuft der Flow weiter, die Rechnung ist abgelegt, und KreditorMails
 zeigt den Fehler.
