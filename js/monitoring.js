@@ -704,7 +704,7 @@ function _monTileClick(id) {
 // MON_STANDARD. Spalten mit bh: true gibt es nur, wenn das Werk die Bearbeitung nutzt.
 const MON_SPALTEN = [
   { id: 'datum',       titel: 'Datum',                sort: 'datum',      breite: 10 },
-  { id: 'erstellt',    titel: 'Erstellt am',          sort: 'erstellt',   breite: 11 },
+  { id: 'erstellt',    titel: 'Erstellt am',          sort: 'erstellt',   breite: 12 },
   { id: 'werk',        titel: 'Werk',                 sort: 'werk',       breite: 5 },
   { id: 'richtung',    titel: 'Richtung',             sort: 'richtung',   breite: 7 },
   { id: 'nummer',      titel: 'Rechnungsnr.',         sort: 'nummer',     breite: 10 },
@@ -903,7 +903,11 @@ function _monZelle(id, r, idx) {
   const bh = r.bh;
   switch (id) {
     case 'datum':    return `<td style="white-space:nowrap;">${_esc(_monDate(r.datum))}</td>`;
-    case 'erstellt': return `<td style="white-space:nowrap;">${_esc(_monZeit(r.erstellt))}</td>`;
+    case 'erstellt': {
+      // Datum und Uhrzeit getrennt: Ist die Spalte schmal, rutscht die Uhrzeit in die nächste Zeile
+      const [tag, zeit] = _monZeit(r.erstellt).split(' ');
+      return `<td><span class="mon-tag">${_esc(tag || '')}</span>${zeit ? ` <span class="mon-uhr">${_esc(zeit)}</span>` : ''}</td>`;
+    }
     case 'werk':     return `<td><span class="pill pill-werk">${_esc(r.werk)}</span></td>`;
     case 'richtung': return `<td><span class="pill ${r.richtung === 'Eingang' ? 'pill-in' : 'pill-out'}">${_esc(r.richtung)}</span></td>`;
     case 'nummer': {
