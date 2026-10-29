@@ -161,13 +161,13 @@ function bhKopfHinweis(r, p, kannMerken) {
   if (r.nummerAusDatei) teile.push('Die Rechnungsnummer ist aus dem Dateinamen abgeleitet.');
   else if (!mitXml) teile.push('Die Rechnungsnummer ist aus dem PDF-Text gelesen.');
   const l = p.eintrag || {};
-  if (p.quelle === 'xml') teile.push('Der Lieferant steht so in der E-Rechnung.');
-  else if (p.quelle === 'bestaetigt') {
-    const wer = l.bestaetigtVonName || l.vonName || '';
-    const am = l.bestaetigtAm || l.am;
-    teile.push(`Lieferant bestätigt${wer ? ' von ' + wer : ''}${am ? ' am ' + _bhDatum(am) : ''}.`);
-  } else if (p.quelle === 'register') {
-    teile.push(`Lieferant aus dem Register erkannt (über ${l.treffer === 'vat' ? 'die USt-IdNr.' : 'den Namen'}), an dieser Rechnung noch nicht bestätigt.`);
+  const wer = l.bestaetigtVonName || l.bestaetigtVon || '';
+  const siegel = p.bestaetigt
+    ? ` Geprüft und bestätigt${wer ? ' von ' + wer : ''}${l.bestaetigtAm ? ' am ' + _bhDatum(l.bestaetigtAm) : ''}.` : '';
+  if (p.quelle === 'xml') teile.push('Der Lieferant steht so in der E-Rechnung.' + siegel);
+  else if (p.quelle === 'rechnung') teile.push('Lieferant an dieser Rechnung eingetragen.' + (siegel || ' Noch nicht bestätigt.'));
+  else if (p.quelle === 'register') {
+    teile.push(`Lieferant aus dem Register erkannt (über ${l.treffer === 'vat' ? 'die USt-IdNr.' : 'den Namen'}).` + (siegel || ' Noch nicht bestätigt.'));
   } else if (r.steller) teile.push('Lieferant aus dem PDF-Text gelesen, bitte prüfen.');
   else teile.push('Lieferant unbekannt, bitte eintragen.');
   if (kannMerken) teile.push('Ein geänderter Lieferant wird für die nächsten Rechnungen gemerkt.');
@@ -363,7 +363,7 @@ function bhDialogOeffnen(r, onGespeichert) {
   // Rechnungsnummer und Lieferant korrigieren (falsch gelesen aus dem PDF-Text)
   const p = typeof _monPartnerSicher === 'function' ? _monPartnerSicher(r) : { name: r.steller || '', quelle: 'xml' };
   const lieferant = p.name || r.steller || '';
-  const merkenAnbieten = typeof ugBestaetigen === 'function' && p.quelle !== 'xml' && p.quelle !== 'bestaetigt';
+  const merkenAnbieten = typeof ugBestaetigen === 'function' && !p.bestaetigt;
   const bekannte = typeof _ug !== 'undefined' ? Object.values(_ug.daten.lieferanten).map(l => l.name).filter(Boolean).sort() : [];
   _bhAktuell.lieferantVorher = lieferant;
 
@@ -376,11 +376,11 @@ function bhDialogOeffnen(r, onGespeichert) {
       <p class="ug-regel">${_esc([partner, betrag, r.werk, typeof _monDate === 'function' ? _monDate(r.datum) : ''].filter(Boolean).join(' · '))}</p>
       <div class="bh-raster bh-kopfdaten">
         <label class="ug-lbl">Rechnungsnummer<input id="bh-nummer" value="${_esc(r.nummer)}" autocomplete="off"></label>
-        <label class="ug-lbl">Lieferant<input id="bh-lieferant" list="bh-lieferanten" value="${_esc(lieferant)}" autocomplete="off"></label>
+        <label class="ug-lbl"><span>Lieferant${p.bestaetigt ? ' <span class="ug-siegel" title="Von der Kreditorenbuchhaltung geprüft und bestätigt">✓ Bestätigt</span>' : ''}</span><input id="bh-lieferant" list="bh-lieferanten" value="${_esc(lieferant)}" autocomplete="off"></label>
       </div>
       <datalist id="bh-lieferanten">${bekannte.map(n => `<option value="${_esc(n)}">`).join('')}</datalist>
       <p class="ug-hinweis">${_esc(bhKopfHinweis(r, p, typeof ugBestaetigen === 'function'))}</p>
-      ${merkenAnbieten && lieferant ? '<label class="bh-check"><input type="checkbox" id="bh-merken"> Lieferant bestätigen und für weitere Rechnungen merken</label>' : ''}
+      ${merkenAnbieten && lieferant ? '<label class="bh-check"><input type="checkbox" id="bh-merken"> Lieferant geprüft: bestätigen und für weitere Rechnungen merken</label>' : ''}
       <div class="bh-raster">
         <label class="ug-lbl">Varialnummer<input id="bh-varial" value="${_esc(b.varial)}" autocomplete="off"></label>
         <label class="ug-lbl">Bestellnummer<input id="bh-bestellnr" value="${_esc(b.bestellnr)}" autocomplete="off"></label>

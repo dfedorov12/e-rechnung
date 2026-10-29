@@ -81,9 +81,14 @@ gleich(recs.map(r => r.dublette), [false, false, false], 'neu gekennzeichnet nac
 // 6) Lieferant aus dem Register: an der Rechnung bestätigt geht vor der XML
 ug._ug.daten = { version: 1, lieferanten: { 'muster gmbh': { name: 'Muster GmbH', vat: 'DE111111111' } },
   rechnungen: { 'e|scan_1': { lieferant: 'muster gmbh' } } };
-gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'Scan_1', steller: 'Muster GmbII', format: 'PDF', ext: 'pdf' }).quelle, 'bestaetigt', 'bestätigt');
+let ps = M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'Scan_1', steller: 'Muster GmbII', format: 'PDF', ext: 'pdf' });
+gleich([ps.name, ps.quelle, ps.bestaetigt], ['Muster GmbH', 'rechnung', false], 'an der Rechnung eingetragen, ohne Siegel');
+ug._ug.daten.lieferanten['muster gmbh'].bestaetigtAm = '2026-10-29T17:00:00Z';
+ps = M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'Scan_1', steller: 'Muster GmbII', format: 'PDF', ext: 'pdf' });
+gleich([ps.quelle, ps.bestaetigt], ['rechnung', true], 'von der Kreditorenbuchhaltung bestätigt');
+gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'R_5', steller: 'Muster GmbH', ustid: 'DE111111111', format: 'XRechnung', ext: 'xml' }).bestaetigt, true, 'Siegel auch bei der XML');
 gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'Scan_2', steller: 'Xy', ustid: 'DE111111111', format: 'PDF', ext: 'pdf' }).quelle, 'register', 'über die USt-IdNr.');
-gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'R_3', steller: 'Neu AG', format: 'XRechnung', ext: 'xml' }), { name: 'Neu AG', quelle: 'xml' }, 'aus der XML');
+gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'R_3', steller: 'Neu AG', format: 'XRechnung', ext: 'xml' }), { name: 'Neu AG', quelle: 'xml', eintrag: null, bestaetigt: false }, 'aus der XML');
 gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'Scan_4', steller: 'Neu AG', format: 'PDF', ext: 'pdf' }).name, '', 'PDF-Text allein ist nicht sicher');
 
 // 7) Neue Spalte in alten Werkseinstellungen

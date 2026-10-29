@@ -200,8 +200,9 @@ Für ein weiteres Werk den Flow kopieren („Speichern unter“) und im Trigger 
      PDF-Text gelesen, hier korrigieren. Ein geänderter Lieferant wird bestätigt und im
      Lieferantenregister gemerkt, die nächste Rechnung mit derselben USt-IdNr. oder
      Schreibweise zeigt ihn dann gleich. Stimmt der gelesene Name, reicht der Haken
-     „Lieferant bestätigen und für weitere Rechnungen merken“. Unter dem Feld steht, woher
-     Nummer und Lieferant stammen.
+     „Lieferant geprüft: bestätigen und für weitere Rechnungen merken“. Bestätigte
+     Lieferanten tragen das Siegel „✓ Bestätigt“, in der Tabelle ein grünes ✓. Unter dem Feld
+     steht, woher Nummer und Lieferant stammen.
 3. Genehmigung: „Genehmigung anfordern“ anhaken, Genehmiger eintragen (mehrere mit `;`, dann
    gilt die erste Antwort), Kommentar, bei Bedarf die Info zum Austragen im abas, „Speichern
    und Genehmigung anfordern“.

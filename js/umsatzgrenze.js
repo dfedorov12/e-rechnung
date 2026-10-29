@@ -12,10 +12,12 @@
  * Monitoring-Site (Standardbibliothek, Ordner Monitoring). Rechnungen ohne
  * Lieferantennamen (PDF ohne XML) werden über ihren Dateischlüssel zugeordnet.
  *
- * Dieselbe Datei ist das Lieferantenregister: Bestätigt die Kreditorenbuchhaltung
- * einen Lieferanten (800k-Einschätzung oder „Bearbeiten“), merkt sie sich Name,
- * USt-IdNr., Mailadresse und die Schreibweisen aus dem PDF-Text (aliase). Spätere
- * Rechnungen desselben Lieferanten werden darüber erkannt.
+ * Dieselbe Datei ist das Lieferantenregister: Bei der 800k-Einschätzung und unter
+ * „Bearbeiten“ merkt sie sich Name, USt-IdNr., Mailadresse und die Schreibweisen aus
+ * dem PDF-Text (aliase). Spätere Rechnungen desselben Lieferanten werden darüber
+ * erkannt. Geprüft und bestätigt ist ein Lieferant erst, wenn die Kreditoren-
+ * buchhaltung es ausdrücklich tut (Knopf „Bestätigen“ im 800k-Dialog, „Bearbeiten“),
+ * dann zeigt das Monitoring ein grünes ✓ als Siegel.
  *
  * Maßgeblich ist laut Gesetz der Leistungszeitpunkt. Das Monitoring kennt nur
  * das Rechnungsdatum und nimmt es als Näherung.
@@ -293,21 +295,26 @@ function ugLieferantName(r) {
 }
 
 /**
- * Bestätigten Lieferanten in einen Registereintrag übernehmen: Name, USt-IdNr., wer und
- * wann. Weicht der Name aus der Rechnung (PDF-Text) ab, kommt er zu den aliase, damit die
- * nächste Rechnung mit derselben Schreibweise erkannt wird. Alles andere bleibt.
+ * Lieferanten in einen Registereintrag übernehmen: Name und USt-IdNr. Weicht der Name aus
+ * der Rechnung (PDF-Text) ab, kommt er zu den aliase, damit die nächste Rechnung mit
+ * derselben Schreibweise erkannt wird. Mit opt.bestaetigen setzt die Kreditorenbuchhaltung
+ * ihr Siegel (wer und wann). Alles andere bleibt, auch ein früheres Siegel.
+ * @param opt  { bestaetigen: boolean, vat: USt-IdNr. aus dem Dialog }
  */
-function ugLieferantMerken(alt, name, r, user, jetzt) {
+function ugLieferantMerken(alt, name, r, user, jetzt, opt) {
+  const o = opt || {};
   const e = Object.assign({}, alt || {});
   e.name = String(name).trim();
-  e.vat = e.vat || r.ustid || '';
+  e.vat = e.vat || o.vat || r.ustid || '';
   const gelesen = String(r.steller || '').trim();
   const aliase = (e.aliase || []).filter(a => ugKey(a) !== ugKey(e.name));
   if (gelesen && ugKey(gelesen) !== ugKey(e.name) && !aliase.some(a => ugKey(a) === ugKey(gelesen))) aliase.push(gelesen);
   if (aliase.length) e.aliase = aliase.slice(-10); else delete e.aliase;
-  e.bestaetigtAm = jetzt;
-  e.bestaetigtVon = user.username || '';
-  e.bestaetigtVonName = user.name || user.username || '';
+  if (o.bestaetigen) {
+    e.bestaetigtAm = jetzt;
+    e.bestaetigtVon = user.username || '';
+    e.bestaetigtVonName = user.name || user.username || '';
+  }
   return e;
 }
 
@@ -377,17 +384,20 @@ async function ugSpeichern(r, name, vermutung, vat, nummer, informiert, mail) {
 }
 
 /**
- * Lieferant an einer Rechnung bestätigen (Bearbeiten im Monitoring) und merken. Eine
- * Einschätzung und die Mailadresse bleiben, die Rechnung wird dem Lieferanten zugeordnet.
+ * Lieferant prüfen und bestätigen (Kreditorenbuchhaltung: Knopf im 800k-Dialog oder
+ * „Bearbeiten“) und merken. Eine Einschätzung und die Mailadresse bleiben, die Rechnung
+ * wird dem Lieferanten zugeordnet.
+ * @param extra  { vat } USt-IdNr., falls der Dialog sie kennt
  */
-async function ugBestaetigen(r, name) {
+async function ugBestaetigen(r, name, extra) {
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
   const key = ugKey(name);
   if (!key) throw new Error('Bitte den Lieferanten angeben.');
   const am = new Date().toISOString();
   const neu = await _ugSchreiben(d => ({
     version: 1,
-    lieferanten: Object.assign({}, d.lieferanten, { [key]: ugLieferantMerken(d.lieferanten[key], name, r, user, am) }),
+    lieferanten: Object.assign({}, d.lieferanten, { [key]: ugLieferantMerken(d.lieferanten[key], name, r, user, am,
+      { bestaetigen: true, vat: extra && extra.vat }) }),
     rechnungen: Object.assign({}, d.rechnungen, { [ugRechnungKey(r)]: Object.assign({}, d.rechnungen[ugRechnungKey(r)],
       { lieferant: key, am, von: user.username || '' }) }),
   }));
@@ -523,7 +533,8 @@ function _ugIso(de) {
  */
 function _ugAbsenderOk(mail) {
   const m = String(mail || '').trim().toLowerCase();
-  if (!ugMailOk(m) || /^(no-?reply|do-?not-?reply|mailer-daemon|postmaster)/.test(m)) return false;
+  // noreply auch mitten in der Adresse (tuev-sued_noreply@…)
+  if (!ugMailOk(m) || /(^|[._-])(no-?reply|do-?not-?reply)([._-]|@)|^(mailer-daemon|postmaster)@/.test(m)) return false;
   if (typeof istEigeneMail === 'function' && istEigeneMail(m)) return false;
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
   const eigen = String(user.username || '').toLowerCase().split('@')[1];
@@ -589,7 +600,10 @@ function _ugRender() {
       </div>
       <p class="ug-regel">${_esc(regel)}</p>
       <div class="ug-felder">
-        <label>Lieferant<input id="ug-name" list="ug-namen" value="${_esc(a.name)}" placeholder="Name wie auf der Rechnung" autocomplete="off"></label>
+        <div class="ug-feld">
+          <div class="ug-feldkopf"><label for="ug-name">Lieferant</label><span id="ug-siegel"></span></div>
+          <input id="ug-name" list="ug-namen" value="${_esc(a.name)}" placeholder="Name wie auf der Rechnung" autocomplete="off">
+        </div>
         <label>Rechnungsnr.<input id="ug-nr" value="${_esc(a.nr)}"></label>
         <label>Datum<input id="ug-datum" value="${_esc(a.datum)}" placeholder="TT.MM.JJJJ"></label>
       </div>
@@ -648,6 +662,7 @@ function _ugRender() {
       a.an = l.mail; a.anQuelle = 'gemerkt';
       dlg.querySelector('#ug-an').value = a.an;
     }
+    _ugSiegel();
     _ugKnoepfe();
   });
   feld('ug-nr', 'nr', _ugVorlageNeu);
@@ -659,6 +674,9 @@ function _ugRender() {
     if (iso && ugPhase(iso) !== a.phase) { a.phase = ugPhase(iso); _ugRender(); }
   });
   dlg.querySelector('[data-ug-zu]').addEventListener('click', () => dlg.close());
+  dlg.querySelector('#ug-siegel').addEventListener('click', ev => {
+    if (ev.target.closest('[data-ug-bestaetigen]')) _ugBestaetigenKlick();
+  });
   dlg.querySelector('[data-ug-kopie]').addEventListener('click', _ugKopieren);
   const nur = dlg.querySelector('[data-ug-nur]');
   if (nur) nur.addEventListener('click', () => _ugAbschliessen('nur'));
@@ -669,6 +687,46 @@ function _ugRender() {
   _ugGelesenZeigen();
   _ugWahlZeigen();
   _ugVorlageNeu();
+  _ugSiegel();
+}
+
+/**
+ * Neben „Lieferant“: grünes Siegel, wenn die Kreditorenbuchhaltung den Lieferanten mit
+ * diesem Namen schon geprüft und bestätigt hat, sonst der Knopf „Bestätigen“.
+ */
+function _ugSiegel() {
+  const el = document.getElementById('ug-siegel');
+  const feld = document.getElementById('ug-name');
+  if (!el || !feld) return;
+  const name = feld.value.trim();
+  const l = _ug.daten.lieferanten[ugKey(name)];
+  if (l && l.bestaetigtAm) {
+    const tip = `Geprüft und bestätigt von ${l.bestaetigtVonName || l.bestaetigtVon || '?'} am ${_monDate(l.bestaetigtAm)}`;
+    el.innerHTML = `<span class="ug-siegel" title="${_esc(tip)}">✓ Bestätigt</span>`;
+    return;
+  }
+  el.innerHTML = ugKey(name)
+    ? '<button type="button" class="ug-bestaetigen" data-ug-bestaetigen title="Name und USt-IdNr. geprüft: Lieferant bestätigen und für weitere Rechnungen merken">Bestätigen</button>'
+    : '';
+}
+
+/** Ein Klick: Lieferant mit dem Namen im Feld bestätigen und merken, danach Siegel zeigen. */
+async function _ugBestaetigenKlick() {
+  const a = _ugAktuell;
+  const dlg = document.getElementById('ug-dialog');
+  const knopf = dlg.querySelector('[data-ug-bestaetigen]');
+  const name = dlg.querySelector('#ug-name').value.trim();
+  if (!knopf || !ugKey(name)) return;
+  knopf.disabled = true;
+  knopf.textContent = 'Wird bestätigt…';
+  try {
+    await ugBestaetigen(a.r, name, { vat: a.vat });
+    _ugMeldung(`${name} ist geprüft und bestätigt.`, 'ok');
+    if (typeof a.onGespeichert === 'function') a.onGespeichert();
+  } catch (e) {
+    _ugMeldung(e.message || String(e), 'nicht');
+  }
+  if (_ugAktuell === a) _ugSiegel();
 }
 
 /**
@@ -726,6 +784,7 @@ async function _ugAusRechnungLesen(r) {
     const dlg = document.getElementById('ug-dialog');
     const setze = (id, v) => { const el = dlg.querySelector('#' + id); if (el) el.value = v; };
     setze('ug-name', a.name); setze('ug-nr', a.nr); setze('ug-datum', a.datum); setze('ug-an', a.an);
+    _ugSiegel();
     const stand = dlg.querySelector('#ug-mailstand');
     if (stand) stand.textContent = _ugMailstand(a);
     _ugGelesenZeigen();

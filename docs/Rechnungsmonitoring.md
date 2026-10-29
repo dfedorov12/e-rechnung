@@ -62,11 +62,14 @@ hinter „Datum“, bis der Admin ihre Spalten neu speichert. Danach gilt seine 
 
 **Steller / Empfänger** zeigt nur, was sicher ist, in dieser Reihenfolge:
 
-1. der Name, den die Kreditorenbuchhaltung an dieser Rechnung bestätigt hat (unter
-   „Bearbeiten“ oder bei der 800k-Einschätzung), mit grünem ✓,
+1. der Name, der an dieser Rechnung eingetragen ist (unter „Bearbeiten“ oder bei der
+   800k-Einschätzung),
 2. der Name aus der E-Rechnung (XML),
-3. der Name aus dem Lieferantenregister, erkannt über die USt-IdNr. oder eine schon
-   bestätigte Schreibweise (kursiv, an dieser Rechnung noch nicht bestätigt).
+3. der Name aus dem Lieferantenregister, erkannt über die USt-IdNr. oder eine gemerkte
+   Schreibweise (kursiv).
+
+Ein grünes **✓** dahinter ist das Siegel der Kreditorenbuchhaltung: Sie hat den Lieferanten
+geprüft und bestätigt. Der Tooltip nennt wer und wann.
 
 Den Namen, den der Prüfdienst nur aus dem PDF-Text gelesen hat, zeigt die Tabelle nicht,
 die aufgeklappte Zeile nennt ihn als „nicht bestätigt“. Darunter steht grün die
@@ -80,7 +83,18 @@ die Bearbeitung hängt (Original-PDF, bei XRechnung das lesbare PDF): `Title` un
 `Rechnungssteller`. Der Versionsverlauf der Datei hält fest, wer was geändert hat.
 
 Ein geänderter Lieferant wird **bestätigt und gemerkt**. Stimmt ein gelesener Name, reicht
-der Haken „Lieferant bestätigen und für weitere Rechnungen merken“. Nach der Korrektur fasst
+der Haken „Lieferant geprüft: bestätigen und für weitere Rechnungen merken“. Ist der
+Lieferant schon bestätigt, steht neben „Lieferant“ das Siegel „✓ Bestätigt“.
+
+## Lieferant bestätigen im 800k-Dialog
+
+Neben „Lieferant“ steht der Knopf **„Bestätigen“**, solange die Kreditorenbuchhaltung den
+Lieferanten mit diesem Namen nicht bestätigt hat. Ein Klick speichert sofort: Name,
+USt-IdNr. (auch die im Dialog gelesene) und Schreibweise aus dem PDF-Text kommen ins
+Register, die Rechnung wird dem Lieferanten zugeordnet, und aus dem Knopf wird das Siegel
+**„✓ Bestätigt“** (Tooltip: wer und wann). Ändert jemand den Namen im Feld, gilt das Siegel
+des neuen Namens. Die Einschätzung selbst (über oder bis 800.000 €) ist keine Bestätigung,
+sie merkt den Lieferanten nur. Nach der Korrektur fasst
 das Monitoring die Zeilen neu zusammen und prüft die Dubletten neu.
 
 ## Lieferantenregister
@@ -92,11 +106,12 @@ das Monitoring die Zeilen neu zusammen und prüft die Dubletten neu.
 |------|--------|
 | `name`, `vat`, `mail` | Name, USt-IdNr., Mailadresse für Kreditor-Mails |
 | `aliase` | Schreibweisen aus dem PDF-Text, die schon einmal zu diesem Lieferanten bestätigt wurden (höchstens 10) |
-| `bestaetigtAm`, `bestaetigtVon`, `bestaetigtVonName` | letzte Bestätigung durch die Kreditorenbuchhaltung |
+| `bestaetigtAm`, `bestaetigtVon`, `bestaetigtVonName` | Siegel: letzte Bestätigung durch die Kreditorenbuchhaltung („Bestätigen“ im 800k-Dialog, „Bearbeiten“) |
 | `vermutung`, `am`, `vonName`, `verlauf` | 800k-Einschätzung, falls es eine gibt |
 
-`rechnungen` ordnet einzelne Rechnungen (Dateischlüssel) einem Lieferanten zu. Bestätigt
-wird bei der 800k-Einschätzung und unter „Bearbeiten“. Eine neue Rechnung wird erkannt über
+`rechnungen` ordnet einzelne Rechnungen (Dateischlüssel) einem Lieferanten zu. Gemerkt wird
+bei der 800k-Einschätzung und unter „Bearbeiten“, das Siegel gibt es nur mit „Bestätigen“
+bzw. einer Korrektur unter „Bearbeiten“. Eine neue Rechnung wird erkannt über
 die Zuordnung, die USt-IdNr., den Namen oder eine gemerkte Schreibweise. Name und
 Schreibweise zählen nicht, wenn beide USt-IdNr. bekannt sind und sich unterscheiden.
 Schreibrechte braucht die Kreditorenbuchhaltung auf diese Datei („Mitwirken“).

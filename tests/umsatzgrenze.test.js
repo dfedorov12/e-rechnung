@@ -118,11 +118,15 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
 
   const user = { username: 'kb@dihag.com', name: 'Kreditoren Buchhaltung' };
   const e = ug.ugLieferantMerken({ name: 'Beispiel AG', vermutung: 'ueber', mail: 'r@beispiel.de' }, 'Beispiel AG',
-    { steller: 'Beisp1el A6', ustid: 'DE555555555' }, user, '2026-10-29T10:00:00Z');
+    { steller: 'Beisp1el A6', ustid: 'DE555555555' }, user, '2026-10-29T10:00:00Z', { bestaetigen: true });
   ok(e.vermutung === 'ueber' && e.mail === 'r@beispiel.de', 'Einschätzung und Mail bleiben');
   ok(e.vat === 'DE555555555' && e.aliase[0] === 'Beisp1el A6', 'USt-IdNr. und Schreibweise gemerkt');
   ok(e.bestaetigtVonName === 'Kreditoren Buchhaltung' && e.bestaetigtAm === '2026-10-29T10:00:00Z', 'wer und wann');
   ok(!ug.ugLieferantMerken(e, 'Beispiel AG', { steller: 'beispiel ag' }, user, '').aliase.includes('beispiel ag'), 'gleicher Name ist kein Alias');
+  const ohne = ug.ugLieferantMerken(null, 'Neu GmbH', { steller: '' }, user, '2026-10-29T11:00:00Z');
+  ok(!ohne.bestaetigtAm, 'Merken ohne Bestätigen setzt kein Siegel');
+  ok(ug.ugLieferantMerken(e, 'Beispiel AG', { steller: '' }, { username: 'x' }, '2026-10-30T09:00:00Z').bestaetigtAm === '2026-10-29T10:00:00Z', 'Siegel bleibt beim Merken');
+  ok(ug.ugLieferantMerken(null, 'Neu GmbH', { steller: '' }, user, '', { vat: 'DE777777777' }).vat === 'DE777777777', 'USt-IdNr. aus dem Dialog');
 }
 
 // Mailadresse des Lieferanten wird beim Speichern gemerkt
@@ -146,6 +150,7 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   e = await ug.ugSpeichern(r, 'Muster Werkzeuge GmbH', 'nein', '', 'RE-12', 'Nein', 'buchhaltung@muster-werkzeuge.de');
   ok(e.mail === 'buchhaltung@muster-werkzeuge.de', 'neue Mail ersetzt die alte');
   ok(e.verlauf.length === 3, 'Verlauf der Einschätzung bleibt');
+  ok(!e.bestaetigtAm, 'Einschätzung allein ist keine Bestätigung');
   // Bestätigen unter „Bearbeiten“: Einschätzung, Mail und „informiert“ bleiben, die Schreibweise kommt dazu
   const scan = { nummer: 'RE-13', werk: 'WGC', richtung: 'Eingang', baseKey: 'Scan_13', steller: 'Muster Werkzeuge GmbII', ustid: '' };
   ug._ug.daten.rechnungen[ug.ugRechnungKey(scan)] = { informiert: 'Ja' };
@@ -154,6 +159,7 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   ok(e.aliase.includes('Muster Werkzeuge GmbII'), 'Schreibweise aus dem PDF gemerkt');
   const zu = bodies[bodies.length - 1].rechnungen[ug.ugRechnungKey(scan)];
   ok(zu.lieferant === ug.ugKey('Muster Werkzeuge GmbH') && zu.informiert === 'Ja', 'Rechnung zugeordnet, informiert bleibt');
+  ok(e.bestaetigtVon === 'test@dihag.com', 'Bestätigen setzt das Siegel');
   e = await ug.ugSpeichern(scan, 'Muster Werkzeuge GmbH', 'bis', '', 'RE-13', 'Nein', '');
   ok(e.aliase.includes('Muster Werkzeuge GmbII') && e.bestaetigtVon === 'test@dihag.com', 'Einschätzung behält die Schreibweisen');
   let fehler = '';
@@ -165,6 +171,9 @@ ok(ug._ugAbsenderOk('rechnung@lieferant.de'), 'Lieferant als Absender');
 ok(!ug._ugAbsenderOk('scanner@dihag.com'), 'Scanner im Haus nicht');
 ok(!ug._ugAbsenderOk('erika.muster@dihag-zaigler.com'), 'weitergeleitet von Kollegin nicht');
 ok(!ug._ugAbsenderOk('noreply@lieferant.de'), 'noreply nicht');
+ok(!ug._ugAbsenderOk('tuev-sued_noreply@edoc-online.com'), 'noreply mitten in der Adresse nicht');
+ok(!ug._ugAbsenderOk('rechnung.do-not-reply@lieferant.de'), 'do-not-reply nicht');
+ok(ug._ugAbsenderOk('replyteam@lieferant.de'), 'reply allein ist in Ordnung');
 ok(!ug._ugAbsenderOk(''), 'leer nicht');
 ok(ug._ugAbsenderWahl('noreply@lieferant.de;buchhaltung@lieferant.de') === 'buchhaltung@lieferant.de', 'Reply-To mit mehreren Adressen');
 ok(ug._ugAbsenderWahl('scanner@dihag.com') === '', 'nur interne Adresse: keine');

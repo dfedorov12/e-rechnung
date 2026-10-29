@@ -99,8 +99,10 @@ gleich(B.bhKopfHinweis(pdfZeile, { name: '', quelle: '' }, true),
   'Die Rechnungsnummer ist aus dem PDF-Text gelesen. Lieferant aus dem PDF-Text gelesen, bitte prüfen. Ein geänderter Lieferant wird für die nächsten Rechnungen gemerkt.', 'PDF-Text');
 gleich(B.bhKopfHinweis({ ext: 'xml', nummerAusDatei: true }, { name: 'X', quelle: 'xml' }, false),
   'Die Rechnungsnummer ist aus dem Dateinamen abgeleitet. Der Lieferant steht so in der E-Rechnung.', 'XML');
-gleich(B.bhKopfHinweis(pdfZeile, { name: 'X', quelle: 'bestaetigt', eintrag: { bestaetigtVonName: 'Erika Muster', bestaetigtAm: '2026-10-29T10:00:00Z' } }, false),
-  'Die Rechnungsnummer ist aus dem PDF-Text gelesen. Lieferant bestätigt von Erika Muster am 29.10.2026.', 'bestätigt');
+gleich(B.bhKopfHinweis(pdfZeile, { name: 'X', quelle: 'rechnung', bestaetigt: true, eintrag: { bestaetigtVonName: 'Erika Muster', bestaetigtAm: '2026-10-29T10:00:00Z' } }, false),
+  'Die Rechnungsnummer ist aus dem PDF-Text gelesen. Lieferant an dieser Rechnung eingetragen. Geprüft und bestätigt von Erika Muster am 29.10.2026.', 'bestätigt');
+gleich(B.bhKopfHinweis(pdfZeile, { name: 'X', quelle: 'rechnung', bestaetigt: false, eintrag: {} }, false),
+  'Die Rechnungsnummer ist aus dem PDF-Text gelesen. Lieferant an dieser Rechnung eingetragen. Noch nicht bestätigt.', 'eingetragen, ohne Siegel');
 gleich(/über die USt-IdNr\./.test(B.bhKopfHinweis(pdfZeile, { name: 'X', quelle: 'register', eintrag: { treffer: 'vat' } }, false)), true, 'Register');
 delete global.ugMitXml;
 

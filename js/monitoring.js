@@ -1542,30 +1542,31 @@ function _monAusXml(r) {
 }
 
 /**
- * Sicherer Name und seine Quelle: { name, quelle, eintrag }. quelle ist 'bestaetigt' (an dieser
- * Rechnung von der Buchhaltung bestätigt, unter „Bearbeiten“ oder bei der 800k-Einschätzung),
- * 'xml', 'register' (aus dem Lieferantenregister über USt-IdNr. oder Name erkannt) oder ''.
+ * Sicherer Name und seine Quelle: { name, quelle, eintrag, bestaetigt }. quelle ist 'rechnung'
+ * (an dieser Rechnung eingetragen, unter „Bearbeiten“ oder bei der 800k-Einschätzung), 'xml',
+ * 'register' (aus dem Lieferantenregister über USt-IdNr. oder Name erkannt) oder ''.
+ * bestaetigt: Die Kreditorenbuchhaltung hat den Lieferanten geprüft und bestätigt (Siegel ✓).
  */
 function _monPartnerSicher(r) {
   if (r.richtung !== 'Eingang') return { name: r.empf || '', quelle: 'xml' };
   const l = typeof ugLieferantFuer === 'function' ? ugLieferantFuer(r) : null;
-  if (l && l.name && l.treffer === 'rechnung') return { name: l.name, quelle: 'bestaetigt', eintrag: l };
-  if (r.steller && _monAusXml(r)) return { name: r.steller, quelle: 'xml' };
-  return l && l.name ? { name: l.name, quelle: 'register', eintrag: l } : { name: '', quelle: '' };
+  const bestaetigt = !!(l && l.bestaetigtAm);
+  if (l && l.name && l.treffer === 'rechnung') return { name: l.name, quelle: 'rechnung', eintrag: l, bestaetigt };
+  if (r.steller && _monAusXml(r)) return { name: r.steller, quelle: 'xml', eintrag: l, bestaetigt };
+  return l && l.name ? { name: l.name, quelle: 'register', eintrag: l, bestaetigt } : { name: '', quelle: '' };
 }
 
-/** Woher der Name stammt, als Zusatz in Klammern ('' bei XML). */
+/** Woher der Name stammt und ob er bestätigt ist, als Zusatz in Klammern ('' bei XML ohne Siegel). */
 function _monPartnerQuelle(r, p) {
-  const l = p.eintrag;
-  if (p.quelle === 'bestaetigt') {
-    const wer = l.bestaetigtVonName || l.vonName || '';
-    const am = l.bestaetigtAm || l.am;
-    return ` (bestätigt${wer ? ' von ' + wer : ''}${am ? ' am ' + _monDate(am) : ''})`;
-  }
+  const l = p.eintrag || {};
+  const wer = l.bestaetigtVonName || l.bestaetigtVon || '';
+  const siegel = p.bestaetigt
+    ? `geprüft und bestätigt${wer ? ' von ' + wer : ''}${l.bestaetigtAm ? ' am ' + _monDate(l.bestaetigtAm) : ''}` : '';
+  if (p.quelle === 'rechnung') return ` (${siegel || 'an dieser Rechnung eingetragen, noch nicht bestätigt'})`;
   if (p.quelle === 'register') {
-    return ` (aus dem Lieferantenregister über ${l.treffer === 'vat' ? 'die USt-IdNr.' : 'den Namen'}, an dieser Rechnung nicht bestätigt)`;
+    return ` (aus dem Lieferantenregister über ${l.treffer === 'vat' ? 'die USt-IdNr.' : 'den Namen'}${siegel ? ', ' + siegel : ', noch nicht bestätigt'})`;
   }
-  return '';
+  return siegel ? ` (${siegel})` : '';
 }
 
 function _monPartner(r) {
@@ -1574,11 +1575,11 @@ function _monPartner(r) {
 
 function _monPartnerCell(r) {
   const p = _monPartnerSicher(r);
+  const quelle = _monPartnerQuelle(r, p);
+  const siegel = p.bestaetigt ? ' <span class="mon-ok" aria-label="bestätigt">✓</span>' : '';
   const name = p.quelle === 'register'
-    ? `<span title="${_esc('Aus dem Lieferantenregister erkannt' + _monPartnerQuelle(r, p))}" style="font-style:italic;">${_esc(p.name)}</span>`
-    : p.quelle === 'bestaetigt'
-      ? `<span title="${_esc('Von der Buchhaltung' + _monPartnerQuelle(r, p))}">${_esc(p.name)} <span class="mon-ok">✓</span></span>`
-      : _esc(p.name);
+    ? `<span title="${_esc('Lieferant' + quelle)}" style="font-style:italic;">${_esc(p.name)}</span>${siegel}`
+    : quelle ? `<span title="${_esc('Lieferant' + quelle)}">${_esc(p.name)}</span>${siegel}` : _esc(p.name);
   // Absender der Rechnungsmail (vom Eingangs-Flow, also sicher)
   const mail = r.richtung === 'Eingang' && r.absenderMail
     ? `<div class="mon-mail" title="Absender der Rechnungsmail">✉ ${_esc(r.absenderMail)}</div>` : '';

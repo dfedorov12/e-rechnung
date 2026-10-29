@@ -198,7 +198,14 @@
     .ug-x { border:none; background:none; font-size:16px; color:var(--gray-500); cursor:pointer; padding:2px 6px; }
     .ug-regel { margin:0; font-size:13px; color:var(--gray-700); background:var(--gray-50); border-left:3px solid var(--primary);
                 padding:8px 10px; border-radius:4px; }
-    .ug-felder { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+    .ug-felder { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; align-items:end; }
+    .ug-feld { display:flex; flex-direction:column; gap:4px; }
+    .ug-feldkopf { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; font-weight:600; color:var(--gray-600); }
+    .ug-siegel { display:inline-block; font-size:11px; font-weight:700; color:#0a6b2e; background:#e3f5e9; border-radius:999px; padding:1px 8px; white-space:nowrap; }
+    .ug-bestaetigen { font:inherit; font-size:11px; font-weight:600; color:#0a6b2e; background:#fff; border:1px solid #0a6b2e;
+                border-radius:999px; padding:1px 9px; cursor:pointer; white-space:nowrap; }
+    .ug-bestaetigen:hover { background:#e3f5e9; }
+    .ug-bestaetigen:disabled { opacity:.6; cursor:wait; }
     .ug-felder label, .ug-lbl { display:flex; flex-direction:column; gap:4px; font-size:12px; font-weight:600; color:var(--gray-600); }
     .ug-felder input, .ug-lbl input, .ug-lbl textarea { font:inherit; font-size:13px; font-weight:400; color:var(--gray-900);
                 border:1px solid var(--gray-300); border-radius:6px; padding:7px 9px; width:100%; }
@@ -407,9 +414,9 @@
 <script src="js/vendor/tesseract/tesseract.min.js?v=000c27d9cd"></script>
 <script src="js/ocr.js?v=ca1f1ec809"></script>
 <script src="js/lieferant.js?v=b859c73959"></script>
-<script src="js/umsatzgrenze.js?v=94ca7b3c5b"></script>
-<script src="js/bearbeitung.js?v=926fc6811a"></script>
-<script src="js/monitoring.js?v=3b0dcb1196"></script>
+<script src="js/umsatzgrenze.js?v=947fb0257d"></script>
+<script src="js/bearbeitung.js?v=cfcf125ff8"></script>
+<script src="js/monitoring.js?v=45082671b8"></script>
 
 <script>
 onAuthReady(async () => {
