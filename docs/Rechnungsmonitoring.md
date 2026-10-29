@@ -56,8 +56,9 @@ Welche Spalten ein Werk zeigt und in welcher Reihenfolge, legt ein Admin über d
 Standard: vorn „Bearbeiten“ mit den Dateien (PDF, XML, Bericht), dann Datum, Erstellt am, Werk, Richtung, Rechnungsnr., Steller / Empfänger, Netto, Fällig am,
 Klassifizierung, Status, Buchung, Lieferant informiert, Konform., Fehler und, wo die
 Bearbeitung an ist, Varialnummer, Bearbeitung, Genehmigung. Wählbar sind außerdem Brutto,
-Bestellnummer, Kontierung und Notiz. Werke mit eigener Spaltenauswahl bekommen „Erstellt am“
-erst, wenn der Admin die Spalte dort anhakt. Sortiert wird trotzdem danach.
+Bestellnummer, Kontierung und Notiz. Werke mit eigener Spaltenauswahl zeigen „Erstellt am“
+hinter „Datum“, bis der Admin ihre Spalten neu speichert. Danach gilt seine Auswahl
+(`spaltenAm` in den Einstellungen, neue Spalten stehen in `MON_NEUE_SPALTEN`).
 
 **Steller / Empfänger** zeigt nur, was sicher ist, in dieser Reihenfolge:
 

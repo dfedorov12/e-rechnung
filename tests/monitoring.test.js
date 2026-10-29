@@ -86,4 +86,10 @@ gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'Scan_2', steller: 'X
 gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'R_3', steller: 'Neu AG', format: 'XRechnung', ext: 'xml' }), { name: 'Neu AG', quelle: 'xml' }, 'aus der XML');
 gleich(M._monPartnerSicher({ richtung: 'Eingang', baseKey: 'Scan_4', steller: 'Neu AG', format: 'PDF', ext: 'pdf' }).name, '', 'PDF-Text allein ist nicht sicher');
 
+// 7) Neue Spalte in alten Werkseinstellungen
+gleich(M._monMitNeuenSpalten({ spalten: ['links', 'werk', 'datum', 'nummer'] }), ['links', 'werk', 'datum', 'erstellt', 'nummer'], 'hinter Datum');
+gleich(M._monMitNeuenSpalten({ spalten: ['links', 'nummer'] }), ['links', 'erstellt', 'nummer'], 'ohne Datum hinter dem Vorgänger');
+gleich(M._monMitNeuenSpalten({ spalten: ['links', 'datum'], spaltenAm: '2026-10-30T08:00:00Z' }), ['links', 'datum'], 'neu gespeichert: Auswahl gilt');
+gleich(M._monMitNeuenSpalten({ spalten: ['erstellt', 'links'] }), ['erstellt', 'links'], 'schon dabei');
+
 console.log(`monitoring: ${n} Prüfungen grün`);

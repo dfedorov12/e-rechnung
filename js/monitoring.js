@@ -751,9 +751,25 @@ function _monSpaltenVorlage() {
 
 /** Spalten eines Werks: eigene Einstellung, sonst die der Vorlage, sonst Standard. */
 function _monSpaltenIds(werk) {
-  if (_monSpaltenEingestellt(werk)) return bhWerkEinst(werk).spalten;
+  if (_monSpaltenEingestellt(werk)) return _monMitNeuenSpalten(bhWerkEinst(werk));
   const vorlage = _monSpaltenVorlage();
-  return vorlage ? bhWerkEinst(vorlage).spalten : MON_STANDARD;
+  return vorlage ? _monMitNeuenSpalten(bhWerkEinst(vorlage)) : MON_STANDARD;
+}
+
+// Spalten, die nach dem Speichern einer Werkseinstellung dazugekommen sind (Spalte: seit).
+// Sie erscheinen dort hinter ihrem Vorgänger aus dem Standard, bis der Admin die Spalten
+// des Werks neu speichert. Danach gilt seine Auswahl (spaltenAm).
+const MON_NEUE_SPALTEN = { erstellt: '2026-10-29' };
+
+function _monMitNeuenSpalten(einst) {
+  const ids = (einst.spalten || []).slice();
+  const stand = String(einst.spaltenAm || '');
+  for (const [id, seit] of Object.entries(MON_NEUE_SPALTEN)) {
+    if (ids.includes(id) || stand >= seit) continue;
+    const vorher = MON_STANDARD.slice(0, MON_STANDARD.indexOf(id)).reverse().find(x => ids.includes(x));
+    ids.splice(vorher ? ids.indexOf(vorher) + 1 : ids.length, 0, id);
+  }
+  return ids;
 }
 
 function _monWerkSpaltenListe(werk) {
@@ -1486,7 +1502,7 @@ function _monSpaltenDialog(werk) {
       dlg.querySelectorAll('.ug-aktionen button').forEach(b => { b.disabled = true; });
       meldung.textContent = 'Wird gespeichert…';
       try {
-        const teil = { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked };
+        const teil = { spalten, bearbeiten: dlg.querySelector('#sp-bh').checked, spaltenAm: new Date().toISOString() };
         const breitenWahl = dlg.querySelector('#sp-breiten');
         if (breitenWahl && breitenWahl.checked) {
           teil.breiten = _monBreitenWieAngezeigt(Object.assign({}, bhWerkEinst(w).breiten, _monEigeneAktiv(breitenQuelle)));
@@ -1868,5 +1884,5 @@ function _esc(s) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { _monMap, _monGroup, _monMarkDupes, _monTitelEcht, _monNummerAusDatei, _monGleicherLieferant,
-    _monPartnerSicher, _monZeit, _monSortVal, _monMatchBase };
+    _monPartnerSicher, _monZeit, _monSortVal, _monMatchBase, _monMitNeuenSpalten };
 }
