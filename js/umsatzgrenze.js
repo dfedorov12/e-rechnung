@@ -12,6 +12,11 @@
  * Monitoring-Site (Standardbibliothek, Ordner Monitoring). Rechnungen ohne
  * Lieferantennamen (PDF ohne XML) werden über ihren Dateischlüssel zugeordnet.
  *
+ * Dieselbe Datei ist das Lieferantenregister: Bestätigt die Kreditorenbuchhaltung
+ * einen Lieferanten (800k-Einschätzung oder „Bearbeiten“), merkt sie sich Name,
+ * USt-IdNr., Mailadresse und die Schreibweisen aus dem PDF-Text (aliase). Spätere
+ * Rechnungen desselben Lieferanten werden darüber erkannt.
+ *
  * Maßgeblich ist laut Gesetz der Leistungszeitpunkt. Das Monitoring kennt nur
  * das Rechnungsdatum und nimmt es als Näherung.
  */
@@ -73,12 +78,20 @@ function ugPhase(datumIso, heuteIso) {
   return 'pflicht';
 }
 
+/** Bringt die Rechnung eine E-Rechnungs-XML mit (ZUGFeRD, XRechnung)? */
+function ugMitXml(r) {
+  return /zugferd|factur|xrechnung|ubl|cii/i.test(r.format || '') || r.ext === 'xml'
+    || (r.dateien || []).some(d => d.label === 'XML');
+}
+
 /**
  * Ist die Rechnung eine sonstige Rechnung im Eingang? Der Prüfdienst setzt
  * Formatmangel bei PDF ohne XML und bei fehlendem PDF/A-3 (/api/intake, P1/P2).
+ * Für die 800k-Regel zählt nur die PDF ohne E-Rechnung: Eine ZUGFeRD-Rechnung mit
+ * fehlerhafter PDF/A-Hülle bringt die XML mit und braucht keine Einschätzung.
  */
 function ugSonstige(r) {
-  return (r.richtung || '') === 'Eingang' && !!r.formatmangel;
+  return (r.richtung || '') === 'Eingang' && !!r.formatmangel && !ugMitXml(r);
 }
 
 /** Kleinbetragsrechnung (§ 33 UStDV): immer als sonstige Rechnung zulässig. */
@@ -224,14 +237,34 @@ async function ugLaden(siteId, token) {
   }
 }
 
-/** Einschätzung einer Rechnung: über Rechnungsschlüssel, USt-IdNr. oder Lieferantenname. */
-function ugFuer(r) {
+/**
+ * Lieferant einer Rechnung aus dem Register. treffer sagt, woher die Zuordnung kommt:
+ * 'rechnung' (an dieser Rechnung bestätigt), 'vat' (gleiche USt-IdNr.), 'name' (gleicher
+ * Name) oder 'alias' (Schreibweise aus dem PDF-Text, die schon einmal bestätigt wurde).
+ * Name und Alias zählen nicht, wenn beide USt-IdNr. bekannt sind und sich unterscheiden.
+ */
+function ugLieferantFuer(r) {
   const d = _ug.daten;
+  const treffer = (key, art) => key && d.lieferanten[key] ? Object.assign({ key, treffer: art }, d.lieferanten[key]) : null;
   const zu = d.rechnungen[ugRechnungKey(r)];
-  let key = (zu && zu.lieferant) || '';
-  if (!key && r.ustid) key = Object.keys(d.lieferanten).find(k => d.lieferanten[k].vat === r.ustid) || '';
-  if (!key) key = ugKey(r.steller);
-  return key && d.lieferanten[key] ? Object.assign({ key }, d.lieferanten[key]) : null;
+  if (zu && zu.lieferant && d.lieferanten[zu.lieferant]) return treffer(zu.lieferant, 'rechnung');
+  if (r.ustid) {
+    const k = Object.keys(d.lieferanten).find(x => d.lieferanten[x].vat === r.ustid);
+    if (k) return treffer(k, 'vat');
+  }
+  const name = ugKey(r.steller);
+  if (!name) return null;
+  const passt = k => !(r.ustid && d.lieferanten[k].vat && d.lieferanten[k].vat !== r.ustid);
+  if (d.lieferanten[name] && passt(name)) return treffer(name, 'name');
+  const k = name.length >= 5 && Object.keys(d.lieferanten).find(x => passt(x)
+    && (d.lieferanten[x].aliase || []).some(a => ugKey(a) === name));
+  return k ? treffer(k, 'alias') : null;
+}
+
+/** Einschätzung zur 800k-Grenze: der Lieferant aus dem Register, sofern er eingeschätzt ist. */
+function ugFuer(r) {
+  const l = ugLieferantFuer(r);
+  return l && l.vermutung ? l : null;
 }
 
 /**
@@ -251,48 +284,43 @@ function ugInformiert(r) {
   return ugFuer(r) ? 'Automatik' : '';
 }
 
-/** Lieferantenname für Rechnungen, die keinen mitbringen (PDF ohne XML). */
+/** Lieferantenname für den 800k-Dialog: bestätigt, aus der XML, aus dem Register, sonst aus dem PDF-Text. */
 function ugLieferantName(r) {
-  if (r.steller) return r.steller;
-  const e = ugFuer(r);
-  return e ? e.name : '';
+  const l = ugLieferantFuer(r);
+  if (l && l.treffer === 'rechnung') return l.name;
+  if (r.steller && ugMitXml(r)) return r.steller;
+  return (l && l.name) || r.steller || '';
 }
 
 /**
- * Einschätzung speichern: Eintrag mergen und mit If-Match schreiben. Hat jemand
- * anderes zwischendurch gespeichert (412), neu laden und einmal wiederholen.
+ * Bestätigten Lieferanten in einen Registereintrag übernehmen: Name, USt-IdNr., wer und
+ * wann. Weicht der Name aus der Rechnung (PDF-Text) ab, kommt er zu den aliase, damit die
+ * nächste Rechnung mit derselben Schreibweise erkannt wird. Alles andere bleibt.
  */
-async function ugSpeichern(r, name, vermutung, vat, nummer, informiert, mail) {
-  const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
-  const key = ugKey(name);
-  if (!key) throw new Error('Bitte den Lieferanten angeben.');
-  const eintrag = {
-    name: String(name).trim(),
-    vat: vat || (_ug.daten.lieferanten[key] && _ug.daten.lieferanten[key].vat) || r.ustid || '',
-    vermutung,
-    am: new Date().toISOString(),
-    von: user.username || '',
-    vonName: user.name || user.username || '',
-    rechnung: nummer || r.nummer || '',
-  };
-  const zuordnung = { lieferant: key, am: eintrag.am, von: eintrag.von };
-  if (informiert === 'Ja' || informiert === 'Nein') zuordnung.informiert = informiert;
+function ugLieferantMerken(alt, name, r, user, jetzt) {
+  const e = Object.assign({}, alt || {});
+  e.name = String(name).trim();
+  e.vat = e.vat || r.ustid || '';
+  const gelesen = String(r.steller || '').trim();
+  const aliase = (e.aliase || []).filter(a => ugKey(a) !== ugKey(e.name));
+  if (gelesen && ugKey(gelesen) !== ugKey(e.name) && !aliase.some(a => ugKey(a) === ugKey(gelesen))) aliase.push(gelesen);
+  if (aliase.length) e.aliase = aliase.slice(-10); else delete e.aliase;
+  e.bestaetigtAm = jetzt;
+  e.bestaetigtVon = user.username || '';
+  e.bestaetigtVonName = user.name || user.username || '';
+  return e;
+}
 
+/**
+ * Register schreiben: aendern(daten) baut aus dem aktuellen Stand den neuen. Mit If-Match;
+ * hat jemand anderes zwischendurch gespeichert (412), neu laden und einmal wiederholen.
+ */
+async function _ugSchreiben(aendern) {
   for (let versuch = 0; versuch < 2; versuch++) {
     const token = await acquireToken(SP.scopes);
     if (!token) throw new Error('Nicht angemeldet.');
     if (versuch > 0) await ugLaden(_ug.siteId, token);
-    const alt = _ug.daten.lieferanten[key];
-    // Mailadresse aus „An“ merken; ohne gültige Eingabe bleibt die bisherige
-    eintrag.mail = ugMailOk(mail) ? String(mail).trim() : ((alt && alt.mail) || '');
-    const neu = {
-      version: 1,
-      lieferanten: Object.assign({}, _ug.daten.lieferanten, {
-        [key]: Object.assign(eintrag, { verlauf: ((alt && alt.verlauf) || []).concat(alt ? [{
-          vermutung: alt.vermutung, am: alt.am, vonName: alt.vonName }] : []).slice(-10) }),
-      }),
-      rechnungen: Object.assign({}, _ug.daten.rechnungen, { [ugRechnungKey(r)]: zuordnung }),
-    };
+    const neu = aendern(_ug.daten);
     const body = new TextEncoder().encode(JSON.stringify(neu, null, 2));
     const url = _ug.itemId
       ? `${SP.graphBase}/sites/${_ug.siteId}/drive/items/${_ug.itemId}/content`
@@ -305,17 +333,65 @@ async function ugSpeichern(r, name, vermutung, vat, nummer, informiert, mail) {
       _ug.daten = neu;
       _ug.itemId = m.id;
       _ug.eTag = m.eTag;
-      return neu.lieferanten[key];
+      return neu;
     }
     if ((resp.status === 412 || resp.status === 409) && versuch === 0) continue;
     if (resp.status === 403 || resp.status === 401) {
-      throw new Error('Keine Schreibrechte auf das Register der Einschätzungen (Monitoring-Site, Dokumente/Monitoring/'
-        + 'lieferanten-umsatzgrenze.json). Die IT muss dort „Mitwirken“ vergeben. Die Vorlage können Sie trotzdem nutzen.');
+      throw new Error('Keine Schreibrechte auf das Lieferantenregister (Monitoring-Site, Dokumente/Monitoring/'
+        + 'lieferanten-umsatzgrenze.json). Die IT muss dort „Mitwirken“ vergeben.');
     }
     const t = await resp.text();
     throw new Error(`Speichern fehlgeschlagen (${resp.status}): ${t.slice(0, 200)}`);
   }
   throw new Error('Speichern fehlgeschlagen: Das Register wurde gleichzeitig geändert. Bitte erneut versuchen.');
+}
+
+/**
+ * Einschätzung speichern: Lieferant mit Einschätzung merken (der alte Stand geht in den
+ * Verlauf) und die Rechnung ihm zuordnen. Mailadresse aus „An“ merken; ohne gültige
+ * Eingabe bleibt die bisherige.
+ */
+async function ugSpeichern(r, name, vermutung, vat, nummer, informiert, mail) {
+  const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
+  const key = ugKey(name);
+  if (!key) throw new Error('Bitte den Lieferanten angeben.');
+  const am = new Date().toISOString();
+  const neu = await _ugSchreiben(d => {
+    const alt = d.lieferanten[key];
+    const e = Object.assign(ugLieferantMerken(alt, name, r, user, am), {
+      vat: vat || (alt && alt.vat) || r.ustid || '',
+      vermutung, am,
+      von: user.username || '',
+      vonName: user.name || user.username || '',
+      rechnung: nummer || r.nummer || '',
+      mail: ugMailOk(mail) ? String(mail).trim() : ((alt && alt.mail) || ''),
+      verlauf: ((alt && alt.verlauf) || []).concat(alt && alt.vermutung ? [{
+        vermutung: alt.vermutung, am: alt.am, vonName: alt.vonName }] : []).slice(-10),
+    });
+    const zuordnung = Object.assign({}, d.rechnungen[ugRechnungKey(r)], { lieferant: key, am, von: e.von });
+    if (informiert === 'Ja' || informiert === 'Nein') zuordnung.informiert = informiert;
+    return { version: 1, lieferanten: Object.assign({}, d.lieferanten, { [key]: e }),
+      rechnungen: Object.assign({}, d.rechnungen, { [ugRechnungKey(r)]: zuordnung }) };
+  });
+  return neu.lieferanten[key];
+}
+
+/**
+ * Lieferant an einer Rechnung bestätigen (Bearbeiten im Monitoring) und merken. Eine
+ * Einschätzung und die Mailadresse bleiben, die Rechnung wird dem Lieferanten zugeordnet.
+ */
+async function ugBestaetigen(r, name) {
+  const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
+  const key = ugKey(name);
+  if (!key) throw new Error('Bitte den Lieferanten angeben.');
+  const am = new Date().toISOString();
+  const neu = await _ugSchreiben(d => ({
+    version: 1,
+    lieferanten: Object.assign({}, d.lieferanten, { [key]: ugLieferantMerken(d.lieferanten[key], name, r, user, am) }),
+    rechnungen: Object.assign({}, d.rechnungen, { [ugRechnungKey(r)]: Object.assign({}, d.rechnungen[ugRechnungKey(r)],
+      { lieferant: key, am, von: user.username || '' }) }),
+  }));
+  return neu.lieferanten[key];
 }
 
 /* ── Mailaufträge (Liste KreditorMails, Versand über den Flow) ────────── */
@@ -463,6 +539,8 @@ function ugDialogOeffnen(r, onGespeichert) {
   const dlg = document.getElementById('ug-dialog');
   if (!dlg) return;
   const e = ugFuer(r);
+  // gemerkter Lieferant, auch wenn er noch nicht eingeschätzt ist (bestätigt unter „Bearbeiten“)
+  const l = ugLieferantFuer(r);
   const user = (typeof getAuthUser === 'function' && getAuthUser()) || {};
   const absender = _ugAbsenderWahl(r.absenderMail);
   _ugAktuell = {
@@ -471,13 +549,13 @@ function ugDialogOeffnen(r, onGespeichert) {
     name: ugLieferantName(r),
     nr: r.nummer || '',
     datum: _monDate(r.datum),
-    vat: r.ustid || (e && e.vat) || '',
+    vat: r.ustid || (l && l.vat) || '',
     phase: ugPhase(r.datum),
     absender: user.name || '',
     // Adresse: Mail an diese Rechnung, sonst beim Lieferanten gemerkt, sonst Absender der
     // Rechnungsmail, sonst aus dem PDF-Text (_ugAusRechnungLesen)
-    an: ((ugMailsFuer(r)[0] || {}).an) || (e && e.mail) || absender || '',
-    anQuelle: (ugMailsFuer(r)[0] || {}).an ? 'mail' : (e && e.mail) ? 'gemerkt' : absender ? 'absender' : '',
+    an: ((ugMailsFuer(r)[0] || {}).an) || (l && l.mail) || absender || '',
+    anQuelle: (ugMailsFuer(r)[0] || {}).an ? 'mail' : (l && l.mail) ? 'gemerkt' : absender ? 'absender' : '',
     informiert: ((_ug.daten.rechnungen[ugRechnungKey(r)] || {}).informiert) || 'Nein',
     kannSenden: ugKannSenden(r),
     bearbeitet: {},          // Felder, die jemand selbst geändert hat, überschreibt das Lesen nicht
@@ -600,7 +678,7 @@ function _ugRender() {
  */
 async function _ugAusRechnungLesen(r) {
   const a = _ugAktuell;
-  const fehlt = !r.steller || !r.ustid || r.nummer === r.baseKey || !r.datumAusRechnung || r.brutto == null || !a.an;
+  const fehlt = !r.steller || !r.ustid || r.nummerAusDatei || !r.datumAusRechnung || r.brutto == null || !a.an;
   if (!fehlt || r.ext !== 'pdf' || !r.listId || !r.itemId || !_ug.siteId
       || typeof textAusPdf !== 'function' || typeof lieferantAusText !== 'function' || !window.pdfjsLib) return;
   a.lesen = 'laeuft';
@@ -641,7 +719,7 @@ async function _ugAusRechnungLesen(r) {
       if (gemerkt) { a.an = gemerkt; a.anQuelle = 'gemerkt'; }
       else if (l.mail) { a.an = l.mail; a.anQuelle = 'pdf'; }
     }
-    if (l.nummer && !a.bearbeitet.nr && r.nummer === r.baseKey) a.nr = l.nummer;
+    if (l.nummer && !a.bearbeitet.nr && r.nummerAusDatei) a.nr = l.nummer;
     if (l.datum && !a.bearbeitet.datum && !r.datumAusRechnung) { a.datum = _monDate(l.datum); a.phase = ugPhase(l.datum); }
     if (l.kleinunternehmer && !a.vermutung) a.vermutung = 'bis';
     if (a.phase !== vorher) { _ugRender(); return; }
@@ -823,5 +901,6 @@ async function _ugAbschliessen(modus) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { UG, UG_MAIL_ART, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage,
-    ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, _ugAbsenderOk, _ugAbsenderWahl, _ug };
+    ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, ugBestaetigen, ugLieferantFuer, ugLieferantMerken, ugLieferantName,
+    ugMitXml, ugFuer, _ugAbsenderOk, _ugAbsenderWahl, _ug };
 }

@@ -111,6 +111,9 @@
     .mon-det-aktionen { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .mon-det-aktionen .bh-btn { display:inline-block; margin:0; }
     .mon-det-klein { margin:6px 0 0; font-size:12px; color:var(--gray-500); }
+    .mon-dupe { display:inline-block; margin-top:2px; font-size:11px; font-weight:600; color:#fff; background:#b40000;
+                border-radius:3px; padding:1px 6px; white-space:nowrap; }
+    .mon-ok { color:#0a6b2e; font-weight:700; }
     .mon-ver { grid-column:1 / -1; }
     .mon-ver .mon-reset { height:30px; font-size:12px; }
     .mon-ver-liste { margin-top:8px; }
@@ -246,6 +249,7 @@
     .bh-pill.bh-neutral { background:var(--gray-100); color:var(--gray-700); }
     .bh-raster { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end; }
     .bh-raster.bh-abas { grid-template-columns:2fr 1fr; }
+    .bh-raster.bh-kopfdaten { grid-template-columns:1fr 2fr; }
     .ug-lbl select { font:inherit; font-size:13px; font-weight:400; color:var(--gray-900); padding:8px 10px;
               border:1px solid var(--gray-300); border-radius:8px; background:#fff; }
     .bh-check { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--gray-700); cursor:pointer; padding:8px 0; }
@@ -283,7 +287,7 @@
     td.mon-mehrzeilig { white-space:pre-line; font-size:12px; }
     .mon-mail { display:inline-block; max-width:100%; margin-top:3px; font-size:11px; font-weight:600; color:#0a6b2e;
                 background:#e3f5e9; border-radius:3px; padding:1px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:top; }
-    @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas { grid-template-columns:1fr; } }
+    @media (max-width:600px) { .bh-raster, .bh-raster.bh-abas, .bh-raster.bh-kopfdaten { grid-template-columns:1fr; } }
   </style>
 </head>
 <body class="auth-guard">
@@ -348,6 +352,10 @@
         <select id="mon-f-status" aria-label="Status"><option value="">Alle Status</option></select>
         <select id="mon-f-bstatus" aria-label="Bearbeitungsstatus"><option value="">Alle Bearbeitung</option></select>
         <select id="mon-f-genehmigt" aria-label="Genehmigt"><option value="">Alle Genehmigt</option></select>
+        <select id="mon-f-datumart" aria-label="Datum für Von und Bis" title="Für welches Datum Von und Bis gelten">
+          <option value="">Rechnungsdatum</option>
+          <option value="erstellt">Erstellt am</option>
+        </select>
         <input type="date" id="mon-f-from" aria-label="Datum von" title="Datum von">
         <input type="date" id="mon-f-to" aria-label="Datum bis" title="Datum bis">
         <button type="button" id="mon-reset" class="mon-reset">Zurücksetzen</button>
@@ -397,9 +405,9 @@
 <script src="js/vendor/tesseract/tesseract.min.js?v=000c27d9cd"></script>
 <script src="js/ocr.js?v=ca1f1ec809"></script>
 <script src="js/lieferant.js?v=b859c73959"></script>
-<script src="js/umsatzgrenze.js?v=84dd2c2c39"></script>
-<script src="js/bearbeitung.js?v=f6e06b72d4"></script>
-<script src="js/monitoring.js?v=c705396bcd"></script>
+<script src="js/umsatzgrenze.js?v=94ca7b3c5b"></script>
+<script src="js/bearbeitung.js?v=926fc6811a"></script>
+<script src="js/monitoring.js?v=2e93e378e3"></script>
 
 <script>
 onAuthReady(async () => {

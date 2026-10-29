@@ -128,12 +128,50 @@ function bhAenderungen(alt, neu) {
 function bhKopfdaten(r, ziel) {
   if (!r || !ziel || ziel === r || (ziel.listId === r.listId && ziel.itemId === r.itemId)) return {};
   const f = {};
-  if (r.nummer && !ziel.titel) f.Title = String(r.nummer).slice(0, 255);
+  // Ein Title, der nur der Dateiname ist (nummerAusDatei), zählt als fehlend
+  if (r.nummer && (!ziel.titel || ziel.nummerAusDatei) && ziel.titel !== r.nummer) f.Title = String(r.nummer).slice(0, 255);
   if (r.steller && !ziel.steller) f.Rechnungssteller = r.steller;
   if (r.netto != null && ziel.netto == null) f.Nettobetrag = r.netto;
   if (r.brutto != null && ziel.brutto == null) f.Bruttobetrag = r.brutto;
   if (r.waehrungFeld && !ziel.waehrungFeld) f.Waehrung = r.waehrungFeld;
   return f;
+}
+
+/**
+ * Korrektur von Rechnungsnummer und Lieferant (falsch gelesen aus dem PDF-Text) als Felder
+ * für die Zieldatei: Title und Rechnungssteller. Leere Eingaben ändern nichts. merken =
+ * Lieferant im Register bestätigen: wenn er geändert ist oder der Haken gesetzt ist.
+ * @param alt  { nummer, lieferant } wie im Dialog vorbelegt
+ * @param neu  { nummer, lieferant, bestaetigen }
+ */
+function bhKopfAenderungen(alt, neu) {
+  const felder = {};
+  const nummer = String(neu.nummer || '').trim();
+  const name = String(neu.lieferant || '').trim().replace(/\s+/g, ' ');
+  if (nummer && nummer !== String(alt.nummer || '').trim()) felder.Title = nummer.slice(0, 255);
+  const merken = !!name && (name !== String(alt.lieferant || '').trim() || !!neu.bestaetigen);
+  if (merken) felder.Rechnungssteller = name.slice(0, 255);
+  return { felder, merken, name };
+}
+
+/** Woher Rechnungsnummer und Lieferant im Dialog stammen, als kurzer Text. */
+function bhKopfHinweis(r, p, kannMerken) {
+  const teile = [];
+  const mitXml = typeof ugMitXml === 'function' ? ugMitXml(r) : p.quelle === 'xml';
+  if (r.nummerAusDatei) teile.push('Die Rechnungsnummer ist aus dem Dateinamen abgeleitet.');
+  else if (!mitXml) teile.push('Die Rechnungsnummer ist aus dem PDF-Text gelesen.');
+  const l = p.eintrag || {};
+  if (p.quelle === 'xml') teile.push('Der Lieferant steht so in der E-Rechnung.');
+  else if (p.quelle === 'bestaetigt') {
+    const wer = l.bestaetigtVonName || l.vonName || '';
+    const am = l.bestaetigtAm || l.am;
+    teile.push(`Lieferant bestätigt${wer ? ' von ' + wer : ''}${am ? ' am ' + _bhDatum(am) : ''}.`);
+  } else if (p.quelle === 'register') {
+    teile.push(`Lieferant aus dem Register erkannt (über ${l.treffer === 'vat' ? 'die USt-IdNr.' : 'den Namen'}), an dieser Rechnung noch nicht bestätigt.`);
+  } else if (r.steller) teile.push('Lieferant aus dem PDF-Text gelesen, bitte prüfen.');
+  else teile.push('Lieferant unbekannt, bitte eintragen.');
+  if (kannMerken) teile.push('Ein geänderter Lieferant wird für die nächsten Rechnungen gemerkt.');
+  return teile.join(' ');
 }
 
 /** Felder für „Genehmigung anfordern“. Der Flow reagiert auf GenehmigungAnfordern = Ja. */
@@ -322,6 +360,12 @@ function bhDialogOeffnen(r, onGespeichert) {
   const stand = bhGenehmigungsStand(b);
   const laeuft = bhInGenehmigung(b);
   const abasVorgabe = b.abasInfoAn || bhVorgabeAbas(r.werk);
+  // Rechnungsnummer und Lieferant korrigieren (falsch gelesen aus dem PDF-Text)
+  const p = typeof _monPartnerSicher === 'function' ? _monPartnerSicher(r) : { name: r.steller || '', quelle: 'xml' };
+  const lieferant = p.name || r.steller || '';
+  const merkenAnbieten = typeof ugBestaetigen === 'function' && p.quelle !== 'xml' && p.quelle !== 'bestaetigt';
+  const bekannte = typeof _ug !== 'undefined' ? Object.values(_ug.daten.lieferanten).map(l => l.name).filter(Boolean).sort() : [];
+  _bhAktuell.lieferantVorher = lieferant;
 
   dlg.innerHTML = `
     <form method="dialog" class="ug-form">
@@ -330,6 +374,13 @@ function bhDialogOeffnen(r, onGespeichert) {
         <button type="button" class="ug-x" data-bh-zu aria-label="Schließen">✕</button>
       </div>
       <p class="ug-regel">${_esc([partner, betrag, r.werk, typeof _monDate === 'function' ? _monDate(r.datum) : ''].filter(Boolean).join(' · '))}</p>
+      <div class="bh-raster bh-kopfdaten">
+        <label class="ug-lbl">Rechnungsnummer<input id="bh-nummer" value="${_esc(r.nummer)}" autocomplete="off"></label>
+        <label class="ug-lbl">Lieferant<input id="bh-lieferant" list="bh-lieferanten" value="${_esc(lieferant)}" autocomplete="off"></label>
+      </div>
+      <datalist id="bh-lieferanten">${bekannte.map(n => `<option value="${_esc(n)}">`).join('')}</datalist>
+      <p class="ug-hinweis">${_esc(bhKopfHinweis(r, p, typeof ugBestaetigen === 'function'))}</p>
+      ${merkenAnbieten && lieferant ? '<label class="bh-check"><input type="checkbox" id="bh-merken"> Lieferant bestätigen und für weitere Rechnungen merken</label>' : ''}
       <div class="bh-raster">
         <label class="ug-lbl">Varialnummer<input id="bh-varial" value="${_esc(b.varial)}" autocomplete="off"></label>
         <label class="ug-lbl">Bestellnummer<input id="bh-bestellnr" value="${_esc(b.bestellnr)}" autocomplete="off"></label>
@@ -369,6 +420,14 @@ function bhDialogOeffnen(r, onGespeichert) {
       </div>
     </form>`;
 
+  // Ein geänderter Lieferant wird immer bestätigt und gemerkt
+  const lf = dlg.querySelector('#bh-lieferant');
+  const mk = dlg.querySelector('#bh-merken');
+  if (mk) lf.addEventListener('input', () => {
+    const anders = lf.value.trim() !== lieferant;
+    mk.disabled = anders;
+    if (anders) mk.checked = true;
+  });
   const anf = dlg.querySelector('#bh-anfordern');
   anf.addEventListener('change', () => {
     dlg.querySelector('#bh-anf').style.display = anf.checked ? '' : 'none';
@@ -561,10 +620,16 @@ async function _bhSpeichern() {
     _bhMeldung(e.message || String(e), 'nicht');
     return;
   }
+  // Korrigierte Rechnungsnummer und Lieferant
+  const merkenBox = dlg.querySelector('#bh-merken');
+  const korr = bhKopfAenderungen({ nummer: a.r.nummer, lieferant: a.lieferantVorher },
+    { nummer: wert('bh-nummer'), lieferant: wert('bh-lieferant'), bestaetigen: !!(merkenBox && merkenBox.checked) });
+  felder = Object.assign(felder, korr.felder);
   if (!Object.keys(felder).length) { dlg.close(); return; }
   // Fehlende Kopfdaten an die Zieldatei (lesbares PDF), damit der Flow sie findet
   const kopf = bhKopfdaten(a.r, a.r.bhQuelle);
   felder = Object.assign({}, kopf, felder);
+  const vorher = Object.assign({}, a.r);
 
   const knopf = dlg.querySelectorAll('.ug-aktionen button');
   knopf.forEach(k => { k.disabled = true; });
@@ -572,13 +637,26 @@ async function _bhSpeichern() {
   try {
     await bhSchreiben(a.r, felder);
     _bhUebernehmen(a.r, felder);
-    if (a.r.bhQuelle && Object.keys(kopf).length) {
-      const z = a.r.bhQuelle;
-      if (kopf.Title) z.titel = kopf.Title;
-      if (kopf.Rechnungssteller) z.steller = kopf.Rechnungssteller;
-      if (kopf.Nettobetrag != null) z.netto = kopf.Nettobetrag;
-      if (kopf.Bruttobetrag != null) z.brutto = kopf.Bruttobetrag;
-      if (kopf.Waehrung) z.waehrungFeld = kopf.Waehrung;
+    // Kopfdaten in den geladenen Daten nachziehen (Zieldatei und Zeile)
+    const z = a.r.bhQuelle || a.r;
+    if (felder.Title) {
+      z.titel = z.nummer = a.r.nummer = felder.Title;
+      z.nummerAusDatei = a.r.nummerAusDatei = false;
+    }
+    if (felder.Rechnungssteller) z.steller = felder.Rechnungssteller;
+    if (kopf.Nettobetrag != null) z.netto = kopf.Nettobetrag;
+    if (kopf.Bruttobetrag != null) z.brutto = kopf.Bruttobetrag;
+    if (kopf.Waehrung) z.waehrungFeld = kopf.Waehrung;
+    // Lieferant bestätigen und im Register merken (Name, USt-IdNr., Schreibweise aus dem PDF)
+    if (korr.merken && typeof ugBestaetigen === 'function') {
+      try {
+        await ugBestaetigen(vorher, korr.name);
+      } catch (e) {
+        _bhMeldung(`Gespeichert, aber der Lieferant ist nicht gemerkt: ${e.message || e}`, 'nicht');
+        knopf.forEach(k => { k.disabled = false; });
+        if (typeof a.onGespeichert === 'function') a.onGespeichert();
+        return;
+      }
     }
     // Genehmiger und abas-Adresse für die nächsten Vorschläge merken (mit Namen, falls gewählt)
     if (felder.GenehmigungAnfordern) {
@@ -598,5 +676,5 @@ async function _bhSpeichern() {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { BH_FELDER, BH_STATUS, BH_GENEHMIGT, bhAusFeldern, bhZiel, bhZusammen, bhMails,
-    bhAenderungen, bhAnforderung, bhKopfdaten, bhGenehmigungsStand, bhInGenehmigung };
+    bhAenderungen, bhAnforderung, bhKopfdaten, bhKopfAenderungen, bhKopfHinweis, bhGenehmigungsStand, bhInGenehmigung };
 }

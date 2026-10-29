@@ -35,8 +35,9 @@ let _monBeobachter = null;          // lädt beim Scrollen die nächste Seite de
 let _monDichte = 'kompakt';         // kompakt | gross (im Browser gemerkt)
 let _monAnsichtWerk = '';           // Werk, dessen Reihenfolge und Breiten die Tabelle gerade nutzt
 let _monGriffZeit = 0;              // Ende des letzten Ziehens (danach kein Sortier-Klick)
-const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' };
-let _monSort = { key: 'datum', dir: -1 };   // -1 = absteigend (neueste zuerst)
+const _monFilter = { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', datumArt: '', from: '', to: '', q: '', flag: '' };
+// Neueste Vorgänge oben: nach Erstelldatum der Datei, -1 = absteigend
+let _monSort = { key: 'erstellt', dir: -1 };
 
 /* ── Laden ──────────────────────────────────────────────────────────── */
 
@@ -153,6 +154,8 @@ async function loadMonitoring(accessList, optionen) {
       `${_monRecords.length} Rechnung(en) (${recs.length} Datei(en)) aus ${libs.length - fehlerLibs.length} Bibliothek(en) · Stand ${new Date().toLocaleString('de-DE')}`
       + (fehlerLibs.length ? ` · nicht geladen: ${fehlerLibs.join(', ')}` : '')
       + (einstFehler ? ` · Spalten-Einstellungen nicht lesbar (${einstFehler}), es gelten die Standardspalten` : '');
+    // Inhalt der Dubletten vergleichen (Prüfsummen nachladen), nicht fatal
+    _monDublettenInhalt(lauf, token).catch(e => console.warn('Monitoring: Dubletten-Vergleich:', e));
   } catch (e) {
     _monLaedt = false;
     _monShowSetup('Fehler beim Laden', e.message || String(e));
@@ -237,11 +240,18 @@ function _monMap(it, f, lib) {
   // (Title ist im Flow oft leer ODER der ganze Dateiname -> zum Gruppieren untauglich.)
   const baseKey = stem.replace(/_\d{6,8}$/, '');
   const titleClean = (f.Title && String(f.Title).trim()) || '';
-  // Anzeige-Nr.: echter Title (ohne Dateiendung/Sidecar-Suffix) sonst baseKey.
-  const nummer = (titleClean && !/\.(pdf|xml)$/i.test(titleClean) && !/_kosit-?bericht$|_lesbar$/i.test(titleClean))
-    ? titleClean : baseKey;
+  // Spalte RechnungsstellerUStID trug bis zur Flow-Korrektur den Namen: nur echte USt-IdNr. nehmen
+  const ustid = /^[A-Z]{2}[0-9A-Z]{8,12}$/.test(String(f.RechnungsstellerUStID || '').replace(/\s+/g, ''))
+    ? String(f.RechnungsstellerUStID).replace(/\s+/g, '') : '';
+  // Anzeige-Nr.: echter Title, sonst aus dem Dateinamen. Bei XML-Dateien setzt SharePoint
+  // den Title selbst auf den Dateinamen, der zählt nicht.
+  const titelEcht = _monTitelEcht(titleClean, stem, baseKey) ? titleClean : '';
+  const nummer = titelEcht || _monNummerAusDatei(baseKey, ustid, f.Rechnungssteller);
   return {
     file, ext, sidecar, baseKey,
+    nummerAusDatei: !titelEcht,
+    // Eingang der Datei in SharePoint (UTC); neueste Vorgänge stehen oben
+    erstellt: (it.createdDateTime || f.Created || '').toString(),
     // Werk aus dem Bibliotheksnamen (AR_SHB -> SHB) = maessgeblich; das Feld
     // Gesellschaft kann leer/falsch sein und wird nur als Fallback genutzt.
     // Eingangsstufe: Werk erst nach Erkennung (Gesellschaft) bekannt, sonst "(Eingang)".
@@ -252,9 +262,7 @@ function _monMap(it, f, lib) {
     // Für den Abruf der Datei (800k-Dialog liest den Lieferanten aus dem PDF)
     listId:   lib.id,
     itemId:   it.id,
-    // Spalte RechnungsstellerUStID trug bis zur Flow-Korrektur den Namen: nur echte USt-IdNr. nehmen
-    ustid:    /^[A-Z]{2}[0-9A-Z]{8,12}$/.test(String(f.RechnungsstellerUStID || '').replace(/\s+/g, ''))
-                ? String(f.RechnungsstellerUStID).replace(/\s+/g, '') : '',
+    ustid,
     datumAusRechnung: !!f.Rechnungsdatum,
     // Absender der Rechnungsmail (Eingangs-Flow) = Empfänger einer Kreditor-Mail
     absenderMail: (f.AbsenderMail || '').toString().trim(),
@@ -305,6 +313,33 @@ function _monMap(it, f, lib) {
 /** Robust auf Boolean lesen (SharePoint liefert true/1/"true"/"1"). */
 function _monBool(v) {
   return v === true || v === 1 || String(v).toLowerCase() === 'true' || String(v) === '1';
+}
+
+/** Ist der Title eine Rechnungsnummer und nicht nur der Dateiname (mit oder ohne Endung)? */
+function _monTitelEcht(titel, stem, baseKey) {
+  const t = String(titel || '').trim();
+  if (!t || /\.(pdf|xml)$/i.test(t) || /_kosit-?bericht$|_lesbar$/i.test(t)) return false;
+  const k = t.toLowerCase();
+  return k !== String(stem || '').toLowerCase() && k !== String(baseKey || '').toLowerCase();
+}
+
+/**
+ * Rechnungsnummer aus dem Dateinamen, wenn kein Title da ist. Der Eingangs-Flow benennt
+ * Dateien „<Nummer>_<USt-IdNr. oder Lieferant>“ (dateibasis aus /api/intake), bei einer
+ * schon vorhandenen Datei mit Zeitstempel „_JJJJMMTThhmmss“ dahinter. Beides gehört nicht
+ * zur Nummer.
+ */
+function _monNummerAusDatei(baseKey, ustid, steller) {
+  const s = String(baseKey || '').replace(/_\d{14}$/, '');
+  const vat = String(ustid || '').toUpperCase();
+  if (vat && s.toUpperCase() === vat) return '';          // ohne Nummer nur die USt-IdNr.
+  const m = /^(.+)_([A-Z]{2}[0-9A-Z]{8,12})$/.exec(s);
+  if (m && (m[2] === vat || /\d{8}/.test(m[2]))) return m[1];
+  // Lieferant als Kürzel, so wie /api/intake es bildet (_dateibasis)
+  const kurz = String(steller || '').replace(/[\\/:*?"<>|#%]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/\s/g, '_').slice(0, 24).replace(/[^A-Za-z0-9_]/g, '');
+  if (kurz && s.length > kurz.length + 1 && s.endsWith('_' + kurz)) return s.slice(0, -kurz.length - 1);
+  return s;
 }
 
 /* ── Zusammenfassen: XML + PDF + KoSIT-Bericht einer Rechnung = 1 Zeile ── */
@@ -377,6 +412,13 @@ function _monGroup(recs) {
     } else {
       primary.bh = null;
     }
+    // Rechnungsnummer: Title der Zieldatei (dort speichert „Bearbeiten“ eine Korrektur),
+    // sonst der Original-Datei oder einer anderen Datei, sonst aus dem Dateinamen
+    const mitTitel = [primary.bhQuelle, best].concat(arr).find(r => r && !r.nummerAusDatei && r.nummer);
+    primary.nummer = mitTitel ? mitTitel.nummer : _monNummerAusDatei(primary.baseKey, primary.ustid, primary.steller);
+    primary.nummerAusDatei = !mitTitel;
+    // Erstellt am: die erste Datei der Rechnung
+    primary.erstellt = arr.map(r => r.erstellt).filter(Boolean).sort()[0] || '';
     out.push(primary);
   }
   return out;
@@ -389,30 +431,94 @@ function _monBestPrimary(arr) {
   return arr.slice().sort((a, b) => score(b) - score(a))[0];
 }
 
-// Echte Dubletten kennzeichnen: dieselbe Rechnungsnummer beim SELBEN Aussteller im
-// selben Werk/Richtung, verteilt auf mehrere Einträge = mögliche Doppelerfassung.
-// Gleiche Nummer bei VERSCHIEDENEN Lieferanten ist keine Dublette -> der Aussteller
-// ist Teil des Schlüssels. Läuft rein clientseitig über die geladenen Datensätze
-// (kein Flow-Schritt, keine Extra-Spalte). Setzt r.dublette + r.dubletteInfo.
+/**
+ * Lieferant einer Zeile für den Dublettenvergleich: USt-IdNr., Eintrag im Lieferanten-
+ * register und Name (normalisiert). Ausgang: der Kunde.
+ */
+function _monLieferantKennung(r) {
+  const reg = r.richtung === 'Eingang' && typeof ugLieferantFuer === 'function' ? ugLieferantFuer(r) : null;
+  const name = r.richtung === 'Eingang' ? (_monPartner(r) || r.steller) : r.empf;
+  return { vat: r.richtung === 'Eingang' ? (r.ustid || (reg && reg.vat) || '') : '', reg: reg ? reg.key : '',
+    name: String(name || '').toLowerCase().replace(/[^a-z0-9äöüß]+/g, ' ').trim() };
+}
+
+/** Derselbe Lieferant? Zwei verschiedene USt-IdNr. sind immer verschiedene Lieferanten. */
+function _monGleicherLieferant(a, b) {
+  if (a.vat && b.vat) return a.vat === b.vat;
+  return !!(a.reg && a.reg === b.reg) || !!(a.name && a.name === b.name);
+}
+
+// Dubletten kennzeichnen: dieselbe Rechnungsnummer beim SELBEN Lieferanten im selben
+// Werk und in derselben Richtung, verteilt auf mehrere Einträge. Gleiche Nummer bei
+// VERSCHIEDENEN Lieferanten ist keine Dublette. Nichts wird gelöscht oder überschrieben.
+// Den Inhalt vergleicht die Prüfsumme der Originaldateien (_monDublettenInhalt): gleich =
+// dieselbe Datei ist mehrfach eingegangen, verschieden = bitte prüfen.
+// Setzt r.dublette, r.dubletteArt ('gleich' | 'anders' | '') und r.dubletteInfo.
 function _monMarkDupes(records) {
   const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
   const groups = new Map();
   for (const r of records) {
+    r.dublette = false; r.dubletteArt = ''; r.dubletteInfo = '';
     const nr = norm(r.nummer);
-    const steller = norm(r.steller);
-    if (!nr || !steller) continue;                 // ohne Nummer/Aussteller nicht bewertbar
-    const key = [r.werk, r.richtung, nr, steller].join('|');
+    if (!nr) continue;
+    const kennung = _monLieferantKennung(r);
+    if (!kennung.vat && !kennung.reg && !kennung.name) continue;   // ohne Lieferant nicht bewertbar
+    const key = [r.werk, r.richtung, nr].join('|');
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(r);
+    groups.get(key).push({ r, kennung });
   }
   for (const arr of groups.values()) {
     if (arr.length < 2) continue;
-    for (const r of arr) {
-      r.dublette = true;
-      r.dubletteInfo = `${arr.length}× dieselbe Nummer „${r.nummer}" von „${r.steller}" `
-                     + '– mögliche Doppelerfassung, bitte prüfen.';
+    const frei = arr.slice();
+    while (frei.length) {
+      const erster = frei.shift();
+      const gruppe = [erster];
+      for (let wuchs = true; wuchs;) {
+        wuchs = false;
+        for (let i = frei.length - 1; i >= 0; i--) {
+          if (gruppe.some(g => _monGleicherLieferant(g.kennung, frei[i].kennung))) { gruppe.push(frei.splice(i, 1)[0]); wuchs = true; }
+        }
+      }
+      if (gruppe.length < 2) continue;
+      const hashes = gruppe.map(g => g.r.hash || '');
+      const art = hashes.every(Boolean) ? (new Set(hashes).size === 1 ? 'gleich' : 'anders') : '';
+      for (const { r } of gruppe) {
+        const name = _monPartner(r) || r.steller || r.empf || '';
+        const von = name ? ` von „${name}“` : '';
+        r.dublette = true;
+        r.dubletteArt = art;
+        r.dubletteInfo = art === 'gleich'
+          ? `${gruppe.length}× dieselbe Datei: Rechnung „${r.nummer}“${von} ist mehrfach eingegangen.`
+          : art === 'anders'
+            ? `${gruppe.length}× Rechnungsnummer „${r.nummer}“${von}, die Dateien unterscheiden sich. Bitte prüfen: Kopie, Korrektur oder neue Rechnung?`
+            : `${gruppe.length}× Rechnungsnummer „${r.nummer}“${von}. Mögliche Doppelerfassung, bitte prüfen.`;
+      }
     }
   }
+}
+
+/**
+ * Inhalt der Dubletten vergleichen: Prüfsumme (quickXorHash), die SharePoint je Datei
+ * führt, für die Originaldateien der Dubletten nachladen. Danach neu kennzeichnen.
+ * Höchstens 120 Abrufe je Laden, ein neuer Ladevorgang bricht ab.
+ */
+async function _monDublettenInhalt(lauf, token) {
+  const offen = _monRecords.filter(r => r.dublette && !r.hash && r.listId && r.itemId).slice(0, 120);
+  let neu = 0;
+  for (const r of offen) {
+    if (lauf !== _monLadeLauf) return;
+    const datei = _monDateien.find(d => d.listId === r.listId && d.itemId === r.itemId);
+    if (!datei || datei.hash) continue;
+    try {
+      const di = await _monGet(`${SP.graphBase}/sites/${_monSiteId}/lists/${r.listId}/items/${r.itemId}/driveItem?$select=id,size,file`, token);
+      const h = di && di.file && di.file.hashes;
+      datei.hash = (h && (h.quickXorHash || h.sha256Hash || h.sha1Hash)) || '';
+      if (datei.hash) neu++;
+    } catch (e) {
+      console.warn('Monitoring: Prüfsumme nicht lesbar:', r.file, e);
+    }
+  }
+  if (neu && lauf === _monLadeLauf) _monUpdate(_monDateien);
 }
 
 /* ── Filter & Rendering ─────────────────────────────────────────────── */
@@ -464,7 +570,8 @@ function _monApply() {
 }
 
 function _monMatchBase(r, f, q) {
-  const d = (r.datum || '').slice(0, 10);
+  // Von/Bis gilt für das Rechnungsdatum oder das Erstelldatum (Auswahl daneben)
+  const d = f.datumArt === 'erstellt' ? _monTag(r.erstellt).slice(0, 10) : (r.datum || '').slice(0, 10);
   return (!f.werk     || r.werk === f.werk)
       && (!f.richtung || r.richtung === f.richtung)
       && (!f.klass    || _monKlass(r) === f.klass)
@@ -507,6 +614,7 @@ function _monSortRows(rows) {
 function _monSortVal(r, key) {
   switch (key) {
     case 'datum':    return (r.datum || '').slice(0, 10);
+    case 'erstellt': return r.erstellt || '';
     case 'werk':     return r.werk || '';
     case 'richtung': return r.richtung || '';
     case 'nummer':   return (r.nummer || '').toLowerCase();
@@ -596,6 +704,7 @@ function _monTileClick(id) {
 // MON_STANDARD. Spalten mit bh: true gibt es nur, wenn das Werk die Bearbeitung nutzt.
 const MON_SPALTEN = [
   { id: 'datum',       titel: 'Datum',                sort: 'datum',      breite: 10 },
+  { id: 'erstellt',    titel: 'Erstellt am',          sort: 'erstellt',   breite: 11 },
   { id: 'werk',        titel: 'Werk',                 sort: 'werk',       breite: 5 },
   { id: 'richtung',    titel: 'Richtung',             sort: 'richtung',   breite: 7 },
   { id: 'nummer',      titel: 'Rechnungsnr.',         sort: 'nummer',     breite: 10 },
@@ -618,7 +727,7 @@ const MON_SPALTEN = [
   { id: 'links',       titel: '',  name: 'Bearbeiten und Dateien (PDF, XML, Bericht)', breite: 15, fest: true },
 ];
 // Standard-Reihenfolge; „Bearbeiten“ und die Dateien stehen vorn
-const MON_STANDARD = ['links', 'datum', 'werk', 'richtung', 'nummer', 'partner', 'netto', 'faellig', 'klass',
+const MON_STANDARD = ['links', 'datum', 'erstellt', 'werk', 'richtung', 'nummer', 'partner', 'netto', 'faellig', 'klass',
   'status', 'buchung', 'informiert', 'konform', 'fehler', 'varial', 'bstatus', 'genehmigung'];
 
 /** Spalten-IDs eines Werks in seiner Reihenfolge ('links' ist immer dabei, sonst vorn). */
@@ -778,12 +887,17 @@ function _monZelle(id, r, idx) {
   const bh = r.bh;
   switch (id) {
     case 'datum':    return `<td style="white-space:nowrap;">${_esc(_monDate(r.datum))}</td>`;
+    case 'erstellt': return `<td style="white-space:nowrap;">${_esc(_monZeit(r.erstellt))}</td>`;
     case 'werk':     return `<td><span class="pill pill-werk">${_esc(r.werk)}</span></td>`;
     case 'richtung': return `<td><span class="pill ${r.richtung === 'Eingang' ? 'pill-in' : 'pill-out'}">${_esc(r.richtung)}</span></td>`;
-    case 'nummer':
-      return `<td>${_esc(r.nummer)}${r.dublette
-        ? `<div class="mon-dupe" title="${_esc(r.dubletteInfo || '')}" style="display:inline-block;margin-top:2px;font-size:11px;font-weight:600;color:#fff;background:#b40000;border-radius:3px;padding:1px 6px;">⚠ Dublette</div>`
+    case 'nummer': {
+      const nr = r.nummerAusDatei
+        ? `<span title="Kein Rechnungsnummer-Feld gesetzt, aus dem Dateinamen gelesen">${_esc(r.nummer)}</span>` : _esc(r.nummer);
+      const art = { gleich: ' · gleiche Datei', anders: ' · anderer Inhalt' }[r.dubletteArt] || '';
+      return `<td>${nr}${r.dublette
+        ? `<div class="mon-dupe" title="${_esc(r.dubletteInfo || '')}">⚠ Dublette${art}</div>`
         : ''}</td>`;
+    }
     case 'partner':  return `<td>${_monPartnerCell(r)}</td>`;
     case 'netto':    return `<td style="text-align:right;white-space:nowrap;">${_esc(_monGeld(r.netto, r))}</td>`;
     case 'brutto':   return `<td style="text-align:right;white-space:nowrap;">${_esc(_monGeld(r.brutto, r))}</td>`;
@@ -950,10 +1064,11 @@ function _monDetail(r, idx) {
   const aktionen = (b ? `<button type="button" class="bh-btn" data-bh="${idx}">Bearbeiten</button>` : '')
     + (sonstige && typeof ugZelle === 'function' ? ugZelle(r, idx) : '');
   return `<div class="mon-det">`
-    + block('Rechnung', [['Nummer', t(r.nummer)], ['Datum', t(_monDate(r.datum))], ['Fällig am', t(_monDate(r.faelligkeit))],
+    + block('Rechnung', [['Nummer', t(r.nummer) + (r.nummerAusDatei && r.nummer ? ' (aus dem Dateinamen)' : '')], ['Datum', t(_monDate(r.datum))],
+        ['Erstellt am', t(_monZeit(r.erstellt))], ['Fällig am', t(_monDate(r.faelligkeit))],
         ['Werk', t(r.werk)], ['Richtung', t(r.richtung)], ['Typ', t(_monKlass(r))], ['Rechnungsart', t(r.art)]])
     + block(r.richtung === 'Eingang' ? 'Lieferant' : 'Kunde', [
-        ['Name', p.name ? t(p.name) + (p.quelle === 'einschaetzung' ? ' (bei der 800k-Einschätzung bestätigt)' : '') : ''],
+        ['Name', p.name ? t(p.name) + t(_monPartnerQuelle(r, p)) : t(r.steller ? r.steller + ' (aus dem PDF-Text gelesen, nicht bestätigt)' : '')],
         ['Rechnungsmail von', t(r.absenderMail)], ['USt-IdNr.', t(r.ustid)]])
     + block('Beträge', [['Netto', t(_monGeld(r.netto, r))], ['Brutto', t(_monGeld(r.brutto, r))], ['Bestellnummer', t((b && b.bestellnr) || r.bestellnr)]])
     + block('Prüfung', [['Ergebnis', t(r.konform)], ['Hinweis', t(_monHinweis(r))], ['Status', t(r.status)],
@@ -1406,12 +1521,31 @@ function _monAusXml(r) {
     || (r.dateien || []).some(d => d.label === 'XML');
 }
 
-/** Sicherer Name und seine Quelle: { name, quelle: 'xml' | 'einschaetzung' | '' }. */
+/**
+ * Sicherer Name und seine Quelle: { name, quelle, eintrag }. quelle ist 'bestaetigt' (an dieser
+ * Rechnung von der Buchhaltung bestätigt, unter „Bearbeiten“ oder bei der 800k-Einschätzung),
+ * 'xml', 'register' (aus dem Lieferantenregister über USt-IdNr. oder Name erkannt) oder ''.
+ */
 function _monPartnerSicher(r) {
   if (r.richtung !== 'Eingang') return { name: r.empf || '', quelle: 'xml' };
+  const l = typeof ugLieferantFuer === 'function' ? ugLieferantFuer(r) : null;
+  if (l && l.name && l.treffer === 'rechnung') return { name: l.name, quelle: 'bestaetigt', eintrag: l };
   if (r.steller && _monAusXml(r)) return { name: r.steller, quelle: 'xml' };
-  const e = typeof ugFuer === 'function' ? ugFuer(r) : null;
-  return e && e.name ? { name: e.name, quelle: 'einschaetzung' } : { name: '', quelle: '' };
+  return l && l.name ? { name: l.name, quelle: 'register', eintrag: l } : { name: '', quelle: '' };
+}
+
+/** Woher der Name stammt, als Zusatz in Klammern ('' bei XML). */
+function _monPartnerQuelle(r, p) {
+  const l = p.eintrag;
+  if (p.quelle === 'bestaetigt') {
+    const wer = l.bestaetigtVonName || l.vonName || '';
+    const am = l.bestaetigtAm || l.am;
+    return ` (bestätigt${wer ? ' von ' + wer : ''}${am ? ' am ' + _monDate(am) : ''})`;
+  }
+  if (p.quelle === 'register') {
+    return ` (aus dem Lieferantenregister über ${l.treffer === 'vat' ? 'die USt-IdNr.' : 'den Namen'}, an dieser Rechnung nicht bestätigt)`;
+  }
+  return '';
 }
 
 function _monPartner(r) {
@@ -1420,9 +1554,11 @@ function _monPartner(r) {
 
 function _monPartnerCell(r) {
   const p = _monPartnerSicher(r);
-  const name = p.quelle === 'einschaetzung'
-    ? `<span title="Bei der 800k-Einschätzung bestätigt, nicht aus der Rechnung gelesen" style="font-style:italic;">${_esc(p.name)}</span>`
-    : _esc(p.name);
+  const name = p.quelle === 'register'
+    ? `<span title="${_esc('Aus dem Lieferantenregister erkannt' + _monPartnerQuelle(r, p))}" style="font-style:italic;">${_esc(p.name)}</span>`
+    : p.quelle === 'bestaetigt'
+      ? `<span title="${_esc('Von der Buchhaltung' + _monPartnerQuelle(r, p))}">${_esc(p.name)} <span class="mon-ok">✓</span></span>`
+      : _esc(p.name);
   // Absender der Rechnungsmail (vom Eingangs-Flow, also sicher)
   const mail = r.richtung === 'Eingang' && r.absenderMail
     ? `<div class="mon-mail" title="Absender der Rechnungsmail">✉ ${_esc(r.absenderMail)}</div>` : '';
@@ -1472,6 +1608,15 @@ function _monTag(s) {
 function _monDate(s) {
   const d = _monTag(s).slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('.') : d;
+}
+
+/** Zeitpunkt (UTC) als TT.MM.JJJJ hh:mm in deutscher Zeit, '' wenn leer. */
+function _monZeit(s) {
+  const t = String(s || '').trim();
+  const d = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(t) ? new Date(t) : null;
+  if (!d || isNaN(d)) return _monDate(t);
+  return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit' }).format(d).replace(',', '');
 }
 
 // Heutiges Datum als ISO (lokal), für den Überfälligkeits-Vergleich.
@@ -1566,8 +1711,9 @@ function _monRenderChips() {
   if (f.status)   chips.push(['status', 'Status: ' + f.status]);
   if (f.bstatus)  chips.push(['bstatus', 'Bearbeitung: ' + f.bstatus]);
   if (f.genehmigt) chips.push(['genehmigt', 'Genehmigt: ' + f.genehmigt]);
-  if (f.from)     chips.push(['from', 'ab ' + deDate(f.from)]);
-  if (f.to)       chips.push(['to', 'bis ' + deDate(f.to)]);
+  const welches = f.datumArt === 'erstellt' ? 'Erstellt ' : '';
+  if (f.from)     chips.push(['from', welches + 'ab ' + deDate(f.from)]);
+  if (f.to)       chips.push(['to', welches + 'bis ' + deDate(f.to)]);
   if (f.q)        chips.push(['q', 'Suche: „' + f.q + '“']);
   if (f.flag)     chips.push(['flag', FLAG[f.flag] || f.flag]);
   const el = document.getElementById('mon-chips');
@@ -1577,7 +1723,7 @@ function _monRenderChips() {
 }
 
 function _monResetFilters() {
-  Object.assign(_monFilter, { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', from: '', to: '', q: '', flag: '' });
+  Object.assign(_monFilter, { werk: '', richtung: '', klass: '', konform: '', buchung: '', status: '', bstatus: '', genehmigt: '', datumArt: '', from: '', to: '', q: '', flag: '' });
   _monSyncControls();
   _monApply();
 }
@@ -1589,7 +1735,7 @@ function _monSyncControls() {
   set('mon-f-werk', f.werk); set('mon-f-richtung', f.richtung); set('mon-f-klass', f.klass);
   set('mon-f-konform', f.konform); set('mon-f-buchung', f.buchung); set('mon-f-status', f.status);
   set('mon-f-bstatus', f.bstatus); set('mon-f-genehmigt', f.genehmigt);
-  set('mon-f-from', f.from); set('mon-f-to', f.to); set('mon-f-q', f.q);
+  set('mon-f-datumart', f.datumArt); set('mon-f-from', f.from); set('mon-f-to', f.to); set('mon-f-q', f.q);
 }
 
 function _monMarkSortHeaders() {
@@ -1618,6 +1764,7 @@ function monInitFilterEvents() {
   bind('mon-f-status', 'status');
   bind('mon-f-bstatus', 'bstatus');
   bind('mon-f-genehmigt', 'genehmigt');
+  bind('mon-f-datumart', 'datumArt');
   bind('mon-f-from', 'from');
   bind('mon-f-to', 'to');
   const q = document.getElementById('mon-f-q');
@@ -1667,13 +1814,14 @@ function monInitFilterEvents() {
     const bh = e.target.closest('[data-bh]');
     if (bh && typeof bhDialogOeffnen === 'function') {
       const r = _monRows[Number(bh.getAttribute('data-bh'))];
-      if (r) bhDialogOeffnen(r, () => { _monBuildFilterOptions(_monLibs); _monSyncControls(); _monApply(); });
+      // Nach dem Speichern neu zusammenfassen: Nummer und Lieferant können sich geändert haben (Dubletten)
+      if (r) bhDialogOeffnen(r, () => { _monRecords = _monGroup(_monDateien); _monMarkDupes(_monRecords); _monBuildFilterOptions(_monLibs); _monSyncControls(); _monApply(); });
       return;
     }
     const btn = e.target.closest('[data-ug]');
     if (btn && typeof ugDialogOeffnen === 'function') {
       const r = _monRows[Number(btn.getAttribute('data-ug'))];
-      if (r) ugDialogOeffnen(r, () => _monApply());
+      if (r) ugDialogOeffnen(r, () => { _monMarkDupes(_monRecords); _monApply(); });
       return;
     }
     const ver = e.target.closest('[data-versionen]');
@@ -1700,7 +1848,7 @@ function monInitFilterEvents() {
     if (!th) return;
     const key = th.getAttribute('data-sort');
     if (_monSort.key === key) _monSort.dir = -_monSort.dir;
-    else _monSort = { key, dir: ['datum', 'brutto', 'netto'].includes(key) ? -1 : 1 };
+    else _monSort = { key, dir: ['datum', 'erstellt', 'brutto', 'netto'].includes(key) ? -1 : 1 };
     _monApply();
   });
 
@@ -1716,4 +1864,9 @@ function _esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { _monMap, _monGroup, _monMarkDupes, _monTitelEcht, _monNummerAusDatei, _monGleicherLieferant,
+    _monPartnerSicher, _monZeit, _monSortVal, _monMatchBase };
 }

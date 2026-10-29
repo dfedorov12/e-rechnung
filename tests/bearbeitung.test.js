@@ -79,6 +79,30 @@ gleich(B.bhKopfdaten(zeile, { listId: 'L', itemId: '2', titel: '', steller: '', 
   { Title: '123456', Rechnungssteller: 'Test GmbH', Nettobetrag: 500, Bruttobetrag: 595, Waehrung: 'EUR' }, 'alles fehlt');
 gleich(B.bhKopfdaten(zeile, { listId: 'L', itemId: '2', titel: 'X', steller: 'Y', netto: 1, brutto: 2, waehrungFeld: 'GBP' }), {}, 'nichts überschreiben');
 gleich(B.bhKopfdaten(zeile, { listId: 'L', itemId: '1' }), {}, 'Zieldatei ist die Rechnung selbst');
+gleich(B.bhKopfdaten(zeile, { listId: 'L', itemId: '2', titel: '123456_DE811979246', nummerAusDatei: true, steller: 'Y', netto: 1, brutto: 2, waehrungFeld: 'EUR' }),
+  { Title: '123456' }, 'Dateiname im Title wird ersetzt');
+
+// 7a) Rechnungsnummer und Lieferant korrigieren
+const vorher = { nummer: '700000080043', lieferant: 'Stadtwerke Elbtal GmbH' };
+gleich(B.bhKopfAenderungen(vorher, { nummer: ' 700000080043 ', lieferant: 'Stadtwerke Elbtal GmbH' }), { felder: {}, merken: false, name: 'Stadtwerke Elbtal GmbH' }, 'nichts geändert');
+gleich(B.bhKopfAenderungen(vorher, { nummer: '700000080044', lieferant: 'Stadtwerke Elbtal GmbH' }).felder, { Title: '700000080044' }, 'Nummer korrigiert');
+gleich(B.bhKopfAenderungen(vorher, { nummer: '', lieferant: '' }).felder, {}, 'leere Felder ändern nichts');
+let k = B.bhKopfAenderungen({ nummer: '1', lieferant: 'Sparkasse Meissen' }, { nummer: '1', lieferant: ' Muster  Werkzeuge GmbH ' });
+gleich([k.merken, k.felder], [true, { Rechnungssteller: 'Muster Werkzeuge GmbH' }], 'geänderter Lieferant wird gemerkt');
+k = B.bhKopfAenderungen(vorher, { nummer: '700000080043', lieferant: 'Stadtwerke Elbtal GmbH', bestaetigen: true });
+gleich([k.merken, k.felder], [true, { Rechnungssteller: 'Stadtwerke Elbtal GmbH' }], 'Haken bestätigt den gelesenen Namen');
+
+// 7b) Hinweis zur Herkunft
+const pdfZeile = { steller: 'Stadtwerke Elbtal GmbH', format: 'PDF', ext: 'pdf' };
+global.ugMitXml = r => r.ext === 'xml';
+gleich(B.bhKopfHinweis(pdfZeile, { name: '', quelle: '' }, true),
+  'Die Rechnungsnummer ist aus dem PDF-Text gelesen. Lieferant aus dem PDF-Text gelesen, bitte prüfen. Ein geänderter Lieferant wird für die nächsten Rechnungen gemerkt.', 'PDF-Text');
+gleich(B.bhKopfHinweis({ ext: 'xml', nummerAusDatei: true }, { name: 'X', quelle: 'xml' }, false),
+  'Die Rechnungsnummer ist aus dem Dateinamen abgeleitet. Der Lieferant steht so in der E-Rechnung.', 'XML');
+gleich(B.bhKopfHinweis(pdfZeile, { name: 'X', quelle: 'bestaetigt', eintrag: { bestaetigtVonName: 'Erika Muster', bestaetigtAm: '2026-10-29T10:00:00Z' } }, false),
+  'Die Rechnungsnummer ist aus dem PDF-Text gelesen. Lieferant bestätigt von Erika Muster am 29.10.2026.', 'bestätigt');
+gleich(/über die USt-IdNr\./.test(B.bhKopfHinweis(pdfZeile, { name: 'X', quelle: 'register', eintrag: { treffer: 'vat' } }, false)), true, 'Register');
+delete global.ugMitXml;
 
 // 8) Werte wie in der alten Liste
 gleich(B.BH_GENEHMIGT.length, 9, 'Genehmigt: 9 alte Werte');

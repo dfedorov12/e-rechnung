@@ -12,7 +12,7 @@ Code: `js/bearbeitung.js`, Spalten: `scripts/provision-rechnungsmonitoring.ps1` 
 
 | Alte Liste | Im Monitoring | Hinweis |
 |---|---|---|
-| Title | Rechnungsnummer | aus der Rechnung |
+| Title | Rechnungsnummer | aus der Rechnung, unter „Bearbeiten“ korrigierbar |
 | Varialnummer | Varialnummer | |
 | Kontierung | Kontierung | mehrzeilig |
 | Bestellnummer | Bestellnummer | bei E-Rechnungen aus der XML vorbelegt |
@@ -196,6 +196,12 @@ Für ein weiteres Werk den Flow kopieren („Speichern unter“) und im Trigger 
    Bestellnummer und Notiz.
 2. „Bearbeiten“ in der letzten Spalte. Varialnummer, Bestellnummer, Bearbeitungsstatus,
    Kontierung, Genehmigt, GF gesehen und Notiz eintragen, „Speichern“.
+   - Oben stehen **Rechnungsnummer** und **Lieferant**. Hat der Prüfdienst sie falsch aus dem
+     PDF-Text gelesen, hier korrigieren. Ein geänderter Lieferant wird bestätigt und im
+     Lieferantenregister gemerkt, die nächste Rechnung mit derselben USt-IdNr. oder
+     Schreibweise zeigt ihn dann gleich. Stimmt der gelesene Name, reicht der Haken
+     „Lieferant bestätigen und für weitere Rechnungen merken“. Unter dem Feld steht, woher
+     Nummer und Lieferant stammen.
 3. Genehmigung: „Genehmigung anfordern“ anhaken, Genehmiger eintragen (mehrere mit `;`, dann
    gilt die erste Antwort), Kommentar, bei Bedarf die Info zum Austragen im abas, „Speichern
    und Genehmigung anfordern“.
@@ -224,9 +230,11 @@ Flow-Schritten das Konto der Flow-Verbindung) und die Spalten, die sich geänder
 Ein Klick auf eine Version klappt alle Werte dieser Version auf. „Datei dieser Version öffnen“
 zeigt die Datei so, wie sie damals war.
 
-Das hilft vor allem, wenn zwei Rechnungen mit derselben Rechnungsnummer und USt-IdNr.
-eingehen. Der Flow benennt beide gleich, die zweite ersetzt die erste als neue Version. Die
-erste bleibt im Versionsverlauf erhalten und lässt sich dort öffnen.
+Das hilft vor allem bei Rechnungen, die vor der Umstellung des Eingangs-Flows zweimal mit
+derselben Rechnungsnummer und USt-IdNr. eingingen: Der Flow benannte beide gleich, die zweite
+ersetzte die erste als neue Version. Die erste bleibt im Versionsverlauf erhalten und lässt
+sich dort öffnen. Seit der Umstellung ([Eingangsrechnungen-Flow.md](Eingangsrechnungen-Flow.md),
+Schritt b) bekommt die zweite Datei einen Zeitstempel, beide stehen als Dublette in der Tabelle.
 
 ## Personen aus dem Firmenverzeichnis vorschlagen
 
@@ -251,7 +259,7 @@ Der Knopf **„Spalten“** neben „Zurücksetzen“ ist nur für Admins sichtb
   Varialnummer, Kontierung, Bearbeitung, Genehmigung und Notiz. Das passt für Werke, die über
   SAP buchen und nie mit der Eingangsrechnungsliste gearbeitet haben, zum Beispiel ZAI.
 - **Welche Spalten** das Werk zeigt und **in welcher Reihenfolge** (Ziehen am ☰ oder Pfeile).
-  „Bearbeiten“ mit den Dateien ist immer dabei und steht im Standard vorn. Auswahl aus: Datum, Werk, Richtung, Rechnungsnr., Steller /
+  „Bearbeiten“ mit den Dateien ist immer dabei und steht im Standard vorn. Auswahl aus: Datum, Erstellt am, Werk, Richtung, Rechnungsnr., Steller /
   Empfänger, Netto, Brutto, Fällig am, Klassifizierung, Status, Buchung, Lieferant informiert,
   Konform., Fehler, Bestellnummer, Varialnummer, Kontierung, Bearbeitung, Genehmigung, Notiz.
   „Standard“ setzt die Auswahl zurück (Netto statt Brutto, mit Lieferant informiert und den

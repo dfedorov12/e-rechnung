@@ -135,6 +135,16 @@ und Unversehrtheit allein (§ 14 Abs. 3 UStG).
 - **Eingang:** eindeutiger Schlüssel **Rechnungsnummer + Aussteller‑USt‑IdNr.**
   (`dateibasis`), da eine Rechnungsnummer nur je Aussteller eindeutig ist. Die
   Rückverknüpfung zum ERP‑Buchungsbeleg erfolgt bei der manuellen Buchung.
+- **Dubletten:** Gleiche Rechnungsnummer beim selben Lieferanten kennzeichnet das
+  Monitoring als Dublette und vergleicht die Prüfsummen der Dateien (gleiche Datei oder
+  anderer Inhalt). Der Eingangs-Flow überschreibt keine vorhandene Datei: ist der Name schon
+  belegt, bekommt die neue Datei einen Zeitstempel. Gelöscht wird nichts, die Buchhaltung
+  entscheidet.
+- **Korrektur der Kopfdaten:** Nummer und Lieferant einer sonstigen Rechnung liest der
+  Prüfdienst aus dem PDF-Text, das ist ein Vorschlag. Die Kreditorenbuchhaltung korrigiert
+  beides im Monitoring („Bearbeiten“). Die Änderung steht im Versionsverlauf der Datei (wer,
+  wann, alter und neuer Wert), die Rechnung selbst bleibt unverändert. Bestätigte Lieferanten
+  merkt sich das Lieferantenregister (Name, USt-IdNr., Schreibweisen aus dem PDF-Text).
 - **Ausgang:** Belegnummer = ERP‑Nummer; Trennung je Werk über `AR_<Werk>`.
 - **Zu bestätigen (organisatorisch):** Kollisionsfreiheit der ERP‑Belegnummernkreise
   über die gemeinsam genutzten Gesellschaften.
@@ -194,3 +204,4 @@ werden dokumentiert: übernommene XML‑Felder (vollständiger CII/UBL‑Datensa
 |---------|-------|-------|----------|
 | 0.1 | 2026‑09‑15 | DIHAG IT | Erstentwurf, aus System abgeleitet; zur WP/StB‑Abnahme |
 | 0.2 | 2026‑09‑18 | DIHAG IT | Abschnitt 5.4 (Format-/Konformitätsregelwerk nach UStAE/GoBD, 8 Punkte) ergänzt; Prüfschritt-Logik entsprechend umgesetzt |
+| 0.3 | 2026‑10‑29 | DIHAG IT | 5.3: Dubletten mit Inhaltsvergleich, kein Überschreiben beim Ablegen, Korrektur von Nummer und Lieferant, Lieferantenregister |

@@ -21,6 +21,12 @@ ok(ug.ugBraucht(pdf), 'ohne Betrag braucht Einschaetzung');
 ok(!ug.ugBraucht(Object.assign({}, pdf, { brutto: 249.99 })), 'Kleinbetrag braucht keine');
 ok(ug.ugBraucht(Object.assign({}, pdf, { brutto: 250.01 })), 'ueber 250 braucht eine');
 
+// ZUGFeRD mit PDF/A-Mangel bringt die XML mit: keine 800k-Einschätzung
+ok(!ug.ugSonstige(Object.assign({}, pdf, { format: 'ZUGFeRD', ext: 'pdf' })), 'ZUGFeRD mit Formatmangel ist keine sonstige Rechnung');
+ok(!ug.ugSonstige(Object.assign({}, pdf, { ext: 'pdf', dateien: [{ label: 'XML' }] })), 'PDF mit XML daneben auch nicht');
+ok(ug.ugSonstige(Object.assign({}, pdf, { format: 'PDF', ext: 'pdf', dateien: [{ label: 'Lesbares PDF' }] })), 'PDF ohne E-Rechnung bleibt');
+ok(!ug.ugBraucht(Object.assign({}, pdf, { format: 'ZUGFeRD', brutto: 5000 })), 'ZUGFeRD braucht keine Einschätzung');
+
 // Folgen
 ok(!ug.ugFolge('ueber', 'grenze').zulaessig, '2027 ueber 800k nicht zulaessig');
 ok(ug.ugFolge('ueber', 'grenze').vorlage === 'ueber-ruecksendung', '2027 ueber -> Variante 1 Ruecksendung');
@@ -91,6 +97,34 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   ok(ug.ugInformiert(xml) === '', 'E-Rechnung, Mail fehlgeschlagen');
 }
 
+// Lieferantenregister: Zuordnung an der Rechnung, USt-IdNr., Name, Schreibweise aus dem PDF
+{
+  const d = ug._ug.daten;
+  d.lieferanten = {
+    'muster werkzeuge gmbh': { name: 'Muster Werkzeuge GmbH', vat: 'DE123456789', aliase: ['Muster Werkzeug GmbH Frankfurt'] },
+    'beispiel ag': { name: 'Beispiel AG', vat: '', vermutung: 'ueber' },
+  };
+  d.rechnungen = { 'e|scan_9': { lieferant: 'beispiel ag' } };
+  const r = (extra) => Object.assign({ richtung: 'Eingang', baseKey: 'x' + Math.random(), steller: '', ustid: '' }, extra);
+  ok(ug.ugLieferantFuer(r({ baseKey: 'Scan_9', ustid: 'DE123456789' })).treffer === 'rechnung', 'an der Rechnung bestätigt geht vor');
+  ok(ug.ugLieferantFuer(r({ ustid: 'DE123456789' })).key === 'muster werkzeuge gmbh', 'über die USt-IdNr.');
+  ok(ug.ugLieferantFuer(r({ steller: 'Muster Werkzeug GmbH, Frankfurt' })).treffer === 'alias', 'Schreibweise aus dem PDF gemerkt');
+  ok(!ug.ugLieferantFuer(r({ steller: 'Muster Werkzeug GmbH Frankfurt', ustid: 'DE999999999' })), 'andere USt-IdNr.: kein Treffer');
+  ok(ug.ugLieferantFuer(r({ steller: 'BEISPIEL AG' })).treffer === 'name', 'gleicher Name');
+  ok(!ug.ugFuer(r({ ustid: 'DE123456789' })), 'bestätigt, aber nicht eingeschätzt: keine Einschätzung');
+  ok(ug.ugFuer(r({ steller: 'Beispiel AG' })).vermutung === 'ueber', 'eingeschätzt');
+  ok(ug.ugLieferantName(r({ baseKey: 'Scan_9', steller: 'Beisp1el A6' })) === 'Beispiel AG', 'bestätigter Name vor dem PDF-Text');
+  ok(ug.ugLieferantName(r({ steller: 'Neu GmbH', ext: 'xml' })) === 'Neu GmbH', 'Name aus der XML');
+
+  const user = { username: 'kb@dihag.com', name: 'Kreditoren Buchhaltung' };
+  const e = ug.ugLieferantMerken({ name: 'Beispiel AG', vermutung: 'ueber', mail: 'r@beispiel.de' }, 'Beispiel AG',
+    { steller: 'Beisp1el A6', ustid: 'DE555555555' }, user, '2026-10-29T10:00:00Z');
+  ok(e.vermutung === 'ueber' && e.mail === 'r@beispiel.de', 'Einschätzung und Mail bleiben');
+  ok(e.vat === 'DE555555555' && e.aliase[0] === 'Beisp1el A6', 'USt-IdNr. und Schreibweise gemerkt');
+  ok(e.bestaetigtVonName === 'Kreditoren Buchhaltung' && e.bestaetigtAm === '2026-10-29T10:00:00Z', 'wer und wann');
+  ok(!ug.ugLieferantMerken(e, 'Beispiel AG', { steller: 'beispiel ag' }, user, '').aliase.includes('beispiel ag'), 'gleicher Name ist kein Alias');
+}
+
 // Mailadresse des Lieferanten wird beim Speichern gemerkt
 (async () => {
   const bodies = [];
@@ -112,6 +146,19 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   e = await ug.ugSpeichern(r, 'Muster Werkzeuge GmbH', 'nein', '', 'RE-12', 'Nein', 'buchhaltung@muster-werkzeuge.de');
   ok(e.mail === 'buchhaltung@muster-werkzeuge.de', 'neue Mail ersetzt die alte');
   ok(e.verlauf.length === 3, 'Verlauf der Einschätzung bleibt');
+  // Bestätigen unter „Bearbeiten“: Einschätzung, Mail und „informiert“ bleiben, die Schreibweise kommt dazu
+  const scan = { nummer: 'RE-13', werk: 'WGC', richtung: 'Eingang', baseKey: 'Scan_13', steller: 'Muster Werkzeuge GmbII', ustid: '' };
+  ug._ug.daten.rechnungen[ug.ugRechnungKey(scan)] = { informiert: 'Ja' };
+  e = await ug.ugBestaetigen(scan, 'Muster Werkzeuge GmbH');
+  ok(e.vermutung === 'nein' && e.mail === 'buchhaltung@muster-werkzeuge.de' && e.verlauf.length === 3, 'Bestätigen ändert die Einschätzung nicht');
+  ok(e.aliase.includes('Muster Werkzeuge GmbII'), 'Schreibweise aus dem PDF gemerkt');
+  const zu = bodies[bodies.length - 1].rechnungen[ug.ugRechnungKey(scan)];
+  ok(zu.lieferant === ug.ugKey('Muster Werkzeuge GmbH') && zu.informiert === 'Ja', 'Rechnung zugeordnet, informiert bleibt');
+  e = await ug.ugSpeichern(scan, 'Muster Werkzeuge GmbH', 'bis', '', 'RE-13', 'Nein', '');
+  ok(e.aliase.includes('Muster Werkzeuge GmbII') && e.bestaetigtVon === 'test@dihag.com', 'Einschätzung behält die Schreibweisen');
+  let fehler = '';
+  try { await ug.ugBestaetigen(scan, '  '); } catch (x) { fehler = x.message; }
+  ok(/Lieferanten angeben/.test(fehler), 'ohne Namen kein Eintrag');
   // Absender der Rechnungsmail nur, wenn er von außen kommt
 global.istEigeneMail = require('../js/lieferant.js').istEigeneMail;
 ok(ug._ugAbsenderOk('rechnung@lieferant.de'), 'Lieferant als Absender');

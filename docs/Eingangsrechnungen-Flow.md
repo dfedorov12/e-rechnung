@@ -112,13 +112,31 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       - Body = **Anlageninhalt**
       - **Kein** „Chunked"/`transferMode` (Azure Functions kann das nicht → sonst 400).
 
-   b. **Dateibasis** (Compose): `basis = coalesce(body('HTTP')?['dateibasis'], <Anlagenname ohne Endung>)`.
-      `dateibasis` = `<Nummer>_<StellerVat>` (bereinigt) — als Dateiname verwendet
-      kollidieren zwei Lieferanten mit derselben Nummer nicht mehr (kein Überschreiben).
+   b. **Dateiname festlegen, nichts überschreiben.** `dateibasis` = `<Nummer>_<StellerVat>`
+      (bereinigt), damit kollidieren zwei Lieferanten mit derselben Nummer nicht. Bei einer
+      PDF ohne E-Rechnung ist `dateibasis` leer, dann gilt der Name des Anhangs. Kommt
+      dieselbe Rechnung ein zweites Mal (oder zwei Lieferanten schicken „Rechnung.pdf“), ist
+      der Name schon belegt, und *Datei erstellen* würde die alte Datei ersetzen. Deshalb vier
+      Schritte vor dem Ablegen:
+
+      | Schritt | Aktion | Inhalt |
+      |---|---|---|
+      | `stamm` | Verfassen | `if(empty(coalesce(body('HTTP')?['dateibasis'],'')), substring(items('Für_jede_Anlage')?['name'], 0, lastIndexOf(items('Für_jede_Anlage')?['name'], '.')), body('HTTP')?['dateibasis'])` |
+      | `endung` | Verfassen | `if(empty(coalesce(body('HTTP')?['dateibasis'],'')), last(split(items('Für_jede_Anlage')?['name'], '.')), if(equals(body('HTTP')?['quelle'],'PDF'),'pdf','xml'))` |
+      | `Vorhandene_Datei` | SharePoint: *Dateien abrufen (nur Eigenschaften)*, Bibliothek `ERAR_<Werk>`, Anzahl `1` | Filterabfrage: `FileLeafRef eq '@{replace(concat(outputs('stamm'), '.', outputs('endung')), '''', '''''')}'` |
+      | `basis` | Verfassen | `if(empty(body('Vorhandene_Datei')?['value']), outputs('stamm'), concat(outputs('stamm'), '_', formatDateTime(utcNow(), 'yyyyMMddHHmmss')))` |
+
+      In `E-R-Rechnung_WGC` heißen die Schritte `HTTP_1` und `Auf_alle_anwenden_2` statt `HTTP` und
+      `Für_jede_Anlage`.
+
+      Alle Dateien der Rechnung (Schritte c und d) heißen danach `@{outputs('basis')}…`, auch die
+      Sidecars, sonst ersetzt das lesbare PDF der zweiten Rechnung das der ersten. Das
+      Monitoring erkennt den Zeitstempel, zeigt die Nummer ohne ihn und kennzeichnet beide
+      Einträge als Dublette, mit Inhaltsvergleich (gleiche Datei oder anderer Inhalt).
 
    c. **Original in `ERAR_<Werk>` ablegen** – *Datei erstellen*
       - Ordnerpfad: `ERAR_WGC` (bzw. `concat('ERAR_', <werk>)` beim gemeinsamen Flow)
-      - Dateiname: `@{outputs('basis')}.pdf` / `.xml` (Anlagen-Endung übernehmen)
+      - Dateiname: `@{outputs('basis')}.@{outputs('endung')}`
       - Dateiinhalt: Anlageninhalt → merkt sich die **ItemId** für Schritt e.
 
    d. **Sidecars** in dieselbe `ERAR_<Werk>` (nur wenn vorhanden; Basis = derselbe Name wie in c):
@@ -145,13 +163,16 @@ aus der Empfänger-Adresse ableitet. Ablauf:
       | `KoSITBerichtUrl` / `LesbarPdfUrl` | WebUrl der Sidecars aus Schritt d |
       | `Verarbeitungsstatus` | `if(equals(body('HTTP')?['konform'],'rot'),'Fehler','Validiert')` |
 
-   > **Dubletten braucht der Flow nicht zu prüfen.** Die Erkennung läuft automatisch im
-   > Monitoring (`monitoring.js`, `_monMarkDupes`): gleiche Rechnungsnummer beim selben
-   > Aussteller = „⚠ Dublette"-Badge + KPI-Kachel. Der `dateibasis`-Dateiname (Schritt b)
-   > verhindert zusätzlich, dass sich verschiedene Lieferanten mit gleicher Nummer beim
-   > Ablegen überschreiben. Optional kann der Flow vor Schritt c per *Dateimetadaten über
-   > Pfad abrufen* auf `ERAR_<Werk>/@{outputs('basis')}.<ext>` prüfen (200 = existiert
-   > bereits) und den Status `Dublette` setzen — nötig ist es für die Sichtbarkeit nicht.
+   > **Dubletten kennzeichnet das Monitoring** (`monitoring.js`, `_monMarkDupes`): gleiche
+   > Rechnungsnummer beim selben Lieferanten = „⚠ Dublette“ und KPI-Kachel, dazu der
+   > Vergleich der Prüfsummen. Der Flow sorgt mit Schritt b nur dafür, dass beide Dateien
+   > erhalten bleiben.
+   >
+   > **Title bei XML-Dateien:** SharePoint setzt den Title einer `.xml`-Datei selbst auf den
+   > Dateinamen, die Nummer aus Schritt e hält dort nicht. Das Monitoring nimmt dann den Title
+   > des Original- oder lesbaren PDFs oder leitet die Nummer aus dem Dateinamen ab. Wer die
+   > Nummer bei XRechnungen sicher im Feld haben will, setzt in den Eigenschaften des
+   > lesbaren PDFs zusätzlich `Title` = `body('HTTP')?['daten']?['nummer']`.
 
    f. **Fehlleitung prüfen** – Bedingung `body('HTTP')?['werkMismatch']` = `true`:
       → `Fehlermeldung` = „Empfänger (@{body('HTTP')?['werkErkannt']}) ≠ Postfach-Werk
@@ -221,8 +242,10 @@ die Nummer allein.
 
 Ergänzend liefert `/api/intake` den kollisionssicheren Dateinamen **`dateibasis`**
 (`<Nummer>_<StellerVat>`): als Dateiname verwendet, überschreiben sich verschiedene
-Lieferanten mit gleicher Nummer beim Ablegen nicht (und echte Dubletten bleiben als
-getrennte Einträge sichtbar, statt sich zu ersetzen).
+Lieferanten mit gleicher Nummer beim Ablegen nicht. Kommt dieselbe Rechnung zweimal, hängt
+der Flow einen Zeitstempel an (Schritt b), so bleiben beide Dateien als getrennte Einträge
+sichtbar. Das Monitoring vergleicht ihren Inhalt über die Prüfsumme der Dateien: **gleiche
+Datei** oder **anderer Inhalt**.
 
 > **Ausgang (AR) ist nicht betroffen:** dort ist der Aussteller immer das Werk selbst,
 > die Nummern sind pro Werk eindeutig und der Dateiname trägt zusätzlich das Datum.
