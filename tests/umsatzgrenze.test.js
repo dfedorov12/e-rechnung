@@ -165,6 +165,13 @@ for (const art of ['ueber-ruecksendung', 'bis-akzeptanz', 'ueber-ankuendigen', '
   let fehler = '';
   try { await ug.ugBestaetigen(scan, '  '); } catch (x) { fehler = x.message; }
   ok(/Lieferanten angeben/.test(fehler), 'ohne Namen kein Eintrag');
+  // Ordner Monitoring für das Konto nicht sichtbar: Laden meldet es, Schreiben nennt die Rechte
+  global.fetch = async () => ({ ok: false, status: 404, text: async () => 'itemNotFound' });
+  await ug.ugLaden('site', 'token');
+  ok(/kein Zugriff/.test(ug._ug.fehler), 'kein Zugriff auf den Ordner erkannt');
+  fehler = '';
+  try { await ug.ugBestaetigen(scan, 'Muster Werkzeuge GmbH'); } catch (x) { fehler = x.message; }
+  ok(/Schreibrechte/.test(fehler), '404 beim Schreiben = Rechte fehlen');
   // Absender der Rechnungsmail nur, wenn er von außen kommt
 global.istEigeneMail = require('../js/lieferant.js').istEigeneMail;
 ok(ug._ugAbsenderOk('rechnung@lieferant.de'), 'Lieferant als Absender');

@@ -114,7 +114,10 @@ bei der 800k-Einschätzung und unter „Bearbeiten“, das Siegel gibt es nur mi
 bzw. einer Korrektur unter „Bearbeiten“. Eine neue Rechnung wird erkannt über
 die Zuordnung, die USt-IdNr., den Namen oder eine gemerkte Schreibweise. Name und
 Schreibweise zählen nicht, wenn beide USt-IdNr. bekannt sind und sich unterscheiden.
-Schreibrechte braucht die Kreditorenbuchhaltung auf diese Datei („Mitwirken“).
+Die Kreditorenbuchhaltung braucht „Mitwirken“ auf den **Ordner** `Dokumente/Monitoring`, nicht
+nur auf einzelne Dateien darin: Die Registerdatei entsteht beim ersten Speichern und erbt die
+Rechte des Ordners. Sieht ein Konto den Ordner nicht, sagt das der Untertitel des Monitorings
+(„Lieferantenregister nicht lesbar“), und neben „Lieferant“ steht „Bestätigen nicht möglich“.
 
 **Buchung**: Bis 10/2026 blieb sie bei gelb und rot auf Automatik. Für solche Rechnungen
 zeigt das Monitoring die heutige Regel (gelb = Unter Vorbehalt, rot = Zurückgewiesen), der

@@ -150,10 +150,12 @@ async function loadMonitoring(accessList, optionen) {
     }
     _monUpdate(recs);
     const einstFehler = typeof _bh !== 'undefined' && _bh.einstFehler;
+    const registerFehler = typeof _ug !== 'undefined' && _ug.fehler;
     if (sub) sub.textContent =
       `${_monRecords.length} Rechnung(en) (${recs.length} Datei(en)) aus ${libs.length - fehlerLibs.length} Bibliothek(en) · Stand ${new Date().toLocaleString('de-DE')}`
       + (fehlerLibs.length ? ` · nicht geladen: ${fehlerLibs.join(', ')}` : '')
-      + (einstFehler ? ` · Spalten-Einstellungen nicht lesbar (${einstFehler}), es gelten die Standardspalten` : '');
+      + (einstFehler ? ` · Spalten-Einstellungen nicht lesbar (${einstFehler}), es gelten die Standardspalten` : '')
+      + (registerFehler ? ` · Lieferantenregister nicht lesbar (${registerFehler}), Bestätigen und Merken gehen nicht` : '');
     // Inhalt der Dubletten vergleichen (Prüfsummen nachladen), nicht fatal
     _monDublettenInhalt(lauf, token).catch(e => console.warn('Monitoring: Dubletten-Vergleich:', e));
   } catch (e) {

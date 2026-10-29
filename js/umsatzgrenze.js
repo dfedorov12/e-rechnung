@@ -54,6 +54,7 @@ function ugMailHtml(text) {
     .map(abs => '<p>' + esc(abs).split(_UG_NL).join('<br>') + '</p>').join('');
 }
 
+const UG_KEIN_ZUGRIFF = 'kein Zugriff auf den Ordner Dokumente/Monitoring';
 const _ug = { siteId: null, itemId: null, eTag: null, daten: { version: 1, lieferanten: {}, rechnungen: {} }, geladen: false, fehler: '',
   mailListId: null, mails: {} };
 const _UG_NL = String.fromCharCode(10);
@@ -221,7 +222,16 @@ async function ugLaden(siteId, token) {
     const meta = await fetch(`${SP.graphBase}/sites/${siteId}/drive/root:/${UG.datei}?$select=id,eTag`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
     });
-    if (meta.status === 404) { _ug.itemId = null; _ug.eTag = null; _ug.geladen = true; return; }
+    if (meta.status === 404) {
+      _ug.itemId = null; _ug.eTag = null; _ug.geladen = true;
+      // 404 heißt auch: Der Ordner Monitoring ist für dieses Konto nicht sichtbar. Dann
+      // sieht es kein Register und kann nichts merken oder bestätigen.
+      const ordner = await fetch(`${SP.graphBase}/sites/${siteId}/drive/root:/Monitoring?$select=id`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+      });
+      if (ordner.status === 404 || ordner.status === 403) _ug.fehler = UG_KEIN_ZUGRIFF;
+      return;
+    }
     if (!meta.ok) throw new Error(`Register (${meta.status})`);
     const m = await meta.json();
     const inhalt = await fetch(`${SP.graphBase}/sites/${siteId}/drive/items/${m.id}/content`, {
@@ -343,7 +353,8 @@ async function _ugSchreiben(aendern) {
       return neu;
     }
     if ((resp.status === 412 || resp.status === 409) && versuch === 0) continue;
-    if (resp.status === 403 || resp.status === 401) {
+    // 404: Ordner für dieses Konto nicht sichtbar
+    if (resp.status === 403 || resp.status === 401 || resp.status === 404) {
       throw new Error('Keine Schreibrechte auf das Lieferantenregister (Monitoring-Site, Dokumente/Monitoring/'
         + 'lieferanten-umsatzgrenze.json). Die IT muss dort „Mitwirken“ vergeben.');
     }
@@ -705,6 +716,10 @@ function _ugSiegel() {
     el.innerHTML = `<span class="ug-siegel" title="${_esc(tip)}">✓ Bestätigt</span>`;
     return;
   }
+  if (_ug.fehler === UG_KEIN_ZUGRIFF) {
+    el.innerHTML = '<span class="ug-hinweis" title="Dieses Konto sieht den Ordner Dokumente/Monitoring nicht. Die IT muss dort „Mitwirken“ vergeben.">Bestätigen nicht möglich</span>';
+    return;
+  }
   el.innerHTML = ugKey(name)
     ? '<button type="button" class="ug-bestaetigen" data-ug-bestaetigen title="Name und USt-IdNr. geprüft: Lieferant bestätigen und für weitere Rechnungen merken">Bestätigen</button>'
     : '';
@@ -961,5 +976,5 @@ async function _ugAbschliessen(modus) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { UG, UG_MAIL_ART, ugKey, ugRechnungKey, ugPhase, ugSonstige, ugKleinbetrag, ugBraucht, ugFolge, ugVorlage,
     ugMailOk, ugMailHtml, ugInformiert, ugSpeichern, ugBestaetigen, ugLieferantFuer, ugLieferantMerken, ugLieferantName,
-    ugMitXml, ugFuer, _ugAbsenderOk, _ugAbsenderWahl, _ug };
+    ugMitXml, ugFuer, ugLaden, _ugAbsenderOk, _ugAbsenderWahl, _ug };
 }
