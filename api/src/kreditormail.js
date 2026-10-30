@@ -17,6 +17,10 @@
  * selben Layout für XRechnung (KoSIT) und ZUGFeRD (Mustang), mit Rechnungsinhalt.
  * Absender im Gruß ist die Gesellschaft des Postfachs (Werk), nicht der Empfänger
  * aus der Rechnung: Der steht bei fehlerhaften Rechnungen oft falsch oder gar nicht drin.
+ *
+ * Empfänger: mail.an ist die Mailadresse, die der Lieferant in der E-Rechnung als
+ * Kommunikationsweg angibt (BT-43 Ansprechpartner, sonst BT-34 elektronische Adresse).
+ * Fehlt sie, ist mail.an null und der Flow schreibt an den Absender der Rechnungsmail.
  */
 
 const { DOMParser } = require('@xmldom/xmldom');
@@ -70,7 +74,15 @@ const GESELLSCHAFT = {
   EIS: 'DIHAG Gienanth GmbH',
   LEG: 'Lintorfer Eisengießerei GmbH',
   EWA: 'Eisenwerk Arnstadt GmbH',
+  HOL: 'DIHAG Holding GmbH',
 };
+
+/** Taugt die Adresse als Empfänger? Keine noreply-Adressen. */
+function mailOk(m) {
+  const s = String(m || '').trim().toLowerCase();
+  return /^[^\s@,;]+@[^\s@,;]+\.[a-z]{2,}$/.test(s)
+    && !/(^|[._-])(no-?reply|do-?not-?reply)([._-]|@)|^(mailer-daemon|postmaster)@/.test(s);
+}
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -232,7 +244,10 @@ function kreditorMail(res) {
     [v.titel, ...angaben.map(([k, w]) => `${k}: ${w}`)].join('\n'),
     ...v.schluss, [GRUSS, firma].filter(Boolean).join('\n')].join('\n\n');
 
-  return { art: v.art, betreff: v.betreff + (d.nummer ? ' ' + d.nummer : ''), html: _mailHtml(v, angaben, firma), text, anhang };
+  // Empfänger aus der E-Rechnung (Kommunikationsweg des Lieferanten), sonst entscheidet der Flow
+  const an = mailOk(d.stellerMail) ? String(d.stellerMail).trim() : null;
+  return { art: v.art, betreff: v.betreff + (d.nummer ? ' ' + d.nummer : ''), html: _mailHtml(v, angaben, firma), text, anhang,
+    an, anQuelle: an ? 'rechnung' : '' };
 }
 
-module.exports = { kreditorMail, VORLAGEN };
+module.exports = { kreditorMail, mailOk, VORLAGEN };

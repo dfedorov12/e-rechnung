@@ -25,7 +25,7 @@ const WERK_MUSTER = [
   { werk: 'DSO', woerter: [] },   // TODO
   { werk: 'LEG', woerter: [] },   // TODO
   { werk: 'EWA', woerter: [] },   // TODO
-  { werk: 'HOL', woerter: [] },   // TODO
+  { werk: 'HOL', woerter: ['dihag holding'] },   // DIHAG Holding GmbH
   { werk: 'MEG', woerter: [] },   // TODO
   { werk: 'SCH', woerter: [] },   // TODO
 ];

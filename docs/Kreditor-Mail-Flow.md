@@ -158,9 +158,11 @@ aktualisieren“:
 2. Im Ja-Zweig Office 365 Outlook **„E-Mail aus einem freigegebenen Postfach senden (V2)“**,
    umbenennen in `E-Mail_an_Lieferant`:
    - Ursprüngliche Postfachadresse: das Rechnungspostfach des Werks (dasselbe wie im Trigger)
-   - An:
+   - An: bevorzugt die Mailadresse, die der Lieferant in der E-Rechnung als Kommunikationsweg
+     angibt (`mail.an`: BT-43 Ansprechpartner, sonst BT-34 elektronische Adresse, nur echte
+     Adressen, keine noreply). Fehlt sie, der Absender der Rechnungsmail (Reply-To, sonst From):
      ```
-     if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])
+     if(empty(body('HTTP_1')?['kreditorAktion']?['mail']?['an']), if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo']), body('HTTP_1')?['kreditorAktion']?['mail']?['an'])
      ```
    - Betreff: `body('HTTP_1')?['kreditorAktion']?['mail']?['betreff']`
    - Text: `body('HTTP_1')?['kreditorAktion']?['mail']?['html']`

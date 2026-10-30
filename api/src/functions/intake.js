@@ -36,8 +36,10 @@
  *     rueckfrageLieferant: true bei materieller PDF↔XML-Abweichung (P4),
  *     zurueckweisung:  { grund, text } | null (harter Stopp MINIMUM/BASIC-WL, P3),
  *     kreditorAktion:  { art:'berichtigung'|'zurueckweisung'|'abweichung', grund, text, mail? } | null,
- *                      mail = { art, betreff, html, text, anhang:{name,base64} }: Mail an den Lieferanten bei
- *                      Zurückweisung und bei Abweichungen (gelb), siehe ../kreditormail.js,
+ *                      mail = { art, betreff, html, text, anhang:{name,base64}, an, anQuelle }: Mail an den
+ *                      Lieferanten bei Zurückweisung und bei Abweichungen (gelb), siehe ../kreditormail.js.
+ *                      an = Mailadresse aus der E-Rechnung (BT-43, sonst BT-34) oder null: dann an den
+ *                      Absender der Rechnungsmail,
  *     konvertiertesPdf:true, wenn ein technisch konvertiertes Ersatz-PDF erzeugt wurde (P8),
  *     formaleHinweise: [ … ] (Leitweg/elektr. Adresse — kein USt-Pruefgrund, P5),
  *     daten:           { nummer, datum, steller, empfaenger, netto, steuerkategorie, ... } | null,
@@ -391,6 +393,7 @@ function mapDaten(d) {
     syntax:             d.syntax            || '',
     steller:            d.verkaeufer        || '',
     stellerVat:         d.verkaeufervat     || '',
+    stellerMail:        _mailAusRechnung(d.verkaeuferemail),   // BT-43, sonst BT-34 (nur echte Mailadresse)
     empfaenger:         d.kaeufer           || '',
     empfaengerVat:      d.kaeufervat        || '',
     empfaengerOrt:      d.kaeuferstadt      || '',
@@ -405,6 +408,12 @@ function mapDaten(d) {
     waehrung:           d.waehrung          || 'EUR',
     steuerkategorie:    d.steuerkategorie   || '',   // UNTDID 5305 (S/Z/AE/K/G/E/O) -> Punkt 6
   };
+}
+
+/** Mailadresse aus der Rechnung: „mailto:“ weg, nur wenn es wirklich eine Adresse ist (BT-34 kann eine GLN sein). */
+function _mailAusRechnung(v) {
+  const m = String(v || '').trim().replace(/^mailto:/i, '');
+  return /^[^\s@,;]+@[^\s@,;]+\.[A-Za-z]{2,}$/.test(m) ? m : '';
 }
 
 /**

@@ -247,7 +247,8 @@ POST /api/intake?werk=<Kuerzel>  -> Body = PDF|XML, Antwort = {
        datenQuelle,                // 'pdf-text' bei PDF ohne XML: Kopfdaten aus dem Text (js/lieferant.js)
        kleinunternehmer,           // true, wenn die PDF auf § 19 UStG verweist
        dateibasis,                 // <Nummer>_<StellerVat> — kollisions-/dublettensicherer Dateiname
-       buchung, kreditorAktion,    // kreditorAktion.mail: Mail bei Zurückweisung/gelb mit Prüfbericht als Anhang (src/kreditormail.js)
+       buchung, kreditorAktion,    // kreditorAktion.mail: Mail bei Zurückweisung/gelb mit Prüfbericht als Anhang (src/kreditormail.js),
+                                   // mail.an = Mailadresse aus der E-Rechnung (BT-43, sonst BT-34) oder null
        xml,                        // extrahierte/empfangene E-Rechnungs-XML
        lesbarPdfBase64 }           // nur bei reiner XML: gerendertes PDF/A
 ```

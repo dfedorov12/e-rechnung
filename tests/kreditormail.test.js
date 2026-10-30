@@ -33,6 +33,14 @@ enthaelt(rot.html, 'Walzengießerei Coswig GmbH</div>', 'Firma im Kopf');
 gleich(/INFIELD/.test(rot.text + rot.html), false, 'Empfänger aus der Rechnung nicht im Gruß');
 gleich(/Mit freundlichen Grüßen\n/.test(kreditorMail({ richtung: 'Eingang', werk: 'XYZ', daten, kreditorAktion: { art: 'abweichung' } }).text), false, 'unbekanntes Werk ohne Namen');
 enthaelt(rot.html, '#B42318', 'rote Akzentfarbe');
+enthaelt(kreditorMail({ richtung: 'Eingang', werk: 'HOL', daten, kreditorAktion: { art: 'abweichung' } }).text, 'Mit freundlichen Grüßen\nDIHAG Holding GmbH', 'Gruß HOL');
+
+// 1a) Empfänger: Adresse aus der E-Rechnung, sonst null (Flow nimmt den Absender der Rechnungsmail)
+gleich([rot.an, rot.anQuelle], [null, ''], 'ohne Adresse in der Rechnung');
+const mitMail = d => kreditorMail({ richtung: 'Eingang', werk: 'WGC', daten: Object.assign({}, daten, d), kreditorAktion: { art: 'abweichung' } });
+gleich([mitMail({ stellerMail: ' rechnung@lieferant.de ' }).an, mitMail({ stellerMail: 'rechnung@lieferant.de' }).anQuelle], ['rechnung@lieferant.de', 'rechnung'], 'Adresse aus der Rechnung');
+gleich(mitMail({ stellerMail: 'noreply@lieferant.de' }).an, null, 'noreply aus der Rechnung nicht');
+gleich(mitMail({ stellerMail: 'faktura_no-reply@lieferant.de' }).an, null, 'no-reply mitten in der Adresse nicht');
 gleich([rot.anhang.name, rot.anhang.contentType], ['Pruefbericht_4711.html', 'text/html'], 'Anhang');
 const bericht = aus64(rot.anhang);
 enthaelt(bericht, '[BR-CO-15] Summe &lt;falsch&gt; &amp; Co', 'Befund maskiert im Bericht');
@@ -125,6 +133,18 @@ const aufruf = async xml => (await handler.intake({
   gleich(r.kreditorAktion.mail.betreff, 'Hinweis zu Ihrer E-Rechnung 4260999', 'gelb: Betreff mit Nummer');
   enthaelt(Buffer.from(r.kreditorAktion.mail.anhang.base64, 'base64').toString('utf8'), '[BR-DE-21] Kennung der Spezifikation', 'gelb: Warnung im Prüfbericht');
   enthaelt(r.kreditorAktion.mail.text, 'Mit freundlichen Grüßen\nWalzengießerei Coswig GmbH', 'gelb: Gruß mit Werk aus ?werk=');
+  gleich(r.kreditorAktion.mail.an, null, 'gelb: ohne Mailadresse in der XML kein an');
+
+  // Mailadresse des Lieferanten in der XML: Ansprechpartner (BT-43) vor elektronischer Adresse (BT-34)
+  const mitKontakt = (kontakt, adresse) => eingang.replace(/<ram:SellerTradeParty>/, '<ram:SellerTradeParty>'
+    + (kontakt ? `<ram:DefinedTradeContact><ram:EmailURIUniversalCommunication><ram:URIID>${kontakt}</ram:URIID></ram:EmailURIUniversalCommunication></ram:DefinedTradeContact>` : '')
+    + (adresse ? `<ram:URIUniversalCommunication><ram:URIID schemeID="${adresse[0]}">${adresse[1]}</ram:URIID></ram:URIUniversalCommunication>` : ''));
+  r = await aufruf(mitKontakt('mailto:buchhaltung@muster-maschinenbau.de', ['EM', 'rechnung@muster-maschinenbau.de']));
+  gleich([r.daten.stellerMail, r.kreditorAktion.mail.an, r.kreditorAktion.mail.anQuelle], ['buchhaltung@muster-maschinenbau.de', 'buchhaltung@muster-maschinenbau.de', 'rechnung'], 'BT-43 vor BT-34, mailto weg');
+  r = await aufruf(mitKontakt('', ['EM', 'rechnung@muster-maschinenbau.de']));
+  gleich(r.kreditorAktion.mail.an, 'rechnung@muster-maschinenbau.de', 'BT-34 als Mailadresse');
+  r = await aufruf(mitKontakt('', ['0088', '4000001000005']));
+  gleich([r.daten.stellerMail, r.kreditorAktion.mail.an], ['', null], 'GLN ist keine Mailadresse');
 
   r = await aufruf(ausgang);
   gleich([r.richtung, r.kreditorAktion && r.kreditorAktion.art, !!(r.kreditorAktion && r.kreditorAktion.mail)], ['Ausgang', 'abweichung', false], 'Ausgang: keine Mail');

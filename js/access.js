@@ -37,7 +37,7 @@ const WERKE_ALLE = [
   ['SHB', 'Stahl- und Hartgusswerk Bösdorf GmbH'],
   ['ZAI', 'Dihag Zaigler GmbH'],
   ['EIS', 'DIHAG Gienanth GmbH'], ['DSO', 'Werk DSO'], ['LEG', 'Lintorfer Eisengießerei GmbH'], ['EWA', 'Eisenwerk Arnstadt GmbH'],
-  ['HOL', 'Werk HOL'], ['MEG', 'Werk MEG'], ['SCH', 'Werk SCH'],
+  ['HOL', 'DIHAG Holding GmbH'], ['MEG', 'Werk MEG'], ['SCH', 'Werk SCH'],
 ];
 
 /* Admin-UPNs – dürfen die Einstellungen-Seite sehen */
