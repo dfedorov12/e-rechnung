@@ -206,17 +206,24 @@ Für Kreditor-Mails aus dem Werks-Postfach schreibt jeder Eingangs-Flow zusätzl
 Absender der Rechnungsmail in die Spalte `AbsenderMail` (Reply-To, sonst Absender: `if(empty(triggerOutputs()?['body/replyTo']), triggerOutputs()?['body/from'], triggerOutputs()?['body/replyTo'])`),
 siehe [Kreditor-Mail-Flow.md](Kreditor-Mail-Flow.md).
 
-## WGC und ZAI: was sich unterscheidet
+## Die Flows je Werk: was sich unterscheidet
 
-Bis zur Ablage in `ERAR_<Werk>` laufen beide Flows gleich. Danach übergeben sie
+Bis zur Ablage in `ERAR_<Werk>` laufen alle Flows gleich. Danach übergeben sie
 unterschiedlich an die Buchhaltung:
 
-| | WGC | ZAI |
+| | WGC | ZAI, HOL, LEG, EWA |
 |---|---|---|
-| Postfach | Rechnungspostfach WGC | `er-zaigler@dihag.com` |
-| Schleifenschutz am Anfang | nicht nötig | Mail vom eigenen Postfach = Archiv-Mail, nur nach „Verarbeitet“ |
-| Übergabe | Eintrag in der Eingangsrechnungsliste auf `gruppe_wgc`, Original und lesbares PDF als Anlage (bei grün oder gelb), Eintrag danach mit dem Prüfergebnis aktualisiert | Archiv-Mail mit lesbarem PDF an das eigene Postfach, Original-Mail nach „Verarbeitet“ |
-| Buchhaltung arbeitet in | der Liste auf `gruppe_wgc` | dem Postfachordner „Verarbeitet“ |
+| Flow | `E-R-Rechnung_WGC` | `E-R-Rechnung_ZAI`, `_HOL`, `_LEG`, `_EWA` |
+| Postfach | `rechnung@walze-coswig.de` | ZAI `er-zaigler@dihag.com`, HOL `ER@dihag.com`, LEG `rechnung@lintorfereg.de`, EWA `er@ewa-guss.de` |
+| Schleifenschutz am Anfang | nicht nötig | Betreff enthält „[ARCHIV]“ = eigene Archiv-Mail: nur in den Ordner `ArchiviertUndGeprueft` (Posteingang) verschieben, nicht verarbeiten |
+| Übergabe | Eintrag in der Eingangsrechnungsliste auf `gruppe_wgc`, Original und lesbares PDF als Anlage (bei grün oder gelb), Eintrag danach mit dem Prüfergebnis aktualisiert | je Rechnung eine Archiv-Mail von `administrator@dihag.com` an das eigene Postfach: Betreff „[ARCHIV] Rechnung <Nr> — <Lieferant>“, Anhang `<basis>_lesbar.pdf` (lesbares PDF, sonst das Original) |
+| Buchhaltung arbeitet in | der Liste auf `gruppe_wgc` | dem Postfachordner `ArchiviertUndGeprueft` |
+
+Aufbau in ZAI, HOL, LEG und EWA: oben `Archiv_pruefen` (bei ZAI `Bedingung_4`) mit dem
+Verschieben im Ja-Zweig und der Schleife über die Anlagen im Nein-Zweig. Die Archiv-Mail
+(`Archiv_Mail_senden`) läuft nach `Bedingung_1`, also nach Ablage, Eigenschaften und
+Sidecars. Sie geht auch bei roten Rechnungen raus, die Originalmail bleibt im Posteingang.
+Die Ordner-Id von `ArchiviertUndGeprueft` ist je Postfach eine andere.
 
 Die Liste auf `gruppe_wgc` wird durch das Monitoring abgelöst: Varialnummer, Kontierung und
 Genehmigung pflegt die Buchhaltung dann an der Rechnung in `ERAR_WGC`, siehe
