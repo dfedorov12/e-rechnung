@@ -216,7 +216,7 @@ unterschiedlich an die Buchhaltung:
 | Flow | `E-R-Rechnung_WGC` | `E-R-Rechnung_ZAI`, `_HOL`, `_LEG`, `_EWA` |
 | Postfach | `rechnung@walze-coswig.de` | ZAI `er-zaigler@dihag.com`, HOL `ER@dihag.com`, LEG `rechnung@lintorfereg.de`, EWA `er@ewa-guss.de` |
 | Schleifenschutz am Anfang | nicht nötig | Betreff enthält „[ARCHIV]“ = eigene Archiv-Mail: nur in den Ordner `ArchiviertUndGeprueft` (Posteingang) verschieben, nicht verarbeiten |
-| Übergabe | Eintrag in der Eingangsrechnungsliste auf `gruppe_wgc`, Original und lesbares PDF als Anlage (bei grün oder gelb), Eintrag danach mit dem Prüfergebnis aktualisiert | je Rechnung eine Archiv-Mail von `administrator@dihag.com` an das eigene Postfach: Betreff „[ARCHIV] Rechnung <Nr> — <Lieferant>“, Anhang `<basis>_lesbar.pdf` (lesbares PDF, sonst das Original) |
+| Übergabe | Eintrag in der Eingangsrechnungsliste auf `gruppe_wgc`, Original und lesbares PDF als Anlage (bei grün oder gelb), Eintrag danach mit dem Prüfergebnis aktualisiert | je Rechnung eine Archiv-Mail aus dem eigenen Postfach an sich selbst (ZAI noch von `administrator@dihag.com`): Betreff „[ARCHIV] Rechnung <Nr> — <Lieferant>“, Anhang `<basis>_lesbar.pdf` (lesbares PDF, sonst das Original) |
 | Buchhaltung arbeitet in | der Liste auf `gruppe_wgc` | dem Postfachordner `ArchiviertUndGeprueft` |
 
 Aufbau in ZAI, HOL, LEG und EWA: oben `Archiv_pruefen` (bei ZAI `Bedingung_4`) mit dem
